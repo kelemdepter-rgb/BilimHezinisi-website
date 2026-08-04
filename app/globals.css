@@ -131,162 +131,169 @@
 }
 
 /* ── Base ── */
-html {
-  background-color: var(--bg);
-}
-body {
-  background-color: var(--bg);
-  background-image: var(--grain);
-  color: var(--text);
-  font-family: var(--jf);
-  font-size: 15px;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-/* Paper-grain helper — layers the faint feTurbulence texture over a panel's own colour. */
-.grain {
-  background-image: var(--grain);
-}
-/* Global focus ring (keyboard only) + smooth theme transitions */
-:focus-visible {
-  outline: 2px solid var(--am);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-button, input, select, textarea, a {
-  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
-}
-input, select, textarea, button {
-  font-family: var(--jf);
+@layer base {
+  html {
+    background-color: var(--bg);
+  }
+  body {
+    background-color: var(--bg);
+    background-image: var(--grain);
+    color: var(--text);
+    font-family: var(--jf);
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  /* Global focus ring (keyboard only) + smooth theme transitions */
+  :focus-visible {
+    outline: 2px solid var(--am);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  button, input, select, textarea, a {
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  }
+  input, select, textarea, button {
+    font-family: var(--jf);
+  }
 }
 
-/* ── Inline line-icon system (lucide-style, stroke = currentColor) ── */
-.ic {
-  width: 1.15em;
-  height: 1.15em;
-  display: inline-block;
-  vertical-align: -0.18em;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  flex-shrink: 0;
-}
-.ic.fill { fill: currentColor; stroke: none; }
-.ic.ic-sm { width: 13px; height: 13px; }
-.ic.ic-lg { width: 22px; height: 22px; }
+/* ── Component classes (in the components layer so Tailwind utilities like
+     `hidden` / `lg:hidden` keep overriding them) ── */
+@layer components {
+  /* Paper-grain helper — layers the faint feTurbulence texture over a panel's own colour. */
+  .grain {
+    background-image: var(--grain);
+  }
 
-/* ── Shared controls, ported from the desktop header/button styles ── */
-.hbtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 44px;
-  min-width: 44px;
-  font-size: 13px;
-  background: none;
-  border: 0.5px solid var(--border2);
-  color: var(--text2);
-  padding: 8px 14px;
-  border-radius: 9px;
-  cursor: pointer;
-  font-family: var(--jf);
-  white-space: nowrap;
-  text-decoration: none;
-}
-.hbtn:hover { background: var(--bg2); color: var(--text); }
-.hbtn.on { background: var(--am); color: var(--at); border-color: var(--am); font-weight: 600; }
-/* Square ghost icon button (≥44px touch target) */
-.ibtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-  background: none;
-  border: none;
-  border-radius: var(--radius);
-  color: var(--text2);
-  cursor: pointer;
-}
-.ibtn:hover { background: var(--bg2); color: var(--text); }
-/* Search box, ported from desktop #sb / #si */
-.sbox {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  background: var(--bg2);
-  border: 0.5px solid var(--border2);
-  border-radius: 22px;
-  padding: 0 14px;
-  gap: 8px;
-  max-width: 540px;
-  min-width: 0;
-  position: relative;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.sbox:focus-within { border-color: var(--am); box-shadow: 0 0 0 3px var(--ab); }
-.sinput {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  color: var(--text);
-  font-family: var(--jf);
-  font-size: 14px;
-  padding: 11px 0;
-  min-width: 0;
-}
-.sinput::placeholder { color: var(--text3); }
-/* Manuscript paper card */
-.paper {
-  background: var(--paper);
-  border: 1px solid var(--paper-bd);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-1);
-}
-/* Form field */
-.field {
-  width: 100%;
-  background: var(--bg2);
-  border: 0.5px solid var(--border2);
-  border-radius: var(--radius);
-  color: var(--text);
-  font-family: var(--jf);
-  font-size: 15px;
-  padding: 11px 14px;
-  min-height: 44px;
-  outline: none;
-}
-.field:focus { border-color: var(--am); box-shadow: 0 0 0 3px var(--ab); }
-.field::placeholder { color: var(--text3); }
-/* Primary action button — desktop pairs --am background with --at text */
-.btn-am {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  background: var(--am);
-  color: var(--at);
-  border: none;
-  border-radius: var(--radius);
-  padding: 11px 18px;
-  font-family: var(--jf);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn-am:hover { filter: brightness(1.06); }
-.btn-am:disabled { opacity: 0.6; cursor: default; }
+  /* ── Inline line-icon system (lucide-style, stroke = currentColor) ── */
+  .ic {
+    width: 1.15em;
+    height: 1.15em;
+    display: inline-block;
+    vertical-align: -0.18em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    flex-shrink: 0;
+  }
+  .ic.fill { fill: currentColor; stroke: none; }
+  .ic.ic-sm { width: 13px; height: 13px; }
+  .ic.ic-lg { width: 22px; height: 22px; }
 
-/* ── Safe-area helpers for fixed/sticky bars (notched phones) ── */
-.safe-top { padding-top: env(safe-area-inset-top); }
-.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
-.safe-x {
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  /* ── Shared controls, ported from the desktop header/button styles ── */
+  .hbtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 13px;
+    background: none;
+    border: 0.5px solid var(--border2);
+    color: var(--text2);
+    padding: 8px 14px;
+    border-radius: 9px;
+    cursor: pointer;
+    font-family: var(--jf);
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  .hbtn:hover { background: var(--bg2); color: var(--text); }
+  .hbtn.on { background: var(--am); color: var(--at); border-color: var(--am); font-weight: 600; }
+  /* Square ghost icon button (≥44px touch target) */
+  .ibtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    border-radius: var(--radius);
+    color: var(--text2);
+    cursor: pointer;
+  }
+  .ibtn:hover { background: var(--bg2); color: var(--text); }
+  /* Search box, ported from desktop #sb / #si */
+  .sbox {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    background: var(--bg2);
+    border: 0.5px solid var(--border2);
+    border-radius: 22px;
+    padding: 0 14px;
+    gap: 8px;
+    max-width: 540px;
+    min-width: 0;
+    position: relative;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .sbox:focus-within { border-color: var(--am); box-shadow: 0 0 0 3px var(--ab); }
+  .sinput {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--jf);
+    font-size: 14px;
+    padding: 11px 0;
+    min-width: 0;
+  }
+  .sinput::placeholder { color: var(--text3); }
+  /* Manuscript paper card */
+  .paper {
+    background: var(--paper);
+    border: 1px solid var(--paper-bd);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-1);
+  }
+  /* Form field */
+  .field {
+    width: 100%;
+    background: var(--bg2);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--jf);
+    font-size: 15px;
+    padding: 11px 14px;
+    min-height: 44px;
+    outline: none;
+  }
+  .field:focus { border-color: var(--am); box-shadow: 0 0 0 3px var(--ab); }
+  .field::placeholder { color: var(--text3); }
+  /* Primary action button — desktop pairs --am background with --at text */
+  .btn-am {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    background: var(--am);
+    color: var(--at);
+    border: none;
+    border-radius: var(--radius);
+    padding: 11px 18px;
+    font-family: var(--jf);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-am:hover { filter: brightness(1.06); }
+  .btn-am:disabled { opacity: 0.6; cursor: default; }
+
+  /* ── Safe-area helpers for fixed/sticky bars (notched phones) ── */
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }

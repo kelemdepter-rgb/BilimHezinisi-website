@@ -7,7 +7,10 @@ import { defineConfig } from "@playwright/test";
  */
 export default defineConfig({
   testDir: "./tests",
-  fullyParallel: true,
+  // The Next dev server on Windows stalls page loads under parallel browser
+  // contexts (all navigations time out with >1 worker), so the smoke suite
+  // runs serially — it stays well under a minute.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [["list"]],

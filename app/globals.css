@@ -1,0 +1,292 @@
+@import "tailwindcss";
+
+/* ── Self-hosted fonts (ported from desktop assets/, no third-party CDNs) ── */
+@font-face {
+  font-family: "UKIJ Ekran";
+  src: url("/fonts/ukijekran.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Traditional Arabic";
+  src: url("/fonts/trad-arabic.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Traditional Arabic";
+  src: url("/fonts/trad-arabic-bold.ttf") format("truetype");
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Bahij Nazanin";
+  src: url("/fonts/Bahij_Nazanin-Regular.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+/* Quran-only fonts (used by the mushaf module) */
+@font-face {
+  font-family: "Uthmanic Hafs";
+  src: url("/fonts/UthmanicHafs1-Ex1-Ver12.otf") format("opentype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Uthmanic Hafs B";
+  src: url("/fonts/UthmanicHafs1B-Ex1-Ver12.otf") format("opentype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Design tokens ported 1:1 from desktop src/index.html :root ── */
+:root {
+  /* ── DAY theme — warm ivory / parchment / walnut / antique-gold ── */
+  --am: #B0832F; --at: #5A4327; --ab: rgba(176, 131, 47, 0.14); --ab2: rgba(176, 131, 47, 0.24);
+  --bg: #FBF6EC; --bg2: #F4EAD7; --bg3: #EADFC8;
+  --text: #2A2012; --text2: #6B5840; --text3: #9A8A70;
+  --border: rgba(90, 70, 40, 0.16); --border2: rgba(90, 70, 40, 0.30);
+  --gold: #C9A24B; --walnut: #5A4632;
+  --paper: #FFFDF8; --paper-bd: rgba(90, 70, 40, 0.14);
+  --shadow-1: 0 2px 10px rgba(70, 50, 20, 0.08);
+  --shadow-2: 0 14px 38px rgba(70, 50, 20, 0.18);
+  --glow: 0 0 0 2px var(--am), 0 6px 20px rgba(201, 162, 75, 0.25);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  /* ── shared tokens (inherited by every theme) ── */
+  --jf: "UKIJ Ekran", "Traditional Arabic", "Arabic Typesetting", serif;
+  /* spacing scale: 4 · 8 · 12 · 16 · 24 · 32 */
+  --radius: 10px; --radius2: 6px; --radius-lg: 14px;
+}
+/* System dark mode applies only while the visitor has not chosen a theme */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --am: #E0B85E; --at: #241C12; --ab: rgba(224, 184, 94, 0.18); --ab2: rgba(224, 184, 94, 0.30);
+    --bg: #14110B; --bg2: #1E1910; --bg3: #2A2215;
+    --text: #F3E9D2; --text2: #D8C195; --text3: #AC9468;
+    --border: rgba(224, 184, 94, 0.16); --border2: rgba(224, 184, 94, 0.30);
+    --gold: #E8C879; --walnut: #3E2F1E;
+    --paper: #221B11; --paper-bd: rgba(224, 184, 94, 0.14);
+    --shadow-1: 0 2px 12px rgba(0, 0, 0, 0.45);
+    --shadow-2: 0 16px 44px rgba(0, 0, 0, 0.6);
+    --glow: 0 0 0 2px var(--am), 0 6px 22px rgba(224, 184, 94, 0.3);
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  }
+}
+:root[data-theme="dark"] {
+  /* ── NIGHT theme — charcoal / dark leather / walnut / antique-gold ── */
+  --am: #E0B85E; --at: #241C12; --ab: rgba(224, 184, 94, 0.18); --ab2: rgba(224, 184, 94, 0.30);
+  --bg: #14110B; --bg2: #1E1910; --bg3: #2A2215;
+  --text: #F3E9D2; --text2: #D8C195; --text3: #AC9468;
+  --border: rgba(224, 184, 94, 0.16); --border2: rgba(224, 184, 94, 0.30);
+  --gold: #E8C879; --walnut: #3E2F1E;
+  --paper: #221B11; --paper-bd: rgba(224, 184, 94, 0.14);
+  --shadow-1: 0 2px 12px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 16px 44px rgba(0, 0, 0, 0.6);
+  --glow: 0 0 0 2px var(--am), 0 6px 22px rgba(224, 184, 94, 0.3);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+}
+:root[data-theme="sepia"] {
+  /* ── SEPIA — warm parchment reading mode, aligned to the Day family ── */
+  --am: #9A6B24; --at: #4A3318; --ab: rgba(154, 107, 36, 0.16); --ab2: rgba(154, 107, 36, 0.26);
+  --bg: #EFE3CC; --bg2: #E7D8BC; --bg3: #DCCBA9;
+  --text: #2E2310; --text2: #6A5734; --text3: #9A8763;
+  --border: rgba(90, 70, 40, 0.20); --border2: rgba(90, 70, 40, 0.34);
+  --gold: #BC9445; --walnut: #5A4632;
+  --paper: #F7EFE0; --paper-bd: rgba(90, 70, 40, 0.16);
+  --shadow-1: 0 2px 10px rgba(70, 50, 20, 0.10);
+  --shadow-2: 0 14px 38px rgba(70, 50, 20, 0.20);
+  --glow: 0 0 0 2px var(--am), 0 6px 20px rgba(188, 148, 69, 0.28);
+}
+
+/* ── Tailwind token bridge: bg-bg, bg-paper, text-ink, border-bd, text-am … ── */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg2: var(--bg2);
+  --color-bg3: var(--bg3);
+  --color-ink: var(--text);
+  --color-ink2: var(--text2);
+  --color-ink3: var(--text3);
+  --color-am: var(--am);
+  --color-at: var(--at);
+  --color-ab: var(--ab);
+  --color-ab2: var(--ab2);
+  --color-gold: var(--gold);
+  --color-walnut: var(--walnut);
+  --color-paper: var(--paper);
+  --color-paper-bd: var(--paper-bd);
+  --color-bd: var(--border);
+  --color-bd2: var(--border2);
+  --font-ug: var(--jf);
+  --radius-tile: var(--radius);
+  --radius-tile2: var(--radius2);
+  --radius-tile-lg: var(--radius-lg);
+  --shadow-card: var(--shadow-1);
+  --shadow-pop: var(--shadow-2);
+}
+
+/* ── Base ── */
+html {
+  background-color: var(--bg);
+}
+body {
+  background-color: var(--bg);
+  background-image: var(--grain);
+  color: var(--text);
+  font-family: var(--jf);
+  font-size: 15px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+/* Paper-grain helper — layers the faint feTurbulence texture over a panel's own colour. */
+.grain {
+  background-image: var(--grain);
+}
+/* Global focus ring (keyboard only) + smooth theme transitions */
+:focus-visible {
+  outline: 2px solid var(--am);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+button, input, select, textarea, a {
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+input, select, textarea, button {
+  font-family: var(--jf);
+}
+
+/* ── Inline line-icon system (lucide-style, stroke = currentColor) ── */
+.ic {
+  width: 1.15em;
+  height: 1.15em;
+  display: inline-block;
+  vertical-align: -0.18em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+}
+.ic.fill { fill: currentColor; stroke: none; }
+.ic.ic-sm { width: 13px; height: 13px; }
+.ic.ic-lg { width: 22px; height: 22px; }
+
+/* ── Shared controls, ported from the desktop header/button styles ── */
+.hbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  min-width: 44px;
+  font-size: 13px;
+  background: none;
+  border: 0.5px solid var(--border2);
+  color: var(--text2);
+  padding: 8px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: var(--jf);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.hbtn:hover { background: var(--bg2); color: var(--text); }
+.hbtn.on { background: var(--am); color: var(--at); border-color: var(--am); font-weight: 600; }
+/* Square ghost icon button (≥44px touch target) */
+.ibtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text2);
+  cursor: pointer;
+}
+.ibtn:hover { background: var(--bg2); color: var(--text); }
+/* Search box, ported from desktop #sb / #si */
+.sbox {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  background: var(--bg2);
+  border: 0.5px solid var(--border2);
+  border-radius: 22px;
+  padding: 0 14px;
+  gap: 8px;
+  max-width: 540px;
+  min-width: 0;
+  position: relative;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.sbox:focus-within { border-color: var(--am); box-shadow: 0 0 0 3px var(--ab); }
+.sinput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--jf);
+  font-size: 14px;
+  padding: 11px 0;
+  min-width: 0;
+}
+.sinput::placeholder { color: var(--text3); }
+/* Manuscript paper card */
+.paper {
+  background: var(--paper);
+  border: 1px solid var(--paper-bd);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
+}
+/* Form field */
+.field {
+  width: 100%;
+  background: var(--bg2);
+  border: 0.5px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--jf);
+  font-size: 15px;
+  padding: 11px 14px;
+  min-height: 44px;
+  outline: none;
+}
+.field:focus { border-color: var(--am); box-shadow: 0 0 0 3px var(--ab); }
+.field::placeholder { color: var(--text3); }
+/* Primary action button — desktop pairs --am background with --at text */
+.btn-am {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  background: var(--am);
+  color: var(--at);
+  border: none;
+  border-radius: var(--radius);
+  padding: 11px 18px;
+  font-family: var(--jf);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-am:hover { filter: brightness(1.06); }
+.btn-am:disabled { opacity: 0.6; cursor: default; }
+
+/* ── Safe-area helpers for fixed/sticky bars (notched phones) ── */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+.safe-x {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}

@@ -37,3 +37,18 @@ be scaffolded and tested before the Supabase project exists.
 Migrations live in `supabase/migrations/`. Apply `0001_init.sql` in the
 Supabase SQL Editor (or `npx supabase db push` when the project is linked).
 Never edit an applied migration — add a new file.
+
+## Troubleshooting
+
+**Every Supabase call fails with `fetch failed` / pages take ~7 s.**
+Check the dev server output for `UNABLE_TO_VERIFY_LEAF_SIGNATURE`. Antivirus
+or VPN software that inspects HTTPS re-signs traffic with its own root
+certificate, and Node does not read the OS certificate store by default, so
+it rejects the connection. The `dev` script therefore runs with
+`NODE_OPTIONS=--use-system-ca`, which makes Node trust the system store in
+addition to its bundled CAs.
+
+This is deliberately applied to `dev` only. `build` and `start` are left
+untouched so deployments are unaffected — the flag needs Node ≥ 22.15 and the
+interception does not exist on the hosting side. If a standalone script hits
+the same wall, run it as `node --use-system-ca script.mjs`.

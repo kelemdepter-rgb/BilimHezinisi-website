@@ -16,6 +16,7 @@ const SIGN_UP_REASONS: Record<string, string> = {
   email_address_invalid: "bad_email",
   weak_password: "short",
   signup_disabled: "disabled",
+  email_provider_disabled: "provider_off",
   over_email_send_rate_limit: "email_limit",
   over_request_rate_limit: "rate_limit",
 };
@@ -23,6 +24,7 @@ const SIGN_UP_REASONS: Record<string, string> = {
 const SIGN_IN_REASONS: Record<string, string> = {
   invalid_credentials: "credentials",
   email_not_confirmed: "unconfirmed",
+  email_provider_disabled: "provider_off",
   over_request_rate_limit: "rate_limit",
 };
 

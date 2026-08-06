@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/icons";
-import type { LibraryBook } from "@/lib/library";
+import type { LibraryBook } from "@/lib/library-types";
 
 /** Signed-in only — the caller passes an empty list for anonymous visitors. */
 export function RecentStrip({

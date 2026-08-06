@@ -33,3 +33,22 @@ export function hasStaffTestEnv(): boolean {
 export const STAFF_STATE_PATH = "tests/.auth/staff.json";
 export const STAFF_EMAIL = "bh-e2e-uploader@mailinator.com";
 export const STAFF_PASSWORD = "bh-e2e-password-8842";
+
+/** Disposable published book used by the reader and search specs. */
+export const SEED_PATH = "tests/.auth/seed.json";
+export const SEED_BOOK_TITLE = "__e2e_kitab__ سىناق كىتابى";
+export const SEED_BOOK_HASH = "__e2e_book_hash__";
+/** A word placed on a known page so search results can be asserted exactly. */
+export const SEED_NEEDLE = "ئالتۇنكۆۋرۈك";
+export const SEED_NEEDLE_PAGE = 3;
+export const SEED_PAGE_COUNT = 14;
+
+export function readSeed(): { bookId: number } | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    return JSON.parse(readFileSync(SEED_PATH, "utf8")) as { bookId: number };
+  } catch {
+    return null;
+  }
+}

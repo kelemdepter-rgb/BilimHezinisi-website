@@ -84,17 +84,29 @@ user_id + book_id + position) ·
 - Quran search: separate RPC over `quran_ayas` (Arabic-normalized + Uyghur columns).
 
 ## Upload Pipeline (admin/uploader only)
-- Extraction happens **in the browser** (pdfjs-dist, mammoth, plain text, HTML/MD →
-  turndown): Vercel functions have a 4.5 MB request-body limit and short timeouts —
-  NEVER parse large files server-side. Web-URL import (readability) runs server-side
-  (small HTML only).
-- `.doc` (legacy Word): word-extractor is Node-only → server route accepts ≤4 MB;
-  otherwise instruct the admin to convert via the desktop app.
-- Original files (when the admin opts to keep the PDF) and covers upload DIRECTLY to
-  Supabase Storage via signed upload URLs; extracted pages insert in batches
-  (≤500 rows per request). Compute file_hash for duplicate detection (like desktop).
-- Scanned PDFs (no text layer): v1 → detect and tell the admin to OCR in the desktop
-  app first; browser-side tesseract.js OCR is a later phase.
+- **Accepted formats: `.docx`, `.doc`, `.md`, `.html`/`.htm`, `.txt`, and web URL.
+  PDF upload is NOT supported on the web** — it is rejected with an Uyghur message
+  telling the admin to open the PDF in the desktop app (OCR there if scanned) and
+  export it as DOCX, then upload that. Never re-add PDF parsing without an explicit
+  request: it pulls in pdfjs-dist, and scanned PDFs need OCR the web cannot do.
+- **Stored content is Markdown.** `.docx` → mammoth `convertToHtml` → turndown →
+  Markdown (headings, bold/italic, lists, blockquotes, tables, links preserved).
+  `.html` → turndown → Markdown. `.md` → stored as-is. `.txt` and legacy `.doc`
+  have no formatting to preserve → stored as plain text.
+  `books.content_format` records `markdown` or `text` per book so the reader renders
+  each correctly; existing books stay `text`.
+- Extraction happens **in the browser** (mammoth, turndown, plain text): Vercel
+  functions have a 4.5 MB request-body limit and short timeouts — NEVER parse large
+  files server-side. Web-URL import (readability) runs server-side (small HTML only).
+- `.doc` (legacy Word): word-extractor is Node-only → server route accepts ≤4 MB and
+  yields plain text only; prefer telling the admin to re-save as `.docx` for formatting.
+- Markdown is rendered through a sanitizing renderer (no raw HTML passthrough), and
+  search snippets strip Markdown syntax before display.
+- Covers (and the original file, only when the admin opts in — default OFF) upload
+  DIRECTLY to Supabase Storage via signed upload URLs; extracted pages insert in
+  batches (≤500 rows per request). Compute file_hash for duplicate detection.
+- Covers are supplied manually or auto-generated as a styled placeholder; there is no
+  PDF-first-page cover generation.
 
 ## Mobile Rules (HARD requirements — previous projects were burned by these)
 - Full-height layout uses `100dvh` / `min-h-dvh`. NEVER bare `100vh`.

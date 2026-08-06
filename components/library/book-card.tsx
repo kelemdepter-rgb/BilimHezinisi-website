@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/icons";
-import type { LibraryBook } from "@/lib/library";
+import type { LibraryBook } from "@/lib/library-types";
 
 /**
  * Manuscript-style placeholder used when a book has no cover — a paper panel

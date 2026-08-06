@@ -32,10 +32,17 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
     setMobileSearchOpen(false);
   }
 
+  /**
+   * The reader owns the whole screen: it carries its own sticky toolbars, and
+   * stacking those under the site header would put two sticky bars at top: 0
+   * and cost scarce vertical space on a phone.
+   */
+  const bare = /^\/books\/[^/]+\/read$/.test(pathname);
+
   // Lock body scroll only while the drawer is open (mobile rule: the page
   // must scroll normally again the moment it closes).
   useEffect(() => {
-    if (!drawerOpen) return;
+    if (!drawerOpen || bare) return;
     document.documentElement.style.overflow = "hidden";
     closeButtonRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
@@ -46,7 +53,9 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
       document.documentElement.style.overflow = "";
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [drawerOpen]);
+  }, [drawerOpen, bare]);
+
+  if (bare) return <>{children}</>;
 
   return (
     <div className="flex min-h-dvh flex-col">

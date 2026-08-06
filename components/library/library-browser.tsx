@@ -5,10 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { BookCard } from "@/components/library/book-card";
 import { loadMoreBooksAction } from "@/app/library-actions";
-import { LIBRARY_PAGE_SIZE, type BookSort, type LibraryBook } from "@/lib/library";
+import {
+  LIBRARY_PAGE_SIZE,
+  VIEW_COOKIE,
+  type BookSort,
+  type LibraryBook,
+} from "@/lib/library-types";
 import type { Category } from "@/lib/types";
-
-export const VIEW_COOKIE = "bh-library-view";
 
 export type BrowserBook = LibraryBook & { coverUrl: string | null };
 

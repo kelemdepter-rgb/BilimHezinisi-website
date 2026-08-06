@@ -16,7 +16,9 @@ test.describe("app shell", () => {
     await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
     await expect(page.locator("html")).toHaveAttribute("lang", "ug");
     await expect(page.getByRole("link", { name: "باش بەت — بىلىم خەزىنىسى" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "بىلىم خەزىنىسىگە خۇش كەپسىز" })).toBeVisible();
+    // Assert the library itself, not the welcome panel — that only shows for a
+    // signed-out visitor while the library is still empty.
+    await expect(page.getByTestId("book-list").or(page.getByTestId("library-empty"))).toBeVisible();
   });
 
   test("no horizontal overflow, including after scrolling to the bottom", async ({ page }) => {
@@ -72,19 +74,20 @@ test.describe("mobile drawer", () => {
 
     await page.getByTestId("menu-button").click();
     await expect(drawer).toBeVisible();
-    await expect(drawer.getByText("تۈرلەر تېخى قوشۇلمىغان")).toBeVisible();
+    // Whatever the library holds, the drawer must show its category nav.
+    await expect(drawer.getByRole("navigation", { name: "كىتاب تۈرلىرى" })).toBeVisible();
+
+    // While open the page must be locked...
+    await expect(page.locator("html")).toHaveCSS("overflow", "hidden");
 
     await page.getByTestId("drawer-close").click();
     await expect(drawer).not.toBeVisible();
 
-    const scrolled = await page.evaluate(
-      () =>
-        new Promise<number>((resolve) => {
-          window.scrollTo(0, 400);
-          requestAnimationFrame(() => resolve(window.scrollY));
-        }),
-    );
-    expect(scrolled, "body must scroll after the drawer closes").toBeGreaterThan(0);
+    // ...and released again on close. Asserted on the lock itself rather than
+    // by scrolling, which proves nothing when the library is short enough to
+    // fit the viewport.
+    const overflow = await page.evaluate(() => document.documentElement.style.overflow);
+    expect(overflow, "body scroll lock must be released").not.toBe("hidden");
 
     // The overlay tap must close it too (tap on the side not covered by the drawer).
     await page.evaluate(() => window.scrollTo(0, 0));

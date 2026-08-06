@@ -1,57 +1,21 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCategories } from "@/lib/data";
-import type { Category } from "@/lib/types";
+import {
+  LIBRARY_PAGE_SIZE,
+  categoryWithDescendants,
+  type BookDetail,
+  type BookSort,
+  type LibraryBook,
+} from "@/lib/library-types";
 
-export type BookSort = "new" | "title" | "author";
-
-export type LibraryBook = {
-  id: number;
-  title: string;
-  author: string;
-  category_id: number | null;
-  page_count: number;
-  date: string;
-  cover_path: string | null;
-  status: string;
-};
-
-export type BookDetail = LibraryBook & {
-  description: string;
-  language: string;
-  format: string;
-  original_file_path: string | null;
-  created_at: string;
-};
-
-export const LIBRARY_PAGE_SIZE = 24;
-
-/** A category plus every category nested under it. */
-export function categoryWithDescendants(categories: Category[], rootId: number): number[] {
-  const ids = [rootId];
-  const walk = (parentId: number) => {
-    for (const category of categories) {
-      if (category.parent_id === parentId && !ids.includes(category.id)) {
-        ids.push(category.id);
-        walk(category.id);
-      }
-    }
-  };
-  walk(rootId);
-  return ids;
-}
-
-/** Trail from the root down to `categoryId`, for breadcrumbs. */
-export function categoryTrail(categories: Category[], categoryId: number | null): Category[] {
-  const trail: Category[] = [];
-  let current = categories.find((category) => category.id === categoryId);
-  const guard = new Set<number>();
-  while (current && !guard.has(current.id)) {
-    guard.add(current.id);
-    trail.unshift(current);
-    current = categories.find((category) => category.id === current!.parent_id);
-  }
-  return trail;
-}
+export {
+  LIBRARY_PAGE_SIZE,
+  categoryTrail,
+  categoryWithDescendants,
+  type BookDetail,
+  type BookSort,
+  type LibraryBook,
+} from "@/lib/library-types";
 
 const ORDER: Record<BookSort, { column: string; ascending: boolean }> = {
   new: { column: "created_at", ascending: false },

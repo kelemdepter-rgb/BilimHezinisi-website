@@ -167,18 +167,35 @@ export function Reader({
     [bookId, firstPage, lastPage, loading, pageCount],
   );
 
+  /** Pull in more pages whenever either edge of the loaded window is close. */
+  const maybeFetchMore = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.bottom - window.innerHeight < FETCH_AHEAD_PX) void loadAround("after");
+    if (rect.top > -FETCH_AHEAD_PX && firstPage > 1) void loadAround("before");
+  }, [firstPage, loadAround]);
+
   useEffect(() => {
     const onScroll = () => {
       scheduleSave();
-      const container = containerRef.current;
-      if (!container) return;
-      const rect = container.getBoundingClientRect();
-      if (rect.bottom - window.innerHeight < FETCH_AHEAD_PX) void loadAround("after");
-      if (rect.top > -FETCH_AHEAD_PX && firstPage > 1) void loadAround("before");
+      maybeFetchMore();
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [firstPage, loadAround, scheduleSave]);
+  }, [maybeFetchMore, scheduleSave]);
+
+  /**
+   * Also check after mount and after each window change. Scroll alone is not
+   * enough: the reader may already sit near the end (short book, tall screen),
+   * or may have scrolled while hydration was still pending — in both cases no
+   * further scroll event would ever arrive to trigger the fetch.
+   * Self-limiting: appended pages push the container edge out of range.
+   */
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => maybeFetchMore());
+    return () => cancelAnimationFrame(frame);
+  }, [maybeFetchMore, pages.length]);
 
   /**
    * Jump to the saved position (or an explicit ?page=) once pages are in the

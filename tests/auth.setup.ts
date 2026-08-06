@@ -1,8 +1,14 @@
 import { test as setup, expect } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  SEED_BOOK_HASH,
+  SEED_BOOK_TITLE,
+  SEED_NEEDLE,
+  SEED_NEEDLE_PAGE,
+  SEED_PAGE_COUNT,
+  SEED_PATH,
   STAFF_EMAIL,
   STAFF_PASSWORD,
   STAFF_STATE_PATH,
@@ -53,4 +59,50 @@ setup("create and sign in a staff account", async ({ page }) => {
 
   mkdirSync(dirname(STAFF_STATE_PATH), { recursive: true });
   await page.context().storageState({ path: STAFF_STATE_PATH });
+});
+
+/**
+ * Seed one published book with real pages, so the reader and search specs
+ * exercise the actual data path instead of an empty library. Removed again by
+ * auth.teardown.ts.
+ */
+setup("seed a published test book", async () => {
+  setup.skip(!hasStaffTestEnv(), "Supabase env not configured");
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  await admin.from("books").delete().eq("file_hash", SEED_BOOK_HASH);
+
+  const { data: book, error } = await admin
+    .from("books")
+    .insert({
+      title: SEED_BOOK_TITLE,
+      author: "سىناق ئاپتور",
+      status: "published",
+      file_hash: SEED_BOOK_HASH,
+      format: "TXT",
+      language: "ug",
+      page_count: SEED_PAGE_COUNT,
+      description: "بۇ Playwright سىنىقى ئۈچۈن قوشۇلغان ۋاقىتلىق كىتاب.",
+    })
+    .select("id")
+    .single();
+  if (error || !book) throw new Error(`could not seed book: ${error?.message}`);
+
+  const pages = Array.from({ length: SEED_PAGE_COUNT }, (_, index) => {
+    const pageNo = index + 1;
+    const filler = `${pageNo}-بەتنىڭ مەزمۇنى. ئۇيغۇر تىلىدىكى سىناق جۈملىسى. `.repeat(18);
+    // One page carries the needle so a search result can be asserted exactly.
+    const marker = pageNo === SEED_NEEDLE_PAGE ? ` بۇ بەتتە ${SEED_NEEDLE} دېگەن سۆز بار. ` : "";
+    return { book_id: book.id, page_no: pageNo, content: `${marker}${filler}` };
+  });
+  const { error: pageError } = await admin.from("book_pages").insert(pages);
+  if (pageError) throw new Error(`could not seed pages: ${pageError.message}`);
+
+  mkdirSync(dirname(SEED_PATH), { recursive: true });
+  writeFileSync(SEED_PATH, JSON.stringify({ bookId: book.id }), "utf8");
 });

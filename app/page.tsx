@@ -1,15 +1,10 @@
 import { cookies } from "next/headers";
 import { Icon } from "@/components/icons";
-import { LibraryBrowser, VIEW_COOKIE } from "@/components/library/library-browser";
+import { LibraryBrowser } from "@/components/library/library-browser";
 import { RecentStrip } from "@/components/library/recent-strip";
 import { getCategories, getSessionInfo } from "@/lib/data";
-import {
-  LIBRARY_PAGE_SIZE,
-  coverUrlMap,
-  getRecentReads,
-  listBooks,
-  type BookSort,
-} from "@/lib/library";
+import { coverUrlMap, getRecentReads, listBooks } from "@/lib/library";
+import { LIBRARY_PAGE_SIZE, VIEW_COOKIE, type BookSort } from "@/lib/library-types";
 
 function parseSort(value: unknown): BookSort {
   return value === "title" || value === "author" ? value : "new";

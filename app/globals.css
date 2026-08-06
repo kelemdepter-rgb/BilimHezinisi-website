@@ -297,3 +297,48 @@
     padding-right: env(safe-area-inset-right);
   }
 }
+
+/* ── Print / save-as-PDF: just the book, correct RTL, one page per book page ── */
+@media print {
+  :root {
+    --bg: #ffffff;
+    --bg2: #ffffff;
+    --paper: #ffffff;
+    --text: #000000;
+    --text2: #222222;
+    --text3: #555555;
+    --grain: none;
+  }
+  html,
+  body {
+    background: #fff !important;
+    background-image: none !important;
+    color: #000 !important;
+    direction: rtl;
+  }
+  /* Site chrome never belongs in a printout. */
+  header:not([data-testid="reader-toolbar"]),
+  footer,
+  aside,
+  nav,
+  .print\:hidden {
+    display: none !important;
+  }
+  .reader-page {
+    break-after: page;
+    page-break-after: always;
+    margin: 0 0 1.5rem;
+  }
+  .reader-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  mark {
+    background: transparent !important;
+    color: inherit !important;
+    font-weight: 700;
+  }
+  @page {
+    margin: 18mm 16mm;
+  }
+}

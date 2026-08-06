@@ -1,0 +1,165 @@
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { ReadingPosition } from "@/lib/reader/position";
+
+export type BookPage = { page_no: number; content: string };
+export type Annotation = {
+  id: number;
+  page_no: number;
+  position: number;
+  created_at: string;
+  /** bookmark name, or note text */
+  text: string;
+};
+
+/** Pages come straight from Supabase under RLS — no Vercel function in the path. */
+export async function fetchPages(bookId: number, from: number, to: number): Promise<BookPage[]> {
+  const supabase = createSupabaseBrowserClient();
+  const { data, error } = await supabase
+    .from("book_pages")
+    .select("page_no, content")
+    .eq("book_id", bookId)
+    .gte("page_no", from)
+    .lte("page_no", to)
+    .order("page_no", { ascending: true });
+  if (error) throw new Error(error.message);
+  return (data as BookPage[] | null) ?? [];
+}
+
+/**
+ * Find pages of THIS book containing the term. Scoped by book_id first, so it
+ * stays cheap even without a dedicated index on raw content.
+ */
+export async function searchInBook(
+  bookId: number,
+  query: string,
+  limit = 100,
+): Promise<BookPage[]> {
+  const term = query.trim();
+  if (!term) return [];
+  const supabase = createSupabaseBrowserClient();
+  const escaped = term.replace(/[%_\\]/g, (char) => `\\${char}`);
+  const { data, error } = await supabase
+    .from("book_pages")
+    .select("page_no, content")
+    .eq("book_id", bookId)
+    .ilike("content", `%${escaped}%`)
+    .order("page_no", { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return (data as BookPage[] | null) ?? [];
+}
+
+/** Debounced by the caller. Anonymous readers never reach this. */
+export async function saveProgress(bookId: number, position: ReadingPosition): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase.from("reading_progress").upsert(
+    {
+      user_id: user.id,
+      book_id: bookId,
+      page_no: position.pageNo,
+      position: position.offset,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id,book_id" },
+  );
+}
+
+/** Upsert keeps recent reads deduplicated per book. */
+export async function touchRecentRead(bookId: number): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await supabase
+    .from("recent_reads")
+    .upsert(
+      { user_id: user.id, book_id: bookId, read_at: new Date().toISOString() },
+      { onConflict: "user_id,book_id" },
+    );
+}
+
+export async function fetchAnnotations(
+  bookId: number,
+): Promise<{ bookmarks: Annotation[]; notes: Annotation[] }> {
+  const supabase = createSupabaseBrowserClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { bookmarks: [], notes: [] };
+
+  const [bookmarkRows, noteRows] = await Promise.all([
+    supabase
+      .from("bookmarks")
+      .select("id, page_no, position, created_at, name")
+      .eq("book_id", bookId)
+      .order("page_no", { ascending: true }),
+    supabase
+      .from("book_notes")
+      .select("id, page_no, position, created_at, text")
+      .eq("book_id", bookId)
+      .order("page_no", { ascending: true }),
+  ]);
+
+  type BookmarkRow = Omit<Annotation, "text"> & { name: string };
+  return {
+    bookmarks: ((bookmarkRows.data as BookmarkRow[] | null) ?? []).map((row) => ({
+      id: row.id,
+      page_no: row.page_no,
+      position: row.position,
+      created_at: row.created_at,
+      text: row.name,
+    })),
+    notes: (noteRows.data as Annotation[] | null) ?? [],
+  };
+}
+
+export async function addBookmark(
+  bookId: number,
+  pageNo: number,
+  name: string,
+): Promise<Annotation | null> {
+  const supabase = createSupabaseBrowserClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("bookmarks")
+    .insert({ user_id: user.id, book_id: bookId, page_no: pageNo, position: 0, name })
+    .select("id, page_no, position, created_at, name")
+    .single();
+  if (error) throw new Error(error.message);
+  const row = data as { id: number; page_no: number; position: number; created_at: string; name: string };
+  return { id: row.id, page_no: row.page_no, position: row.position, created_at: row.created_at, text: row.name };
+}
+
+export async function addNote(
+  bookId: number,
+  pageNo: number,
+  text: string,
+): Promise<Annotation | null> {
+  const supabase = createSupabaseBrowserClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from("book_notes")
+    .insert({ user_id: user.id, book_id: bookId, page_no: pageNo, position: 0, text })
+    .select("id, page_no, position, created_at, text")
+    .single();
+  if (error) throw new Error(error.message);
+  return data as Annotation;
+}
+
+export async function deleteAnnotation(kind: "bookmark" | "note", id: number): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
+  const table = kind === "bookmark" ? "bookmarks" : "book_notes";
+  const { error } = await supabase.from(table).delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}

@@ -80,12 +80,7 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
             </span>
           </Link>
 
-          {/* Search — UI only in Phase 1; wired to FTS in Phase 3 */}
-          <form
-            role="search"
-            className="sbox mx-2 hidden md:flex"
-            onSubmit={(event) => event.preventDefault()}
-          >
+          <form role="search" action="/search" className="sbox mx-2 hidden md:flex">
             <Icon name="search" className="text-ink3" />
             <input
               className="sinput"
@@ -138,14 +133,15 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
 
         {mobileSearchOpen && (
           <div className="border-t border-bd px-3 pb-3 pt-2 md:hidden">
-            <form role="search" className="sbox flex" onSubmit={(event) => event.preventDefault()}>
+            <form role="search" action="/search" className="sbox flex">
               <Icon name="search" className="text-ink3" />
               <input
                 className="sinput"
                 type="search"
                 name="q"
                 placeholder="كىتاب، ئاپتور ياكى مەزمۇن ئىزدەڭ…"
-                aria-label="كۇتۇپخانىدىن ئىزدەش"
+                aria-label="كۇتۇپخانىدىن ئىزدەش (تېلېفون)"
+                autoFocus
               />
             </form>
           </div>
@@ -223,6 +219,16 @@ function SidebarContent({ categories }: { categories: Category[] }) {
         <Icon name="layers" className="text-am" />
         تۈرلەر
       </h2>
+      {categories.length > 0 && (
+        <Link
+          href="/"
+          data-testid="category-all"
+          className="mb-1 flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+        >
+          <Icon name="layers" className="text-am" />
+          ھەممە كىتابلار
+        </Link>
+      )}
       {topLevel.length === 0 ? (
         <p className="rounded-[var(--radius)] bg-ab px-3 py-3 text-[13px] leading-6 text-ink2">
           تۈرلەر تېخى قوشۇلمىغان. كىتابلار قوشۇلغاندا تۈرلەر مۇشۇ يەردە كۆرۈنىدۇ.
@@ -251,9 +257,14 @@ function SidebarContent({ categories }: { categories: Category[] }) {
 
 function CategoryRow({ category }: { category: Category }) {
   return (
-    <span className="flex min-h-11 cursor-default items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] text-ink2 hover:bg-bg2 hover:text-ink">
+    <Link
+      href={`/?cat=${category.id}`}
+      data-testid="category-link"
+      data-category-id={category.id}
+      className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] text-ink2 hover:bg-bg2 hover:text-ink"
+    >
       <Icon name={(category.icon || "folder") as IconName} className="text-am" />
       <span className="min-w-0 truncate">{category.name}</span>
-    </span>
+    </Link>
   );
 }

@@ -1,4 +1,13 @@
 import { defineConfig } from "@playwright/test";
+import { STAFF_STATE_PATH, loadEnvLocal } from "./tests/env";
+
+loadEnvLocal();
+
+const VIEWPORTS = [
+  { name: "mobile-375x667", width: 375, height: 667, mobile: true, scale: 2 },
+  { name: "mobile-390x844", width: 390, height: 844, mobile: true, scale: 3 },
+  { name: "desktop-1280x800", width: 1280, height: 800, mobile: false, scale: 1 },
+] as const;
 
 /**
  * Mobile-first testing gate (CLAUDE.md): every feature must pass at
@@ -8,8 +17,8 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   // The Next dev server on Windows stalls page loads under parallel browser
-  // contexts (all navigations time out with >1 worker), so the smoke suite
-  // runs serially — it stays well under a minute.
+  // contexts (all navigations time out with >1 worker), so the suite runs
+  // serially — it stays well under a minute.
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -20,33 +29,35 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [
-    {
-      name: "mobile-375x667",
-      use: {
-        browserName: "chromium",
-        viewport: { width: 375, height: 667 },
-        isMobile: true,
-        hasTouch: true,
-        deviceScaleFactor: 2,
+    { name: "setup", testMatch: /auth\.setup\.ts/, teardown: "cleanup" },
+    { name: "cleanup", testMatch: /auth\.teardown\.ts/ },
+    ...VIEWPORTS.flatMap((viewport) => [
+      {
+        name: viewport.name,
+        testMatch: /smoke\.spec\.ts/,
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
       },
-    },
-    {
-      name: "mobile-390x844",
-      use: {
-        browserName: "chromium",
-        viewport: { width: 390, height: 844 },
-        isMobile: true,
-        hasTouch: true,
-        deviceScaleFactor: 3,
+      {
+        // Admin specs reuse the signed-in staff state from the setup project.
+        name: `admin-${viewport.name}`,
+        testMatch: /admin\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
       },
-    },
-    {
-      name: "desktop-1280x800",
-      use: {
-        browserName: "chromium",
-        viewport: { width: 1280, height: 800 },
-      },
-    },
+    ]),
   ],
   webServer: {
     command: "npm run dev",

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
 import { getAdminCounts, getSessionInfo } from "@/lib/data";
@@ -16,7 +17,7 @@ export default async function AdminDashboardPage() {
   const counts = await getAdminCounts();
 
   return (
-    <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
+    <>
       <h1 className="flex items-center gap-2.5 text-xl font-bold">
         <Icon name="settings" className="ic-lg text-am" />
         باشقۇرۇش سۇپىسى
@@ -31,14 +32,21 @@ export default async function AdminDashboardPage() {
         <StatCard icon="layers" label="تۈرلەر" value={String(counts.categories)} />
       </div>
 
-      <div className="paper mt-5 p-5">
-        <p className="flex items-start gap-2.5 text-[13.5px] leading-7 text-ink2">
-          <Icon name="info" className="mt-1 shrink-0 text-am" />
-          بۇ — دەسلەپكى باشقۇرۇش بېتى. كىتاب يوللاش، تۈر باشقۇرۇش ۋە ئەزا باشقۇرۇش
-          ئىقتىدارلىرى كېيىنكى باسقۇچتا قوشۇلىدۇ.
-        </p>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Link href="/admin/books/new" className="btn-am">
+          <Icon name="plus" />
+          يېڭى كىتاب قوشۇش
+        </Link>
+        <Link href="/admin/books" className="hbtn">
+          <Icon name="book" />
+          كىتابلارنى باشقۇرۇش
+        </Link>
+        <Link href="/admin/categories" className="hbtn">
+          <Icon name="layers" />
+          تۈرلەرنى باشقۇرۇش
+        </Link>
       </div>
-    </div>
+    </>
   );
 }
 

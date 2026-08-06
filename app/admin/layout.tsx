@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Icon } from "@/components/icons";
+import { AdminNav } from "@/components/admin/admin-nav";
 import { hasSupabaseEnv } from "@/lib/env";
 import { getSessionInfo } from "@/lib/data";
 
@@ -27,5 +28,10 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   if (!session) redirect("/login");
   if (session.role !== "admin" && session.role !== "uploader") redirect("/");
 
-  return <>{children}</>;
+  return (
+    <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
+      <AdminNav role={session.role} />
+      {children}
+    </div>
+  );
 }

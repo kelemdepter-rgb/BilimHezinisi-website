@@ -28,10 +28,31 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem ---- Copy the backup into OneDrive so it leaves this computer ----
+rem OneDrive syncs it to the cloud on its own; if OneDrive is missing or
+rem signed out the backup still exists locally, so this never fails the run.
+set "CLOUD=%OneDrive%\BilimHezinisi-Backups"
+
+if defined OneDrive (
+  if not exist "%CLOUD%" mkdir "%CLOUD%" >nul 2>&1
+  copy /y "backups\*.ndjson.gz" "%CLOUD%\" >nul 2>&1
+  if errorlevel 1 (
+    echo.
+    echo DIQQET: OneDrive gha kochurgili bolmidi.
+    echo Zapas yenila "backups" qisquchida bar - uni qolingiz bilen kochurung.
+  ) else (
+    echo.
+    echo OneDrive gha kochuruldi:
+    echo    %CLOUD%
+  )
+) else (
+  echo.
+  echo DIQQET: OneDrive tepilmidi - zapas peqet bu kompyutirda.
+)
+
 echo.
 echo ============================================
-echo   TAMAM! Zapas "backups" qisquchigha chushti.
-echo   Uni USB yaki bulut diskigha kochurup qoyung.
+echo   TAMAM!
 echo ============================================
 echo.
 

@@ -107,6 +107,16 @@ $fn$;
 
 grant execute on function public.search_books(text, bigint, int, int) to anon, authenticated;
 
--- Reclaim the space the dropped index and column were holding.
-vacuum full public.book_pages;
+-- Refresh planner statistics for the new expression index.
 analyze public.book_pages;
+
+-- NOTE: no VACUUM here on purpose.
+-- Dropping the index frees its space immediately, but the dropped column's
+-- bytes stay in the existing rows until the table is rewritten. VACUUM FULL
+-- does that — and it CANNOT run inside a transaction block, which is how
+-- migration tools (and the Supabase SQL Editor) execute a script. Run it
+-- separately, on its own, when convenient:
+--
+--     vacuum full public.book_pages;
+--
+-- Autovacuum also reclaims the space over time, so this is optional.

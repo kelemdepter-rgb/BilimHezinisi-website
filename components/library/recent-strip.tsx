@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { BookCover } from "@/components/library/book-cover";
 import type { LibraryBook } from "@/lib/library-types";
 
 /** Signed-in only — the caller passes an empty list for anonymous visitors. */
@@ -24,15 +25,8 @@ export function RecentStrip({
           return (
             <li key={book.id} className="w-28 shrink-0">
               <Link href={`/books/${book.id}/read`} className="paper block overflow-hidden">
-                <span className="block aspect-[3/4] w-full overflow-hidden border-b border-bd">
-                  {coverUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={coverUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-                  ) : (
-                    <span className="grain flex h-full w-full items-center justify-center bg-paper">
-                      <Icon name="book" className="ic-lg text-am" />
-                    </span>
-                  )}
+                <span className="relative block aspect-[3/4] w-full overflow-hidden border-b border-bd">
+                  <BookCover coverUrl={coverUrl ?? null} title={book.title} sizes="112px" />
                 </span>
                 <span className="line-clamp-2 p-2 text-[12px] font-semibold leading-5">
                   {book.title}

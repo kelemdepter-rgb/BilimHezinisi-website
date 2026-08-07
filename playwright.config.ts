@@ -44,6 +44,20 @@ export default defineConfig({
         },
       },
       {
+        // Format specs (PDF rejection, DOCX round-trip, free-tier plumbing).
+        name: `formats-${viewport.name}`,
+        testMatch: /formats\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Reader/library specs need the seeded book from the setup project.
         name: `reader-${viewport.name}`,
         testMatch: /reader\.spec\.ts/,

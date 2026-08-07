@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
+import { UsagePanel } from "@/components/admin/usage-panel";
 import { getAdminCounts, getSessionInfo } from "@/lib/data";
+import { getUsageReport } from "@/lib/usage";
 import type { Role } from "@/lib/types";
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -15,6 +17,7 @@ export default async function AdminDashboardPage() {
   if (!session) redirect("/login");
 
   const counts = await getAdminCounts();
+  const usage = session.role === "admin" ? await getUsageReport() : null;
 
   return (
     <>
@@ -31,6 +34,9 @@ export default async function AdminDashboardPage() {
         <StatCard icon="book" label="كىتابلار" value={String(counts.books)} />
         <StatCard icon="layers" label="تۈرلەر" value={String(counts.categories)} />
       </div>
+
+      {/* Free-tier gauge is admin-only: an uploader manages books, not limits. */}
+      {session.role === "admin" && usage && <UsagePanel report={usage} />}
 
       <div className="mt-5 flex flex-wrap gap-3">
         <Link href="/admin/books/new" className="btn-am">

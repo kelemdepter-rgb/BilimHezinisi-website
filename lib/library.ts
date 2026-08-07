@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getCategories } from "@/lib/data";
+import { getPublicUrl } from "@/lib/storage";
 import {
   LIBRARY_PAGE_SIZE,
   categoryWithDescendants,
@@ -126,7 +127,7 @@ export async function coverUrlFor(coverPath: string | null): Promise<string | nu
   if (!coverPath) return null;
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
-  return supabase.storage.from("covers").getPublicUrl(coverPath).data.publicUrl;
+  return getPublicUrl(supabase, "covers", coverPath);
 }
 
 /** Resolve many cover paths at once (one client, no extra round trips). */
@@ -138,7 +139,7 @@ export async function coverUrlMap(
   if (!supabase) return map;
   for (const book of books) {
     if (!book.cover_path || map.has(book.cover_path)) continue;
-    map.set(book.cover_path, supabase.storage.from("covers").getPublicUrl(book.cover_path).data.publicUrl);
+    map.set(book.cover_path, getPublicUrl(supabase, "covers", book.cover_path));
   }
   return map;
 }

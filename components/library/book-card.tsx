@@ -1,20 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { BookCover } from "@/components/library/book-cover";
 import type { LibraryBook } from "@/lib/library-types";
-
-/**
- * Manuscript-style placeholder used when a book has no cover — a paper panel
- * carrying the title and author, so the grid never shows a broken image.
- */
-function PlaceholderCover({ title, author }: { title: string; author: string }) {
-  return (
-    <div className="grain flex h-full w-full flex-col items-center justify-center gap-2 bg-paper p-3 text-center">
-      <Icon name="book" className="ic-lg text-am" />
-      <span className="line-clamp-3 text-[12.5px] font-bold leading-5 text-ink">{title}</span>
-      {author && <span className="line-clamp-1 text-[11px] text-ink3">{author}</span>}
-    </div>
-  );
-}
 
 export function BookCard({
   book,
@@ -39,14 +26,8 @@ export function BookCard({
           data-testid="book-card"
           className="paper flex items-center gap-3 p-2.5 hover:shadow-[var(--shadow-2)]"
         >
-          <span className="h-20 w-14 shrink-0 overflow-hidden rounded-[var(--radius2)] border border-bd">
-            {coverUrl ? (
-              // Covers live in Supabase Storage; next/image would need remote config.
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={coverUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-            ) : (
-              <PlaceholderCover title={book.title} author={book.author} />
-            )}
+          <span className="relative h-20 w-14 shrink-0 overflow-hidden rounded-[var(--radius2)] border border-bd">
+            <BookCover coverUrl={coverUrl} title={book.title} author={book.author} sizes="56px" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14.5px] font-bold text-ink">{book.title}</span>
@@ -68,13 +49,13 @@ export function BookCard({
         data-testid="book-card"
         className="paper grain flex h-full flex-col overflow-hidden hover:shadow-[var(--shadow-2)]"
       >
-        <span className="block aspect-[3/4] w-full overflow-hidden border-b border-bd">
-          {coverUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={coverUrl} alt="" className="h-full w-full object-cover" loading="lazy" />
-          ) : (
-            <PlaceholderCover title={book.title} author={book.author} />
-          )}
+        <span className="relative block aspect-[3/4] w-full overflow-hidden border-b border-bd">
+          <BookCover
+            coverUrl={coverUrl}
+            title={book.title}
+            author={book.author}
+            sizes="(min-width: 1280px) 200px, (min-width: 1024px) 22vw, (min-width: 640px) 30vw, 45vw"
+          />
         </span>
         <span className="flex min-w-0 flex-1 flex-col p-3">
           <span className="line-clamp-2 text-[13.5px] font-bold leading-6 text-ink">{book.title}</span>

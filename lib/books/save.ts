@@ -1,5 +1,8 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { compressCover, uploadFile, type Bucket } from "@/lib/storage";
 import type { BookMetadataInput } from "@/lib/books/types";
+
+export { storagePath } from "@/lib/storage";
 
 /**
  * CLAUDE.md caps a page insert at 500 rows per request. Uyghur text is
@@ -83,19 +86,23 @@ export async function insertPages(
   }
 }
 
-/** Upload straight to Storage from the browser; returns the stored object path. */
+/**
+ * Upload straight to Storage from the browser; returns the stored object path.
+ * Covers are re-encoded to a small WebP first — they are the main egress cost.
+ */
 export async function uploadToBucket(
-  bucket: "covers" | "book-files",
+  bucket: Bucket,
   path: string,
   body: Blob | File,
 ): Promise<string> {
   const supabase = createSupabaseBrowserClient();
-  const { error } = await supabase.storage.from(bucket).upload(path, body, {
-    upsert: true,
-    contentType: body.type || undefined,
-  });
-  if (error) throw new Error(error.message);
-  return path;
+  if (bucket === "covers") {
+    const compressed = await compressCover(body);
+    if (compressed) {
+      return uploadFile(supabase, bucket, path.replace(/\.[^.]+$/, ".webp"), compressed);
+    }
+  }
+  return uploadFile(supabase, bucket, path, body);
 }
 
 export async function setBookPaths(
@@ -112,10 +119,4 @@ export async function deletePartialBook(bookId: number): Promise<void> {
   const supabase = createSupabaseBrowserClient();
   await supabase.from("book_pages").delete().eq("book_id", bookId);
   await supabase.from("books").delete().eq("id", bookId);
-}
-
-/** Storage object path for a book's cover / original file. */
-export function storagePath(bookId: number, fileName: string, kind: "cover" | "file"): string {
-  const ext = (fileName.split(".").pop() ?? "bin").toLowerCase().replace(/[^a-z0-9]/g, "");
-  return kind === "cover" ? `${bookId}/cover.${ext}` : `${bookId}/original.${ext}`;
 }

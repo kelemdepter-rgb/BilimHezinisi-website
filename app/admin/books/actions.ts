@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/admin/guards";
 import { MSG, failureMessage, type ActionResult } from "@/lib/admin/messages";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { removeFiles } from "@/lib/storage";
 
 async function client() {
   const supabase = await createSupabaseServerClient();
@@ -70,8 +71,8 @@ export async function deleteBooksAction(formData: FormData): Promise<ActionResul
 
     const covers = (rows ?? []).map((r) => r.cover_path).filter(Boolean) as string[];
     const originals = (rows ?? []).map((r) => r.original_file_path).filter(Boolean) as string[];
-    if (covers.length) await supabase.storage.from("covers").remove(covers);
-    if (originals.length) await supabase.storage.from("book-files").remove(originals);
+    await removeFiles(supabase, "covers", covers);
+    await removeFiles(supabase, "book-files", originals);
 
     const { error } = await supabase.from("books").delete().in("id", ids);
     if (error) return { ok: false, error: failureMessage(new Error(error.message)) };

@@ -38,6 +38,53 @@ Migrations live in `supabase/migrations/`. Apply `0001_init.sql` in the
 Supabase SQL Editor (or `npx supabase db push` when the project is linked).
 Never edit an applied migration — add a new file.
 
+## Free tier — كۇتۇپخانىنى ھەقسىز ساقلاش
+
+بۇ سايت Supabase ۋە Vercel نىڭ ھەقسىز نۇسخىسىدا ئىشلەيدۇ. چەكلىمە: ساندان
+**500 MB**، ساقلاش **1 GB**، ئېقىم **5 GB/ئاي**.
+
+### بوشلۇقنى ئۆلچەش
+
+```bash
+node --env-file=.env.local scripts/db-usage.mjs
+```
+
+قايسى جەدۋەل ۋە قايسى ئىندېكسنىڭ قانچە جاي ئىگىلىگىنىنى، ھەر كىتابقا قانچە
+بايت كەتكىنىنى ۋە يەنە قانچە كىتاب سىغىدىغانلىقىنى كۆرسىتىدۇ. `/admin` بېتىدىمۇ
+ئوخشاش ئۇچۇر كۆرۈنىدۇ.
+
+### زاپاسلاش (backup) — ئەڭ مۇھىم ئىش
+
+Supabase يوقاپ كەتسە ياكى ھېسابات ئېتىلىپ قالسا، كىتابلىرىڭىز يوقالماسلىقى
+ئۈچۈن ۋاقىتلىق زاپاسلاپ تۇرۇڭ:
+
+```bash
+node --env-file=.env.local scripts/backup.mjs
+```
+
+`backups/` قىسقۇچىغا زىپلانغان بىر ھۆججەت چۈشىدۇ. **ئۇنى كومپيۇتېرىڭىزدىن
+باشقا يەرگىمۇ كۆچۈرۈپ قويۇڭ** (USB دىسكا ياكى بۇلۇت دىسكا).
+
+**قانچىلىك ئارىلىقتا؟** يېڭى كىتاب قوشقان ھەر قېتىمدىن كېيىن، ياكى ئاز
+دېگەندە **ئايدا بىر قېتىم**.
+
+### ئەسلىگە قايتۇرۇش (restore)
+
+يېڭى (بوش) Supabase لايىھەسىگە:
+
+```bash
+node --env-file=.env.local scripts/restore.mjs backups/bilim-backup-2026-08-07.ndjson.gz
+```
+
+ئالدىن سىناپ كۆرۈش ئۈچۈن `--dry-run` قوشۇڭ — ھېچنېمە يېزىلمايدۇ. قايتا ئىجرا
+قىلىشقا بولىدۇ، تەكرارلانمايدۇ.
+
+### سايت ئۇخلاپ قالماسلىقى ئۈچۈن
+
+Supabase نىڭ ھەقسىز لايىھەسى 7 كۈن جىمجىت تۇرسا توختايدۇ. شۇڭا `vercel.json`
+دا كۈندە بىر قېتىم `/api/health` نى چېكىدىغان cron بار. Vercel دا
+`CRON_SECRET` مۇھىت ئۆزگەرگۈچىسىنى قويۇڭ (خالىغان ئۇزۇن مەخپىي سۆز).
+
 ## Troubleshooting
 
 **Every Supabase call fails with `fetch failed` / pages take ~7 s.**

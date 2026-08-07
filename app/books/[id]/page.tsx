@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/icons";
+import { BookCover } from "@/components/library/book-cover";
 import { getCategories, getSessionInfo } from "@/lib/data";
 import {
   categoryTrail,
@@ -60,16 +61,14 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
 
       <div className="grid gap-5 lg:grid-cols-[220px_1fr]">
         <div className="paper grain mx-auto w-40 overflow-hidden lg:mx-0 lg:w-full">
-          <div className="aspect-[3/4] w-full">
-            {coverUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={coverUrl} alt="" className="h-full w-full object-cover" />
-            ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-4 text-center">
-                <Icon name="book" className="ic-lg text-am" />
-                <span className="text-[13px] font-bold leading-6">{book.title}</span>
-              </div>
-            )}
+          <div className="relative aspect-[3/4] w-full">
+            <BookCover
+              coverUrl={coverUrl}
+              title={book.title}
+              author={book.author}
+              sizes="(min-width: 1024px) 220px, 160px"
+              priority
+            />
           </div>
         </div>
 

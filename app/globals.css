@@ -298,6 +298,127 @@
   }
 }
 
+/* ── Rendered Markdown book pages ──────────────────────────────────────────
+   Sizes are relative (em) so the reader's font-size, font-family and
+   line-height controls flow through untouched. Spacing uses logical
+   properties so it mirrors correctly under dir="rtl". */
+@layer components {
+  .md-body > :first-child { margin-block-start: 0; }
+  .md-body > :last-child { margin-block-end: 0; }
+
+  .md-body h1,
+  .md-body h2,
+  .md-body h3,
+  .md-body h4,
+  .md-body h5,
+  .md-body h6 {
+    font-weight: 700;
+    line-height: 1.5;
+    color: var(--text);
+    margin-block: 1.2em 0.5em;
+  }
+  .md-body h1 { font-size: 1.5em; }
+  .md-body h2 { font-size: 1.3em; }
+  .md-body h3 { font-size: 1.15em; }
+  .md-body h4,
+  .md-body h5,
+  .md-body h6 { font-size: 1em; }
+  /* A gold hairline under the top levels, echoing the desktop headings. */
+  .md-body h1,
+  .md-body h2 {
+    border-block-end: 1px solid var(--border);
+    padding-block-end: 0.25em;
+  }
+
+  .md-body p { margin-block: 0.85em; }
+  .md-body strong { font-weight: 700; color: var(--text); }
+  .md-body em { font-style: italic; }
+  .md-body del { text-decoration: line-through; color: var(--text3); }
+  .md-body hr { border: 0; border-block-start: 1px solid var(--border); margin-block: 1.5em; }
+
+  .md-body a {
+    color: var(--am);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .md-body ul,
+  .md-body ol {
+    margin-block: 0.85em;
+    padding-inline-start: 1.6em;
+  }
+  .md-body ul { list-style: disc; }
+  .md-body ol { list-style: decimal; }
+  .md-body li { margin-block: 0.3em; }
+  .md-body li > ul,
+  .md-body li > ol { margin-block: 0.3em; }
+
+  .md-body blockquote {
+    margin-block: 1em;
+    padding: 0.6em 1em;
+    border-inline-start: 3px solid var(--am);
+    background: var(--ab);
+    border-radius: var(--radius2);
+    color: var(--text2);
+  }
+
+  .md-body code {
+    font-family: ui-monospace, monospace;
+    font-size: 0.9em;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius2);
+    padding: 0.1em 0.35em;
+  }
+  .md-body pre {
+    margin-block: 1em;
+    padding: 0.9em;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    direction: ltr;
+    text-align: start;
+  }
+  .md-body pre code {
+    background: none;
+    border: 0;
+    padding: 0;
+  }
+
+  /* Tables scroll inside their own container so a wide table can never make
+     the page scroll sideways at 360 px. */
+  .md-body table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    border-collapse: collapse;
+    margin-block: 1em;
+    font-size: 0.95em;
+  }
+  .md-body th,
+  .md-body td {
+    border: 1px solid var(--border2);
+    padding: 0.45em 0.7em;
+    text-align: start;
+    vertical-align: top;
+  }
+  .md-body thead th {
+    background: var(--bg2);
+    font-weight: 700;
+  }
+  .md-body tbody tr:nth-child(even) { background: var(--ab); }
+
+  .md-body mark {
+    background: var(--ab2);
+    color: var(--text);
+    border-radius: 3px;
+    padding-inline: 0.15em;
+  }
+}
+
 /* ── Print / save-as-PDF: just the book, correct RTL, one page per book page ── */
 @media print {
   :root {

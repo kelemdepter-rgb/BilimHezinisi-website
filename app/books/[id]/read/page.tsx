@@ -63,6 +63,7 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/boo
       bookId={bookId}
       title={book.title}
       pageCount={book.page_count}
+      contentFormat={book.content_format === "markdown" ? "markdown" : "text"}
       initialPages={initialPages}
       initialPosition={position}
       signedIn={Boolean(session)}

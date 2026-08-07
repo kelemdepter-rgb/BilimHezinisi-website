@@ -61,10 +61,19 @@ npx playwright test  # mobile (375x667, 390x844) + desktop (1280x800) projects
 - `100dvh` never `100vh`; `env(safe-area-inset-*)` on fixed bars; ≥44 px touch
   targets; no hover-only UI.
 - Vercel request-body limit is 4.5 MB → book files upload DIRECT to Supabase Storage
-  (signed URLs); PDF/DOCX text extraction runs in the admin's BROWSER (pdfjs-dist,
-  mammoth), never server-side for big files. Page inserts batched ≤500 rows.
+  (signed URLs); DOCX/HTML/TXT extraction runs in the admin's BROWSER (mammoth,
+  turndown), never server-side for big files. Page inserts batched ≤500 rows.
+- **NO PDF and NO OCR on the web.** Accepted: `.docx`, `.doc`, `.md`, `.html`/`.htm`,
+  `.txt`, web URL. PDFs are rejected client- AND server-side (an INSERT trigger on
+  `books`); the admin exports DOCX from the desktop app instead. Never re-add
+  pdfjs-dist or a browser OCR library.
+- Content is stored as **Markdown** (`books.content_format = 'markdown' | 'text'`);
+  the reader renders it with inline HTML disabled + DOMPurify, and search snippets
+  strip Markdown syntax while keeping `<mark>`.
 - Supabase free tier: 500 MB DB, 1 GB storage, 5 GB egress, project PAUSES after ~7
-  days idle → set up an uptime ping once live; upgrade to Pro when the library grows.
+  days idle → a daily Vercel cron hits `/api/health`. This site must stay free:
+  no paid plan, no new vendor. Measure with `node scripts/db-usage.mjs` before
+  optimising anything.
 - Uyghur search: normalize with `ug_normalize()` (ported from desktop
   `normalizeArabicQuery`) at BOTH index and query time; FTS config `simple` +
   `pg_trgm` for substrings.

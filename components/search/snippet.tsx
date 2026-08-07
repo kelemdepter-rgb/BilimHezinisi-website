@@ -1,13 +1,15 @@
 import { parseMarkedSnippet } from "@/lib/reader/highlight";
+import { stripMarkdown } from "@/lib/books/render-markdown";
 
 /**
  * Render the RPC's `<mark>`-highlighted snippet as React nodes.
  *
- * The snippet contains book text, so it is parsed into plain segments and
- * rendered as text — never injected as HTML.
+ * Markdown syntax is stripped first so results read as clean prose, with the
+ * `<mark>` tags preserved. The snippet contains book text, so it is parsed
+ * into plain segments and rendered as text — never injected as HTML.
  */
 export function Snippet({ snippet }: { snippet: string }) {
-  const segments = parseMarkedSnippet(snippet);
+  const segments = parseMarkedSnippet(stripMarkdown(snippet));
   return (
     <>
       {segments.map((segment, index) =>

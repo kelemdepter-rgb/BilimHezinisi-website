@@ -24,7 +24,7 @@ export async function findDuplicate(fileHash: string): Promise<DuplicateHit | nu
 
 export async function createBookRow(
   metadata: BookMetadataInput,
-  extras: { format: string; fileHash: string; pageCount: number },
+  extras: { format: string; fileHash: string; pageCount: number; contentFormat: string },
 ): Promise<number> {
   const supabase = createSupabaseBrowserClient();
   const {
@@ -44,6 +44,7 @@ export async function createBookRow(
       status: metadata.status,
       file_hash: extras.fileHash,
       page_count: extras.pageCount,
+      content_format: extras.contentFormat,
       uploaded_by: user?.id ?? null,
     })
     .select("id")

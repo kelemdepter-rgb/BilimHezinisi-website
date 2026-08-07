@@ -4,7 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { chunkIntoPages } from "@/lib/books/chunk";
-import { ExtractionError, extractFromFile, extractFromUrl, renderPdfCover } from "@/lib/books/extract";
+import {
+  ACCEPT_ATTRIBUTE,
+  ExtractionError,
+  assertAcceptedFile,
+  extractFromFile,
+  extractFromUrl,
+} from "@/lib/books/extract";
+import { MarkdownContent } from "@/components/reader/markdown-content";
 import {
   createBookRow,
   deletePartialBook,
@@ -21,7 +28,7 @@ import type { Category } from "@/lib/types";
 const STEPS = ["مەنبە", "ئوقۇش", "بەتلەر", "ئۇچۇرلار", "مۇقاۋا", "ساقلاش"] as const;
 type StepIndex = 0 | 1 | 2 | 3 | 4 | 5;
 
-const ACCEPT = ".pdf,.txt,.docx,.doc,.md,.markdown,.html,.htm";
+const ACCEPT = ACCEPT_ATTRIBUTE;
 
 type QueueItem = {
   file: File;
@@ -121,10 +128,20 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
   );
 
   function addFiles(files: FileList | File[]) {
-    const items = Array.from(files).map((file) => ({ file, status: "pending" as const }));
-    if (items.length === 0) return;
-    setQueue((prev) => [...prev, ...items]);
-    setError(null);
+    const accepted: QueueItem[] = [];
+    let rejection: string | null = null;
+    // Reject unsupported files (notably PDF) before anything is parsed, so a
+    // drag-drop or renamed file cannot slip past the picker's accept filter.
+    for (const file of Array.from(files)) {
+      try {
+        assertAcceptedFile(file);
+        accepted.push({ file, status: "pending" });
+      } catch (caught) {
+        rejection = caught instanceof ExtractionError ? caught.message : "بۇ ھۆججەت قوللانمايدۇ.";
+      }
+    }
+    setError(rejection);
+    if (accepted.length > 0) setQueue((prev) => [...prev, ...accepted]);
   }
 
   /** Step 1 → 2: extract the active file and check for a duplicate. */
@@ -140,16 +157,6 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
       const result = await extractFromFile(item.file, (fraction) =>
         setExtractProgress(Math.round(fraction * 100)),
       );
-      if (result.scanned) {
-        setQueue((prev) =>
-          prev.map((q, i) => (i === index ? { ...q, status: "failed", error: "scanned" } : q)),
-        );
-        setError(
-          "بۇ PDF سىكان قىلىنغان (تېكىست قەۋىتى يوق). ئالدى بىلەن كومپيۇتېر نۇسخىسىدا OCR قىلىڭ، ئاندىن قايتا يوللاڭ.",
-        );
-        setBusy(false);
-        return;
-      }
       // Duplicate check happens BEFORE anything is written.
       const hit = await findDuplicate(result.fileHash);
       setDuplicate(hit);
@@ -199,21 +206,6 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
     }
   }
 
-  async function generateCoverFromPdf() {
-    if (!current?.file || extracted?.format !== "PDF") return;
-    setBusy(true);
-    try {
-      const blob = await renderPdfCover(current.file);
-      if (blob) {
-        setCover(blob);
-      } else {
-        setError("مۇقاۋا ياسىغىلى بولمىدى.");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function save() {
     if (!extracted) return;
     setBusy(true);
@@ -230,7 +222,12 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
           language: meta.language,
           status: meta.status,
         },
-        { format: extracted.format, fileHash: extracted.fileHash, pageCount: pages.length },
+        {
+          format: extracted.format,
+          fileHash: extracted.fileHash,
+          pageCount: pages.length,
+          contentFormat: extracted.contentFormat,
+        },
       );
 
       setSaveProgress({ done: 0, total: pages.length });
@@ -332,7 +329,9 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
         />
       )}
 
-      {step === 2 && <ChunkStep pages={pages} />}
+      {step === 2 && (
+        <ChunkStep pages={pages} isMarkdown={extracted?.contentFormat === "markdown"} />
+      )}
 
       {step === 3 && (
         <MetaStep meta={meta} setMeta={setMeta} categories={flatCategories} />
@@ -340,13 +339,10 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
 
       {step === 4 && (
         <CoverStep
-          isPdf={extracted?.format === "PDF"}
-          busy={busy}
           preview={cover.url}
           keepOriginal={keepOriginal}
           hasOriginal={Boolean(current?.file && current.file.size > 0)}
           onPick={(file) => setCover(file)}
-          onGenerate={generateCoverFromPdf}
           onClear={() => setCover(null)}
           onKeepOriginalChange={setKeepOriginal}
         />
@@ -461,8 +457,17 @@ function SourceStep({
     <section className="paper grain p-5">
       <h2 className="text-[16px] font-bold">كىتاب ھۆججىتىنى تاللاڭ</h2>
       <p className="mt-1.5 text-[13px] leading-6 text-ink3">
-        PDF، TXT، DOCX، DOC، MD ياكى HTML. ھۆججەت كومپيۇتېرىڭىزدىلا ئوقۇلىدۇ — چوڭ
+        DOCX، DOC، MD، HTML ياكى TXT. ھۆججەت كومپيۇتېرىڭىزدىلا ئوقۇلىدۇ — چوڭ
         ھۆججەتلەر سېرۋېرغا يوللانمايدۇ.
+      </p>
+      <p className="mt-1.5 text-[12.5px] leading-6 text-ink3">
+        <strong>DOCX</strong> تەۋسىيە قىلىنىدۇ — ماۋزۇ، توم خەت، تىزىم ۋە جەدۋەللەر
+        ساقلىنىپ قالىدۇ. كونا <strong>.doc</strong> بولسا Word دا ئېچىپ .docx قىلىپ
+        ساقلىسىڭىز فورماتلاش يوقالمايدۇ.
+      </p>
+      <p className="mt-1.5 text-[12.5px] leading-6 text-ink3">
+        PDF قوبۇل قىلىنمايدۇ — ئۇنى كومپيۇتېردىكى «بىلىم خەزىنىسى» دېتالىدا ئېچىپ
+        DOCX قىلىپ ساقلاڭ، ئاندىن شۇنى يوللاڭ.
       </p>
 
       <div
@@ -590,20 +595,44 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ChunkStep({ pages }: { pages: string[] }) {
+function ChunkStep({ pages, isMarkdown }: { pages: string[]; isMarkdown: boolean }) {
+  const [showRaw, setShowRaw] = useState(false);
   return (
     <section className="paper grain p-5">
       <h2 className="text-[16px] font-bold">بەتلەرگە بۆلۈندى</h2>
       <p className="mt-1.5 text-[13.5px] text-ink2">
         جەمئىي <strong>{pages.length}</strong> بەت. ھەر بەت پاراگراف چېگرىسىدىن بۆلۈنگەن.
+        {isMarkdown ? " فورماتلاش (ماۋزۇ، توم خەت، تىزىم، جەدۋەل) ساقلاندى." : ""}
       </p>
+
       {pages[0] && (
         <div className="mt-4">
-          <h3 className="text-[13px] font-semibold text-ink3">بىرىنچى بەتنىڭ بېشى</h3>
-          <p className="mt-1.5 max-h-56 overflow-y-auto overscroll-contain whitespace-pre-wrap rounded-[var(--radius)] bg-bg2 p-3 text-[13.5px] leading-7">
-            {pages[0].slice(0, 600)}
-            {pages[0].length > 600 ? "…" : ""}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[13px] font-semibold text-ink3">
+              بىرىنچى بەت — {showRaw ? "ئەسلى مەنبە" : "ئوقۇرمەنلەر كۆرىدىغان شەكلى"}
+            </h3>
+            {isMarkdown && (
+              <button
+                type="button"
+                className="hbtn"
+                data-testid="preview-toggle"
+                onClick={() => setShowRaw((raw) => !raw)}
+              >
+                <Icon name="file-text" />
+                {showRaw ? "كۆرۈنۈشنى كۆرۈش" : "ئەسلى مەنبەنى كۆرۈش"}
+              </button>
+            )}
+          </div>
+          <div
+            data-testid="chunk-preview"
+            className="mt-2 max-h-72 overflow-y-auto overscroll-contain rounded-[var(--radius)] bg-bg2 p-3 text-[13.5px] leading-7"
+          >
+            {isMarkdown && !showRaw ? (
+              <MarkdownContent source={pages[0]} />
+            ) : (
+              <p className="whitespace-pre-wrap">{pages[0].slice(0, 900)}{pages[0].length > 900 ? "…" : ""}</p>
+            )}
+          </div>
         </div>
       )}
     </section>
@@ -700,30 +729,27 @@ function MetaStep({
 }
 
 function CoverStep({
-  isPdf,
-  busy,
   preview,
   keepOriginal,
   hasOriginal,
   onPick,
-  onGenerate,
   onClear,
   onKeepOriginalChange,
 }: {
-  isPdf: boolean;
-  busy: boolean;
   preview: string | null;
   keepOriginal: boolean;
   hasOriginal: boolean;
   onPick: (file: File) => void;
-  onGenerate: () => void;
   onClear: () => void;
   onKeepOriginalChange: (value: boolean) => void;
 }) {
   return (
     <section className="paper grain p-5">
       <h2 className="text-[16px] font-bold">مۇقاۋا ۋە ئەسلى ھۆججەت</h2>
-      <p className="mt-1.5 text-[13px] text-ink3">مۇقاۋا مەجبۇرىي ئەمەس.</p>
+      <p className="mt-1.5 text-[13px] text-ink3">
+        مۇقاۋا مەجبۇرىي ئەمەس — قويمىسىڭىز ماۋزۇ يېزىلغان قەغەز شەكلىدىكى مۇقاۋا
+        ئۆزلۈكىدىن ياسىلىدۇ.
+      </p>
 
       <div className="mt-4 flex flex-wrap items-start gap-4">
         <div className="flex h-40 w-28 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius)] border border-bd bg-bg2">
@@ -749,12 +775,6 @@ function CoverStep({
               }}
             />
           </label>
-          {isPdf && (
-            <button type="button" className="hbtn" disabled={busy} onClick={onGenerate}>
-              <Icon name="sparkles" />
-              PDF نىڭ بىرىنچى بېتىدىن ياساش
-            </button>
-          )}
           {preview && (
             <button type="button" className="hbtn" onClick={onClear}>
               <Icon name="x" />

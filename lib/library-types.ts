@@ -24,6 +24,8 @@ export type BookDetail = LibraryBook & {
   description: string;
   language: string;
   format: string;
+  /** 'markdown' | 'text' — how the reader must render this book's pages. */
+  content_format: string;
   original_file_path: string | null;
   created_at: string;
 };

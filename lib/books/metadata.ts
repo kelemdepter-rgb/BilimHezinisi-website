@@ -4,8 +4,6 @@ import type { BookFormat } from "@/lib/books/types";
 export function formatFromFileName(fileName: string): BookFormat {
   const ext = (fileName.split(".").pop() ?? "").toLowerCase();
   switch (ext) {
-    case "pdf":
-      return "PDF";
     case "docx":
       return "DOCX";
     case "doc":

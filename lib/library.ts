@@ -69,7 +69,7 @@ export async function getBookDetail(bookId: number): Promise<BookDetail | null> 
   const { data } = await supabase
     .from("books")
     .select(
-      "id, title, author, category_id, page_count, date, cover_path, status, description, language, format, original_file_path, created_at",
+      "id, title, author, category_id, page_count, date, cover_path, status, description, language, format, content_format, original_file_path, created_at",
     )
     .eq("id", bookId)
     .maybeSingle();

@@ -5,7 +5,9 @@ import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
+import { MarkdownContent } from "@/components/reader/markdown-content";
 import { toSegments } from "@/lib/reader/highlight";
+import type { ContentFormat } from "@/lib/books/types";
 import {
   addBookmark,
   addNote,
@@ -41,6 +43,7 @@ export function Reader({
   bookId,
   title,
   pageCount,
+  contentFormat,
   initialPages,
   initialPosition,
   signedIn,
@@ -51,6 +54,7 @@ export function Reader({
   bookId: number;
   title: string;
   pageCount: number;
+  contentFormat: ContentFormat;
   initialPages: BookPage[];
   initialPosition: ReadingPosition;
   signedIn: boolean;
@@ -480,19 +484,23 @@ export function Reader({
             className="reader-page mb-8 break-after-page"
           >
             <p className="mb-2 text-center text-[11.5px] text-ink3 print:text-[10px]">{page.page_no}</p>
-            <div className="whitespace-pre-wrap break-words">
-              {activeTerm.trim()
-                ? toSegments(page.content, activeTerm).map((segment, index) =>
-                    segment.match ? (
-                      <mark key={index} className="rounded bg-ab2 px-0.5 text-ink">
-                        {segment.text}
-                      </mark>
-                    ) : (
-                      <span key={index}>{segment.text}</span>
-                    ),
-                  )
-                : page.content}
-            </div>
+            {contentFormat === "markdown" ? (
+              <MarkdownContent source={page.content} />
+            ) : (
+              <div className="whitespace-pre-wrap break-words">
+                {activeTerm.trim()
+                  ? toSegments(page.content, activeTerm).map((segment, index) =>
+                      segment.match ? (
+                        <mark key={index} className="rounded bg-ab2 px-0.5 text-ink">
+                          {segment.text}
+                        </mark>
+                      ) : (
+                        <span key={index}>{segment.text}</span>
+                      ),
+                    )
+                  : page.content}
+              </div>
+            )}
           </article>
         ))}
 

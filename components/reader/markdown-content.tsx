@@ -6,8 +6,11 @@ import { renderMarkdown } from "@/lib/books/render-markdown";
 /**
  * Render a Markdown book page.
  *
- * The HTML is produced with inline HTML disabled and then run through the
- * shared DOMPurify allow-list, so nothing a book contains can become markup.
+ * renderMarkdown runs markdown-it with inline HTML disabled, so a book's own
+ * text can never become markup — the only tags present are ones the renderer
+ * generated. See lib/books/render-markdown.ts for why that, rather than
+ * DOMPurify, is the guarantee on this path.
+ *
  * Styling lives in the `.md-body` rules in globals.css, which use the
  * manuscript tokens and inherit the reader's font controls.
  */

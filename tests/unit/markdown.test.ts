@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
 import { htmlToMarkdown } from "@/lib/books/markdown";
 import { chunkIntoPages } from "@/lib/books/chunk";
-import { stripMarkdown } from "@/lib/books/render-markdown";
+import { renderMarkdown, stripMarkdown } from "@/lib/books/render-markdown";
 
 // turndown needs a DOM; jsdom is already a dependency for the URL importer.
 const dom = new JSDOM("");
@@ -55,6 +55,22 @@ describe("htmlToMarkdown (what mammoth hands us from a .docx)", () => {
     expect(markdown).toContain("| ئىسىم |");
     expect(markdown).toContain("| بىر |");
     expect(markdown).toMatch(/\| *---/);
+  });
+
+  it("keeps a header-less table, which is what Word actually produces", () => {
+    // mammoth emits <table><tr><td> with no <thead>; the GFM plugin alone
+    // drops such tables, so real documents would silently lose them.
+    const markdown = htmlToMarkdown(
+      "<table><tr><td>ئىسىم</td><td>سان</td></tr><tr><td>بىرىنچى</td><td>1</td></tr></table>",
+    );
+    expect(markdown).toContain("| ئىسىم | سان |");
+    expect(markdown).toMatch(/\| *--- *\| *--- *\|/);
+    expect(markdown).toContain("| بىرىنچى | 1 |");
+  });
+
+  it("escapes pipes inside table cells", () => {
+    const markdown = htmlToMarkdown("<table><tr><td>a|b</td><td>c</td></tr></table>");
+    expect(markdown).toContain("a\\|b");
   });
 
   it("drops embedded images rather than inlining base64 blobs", () => {
@@ -126,6 +142,51 @@ describe("chunkIntoPages keeps Markdown blocks whole", () => {
     const pages = chunkIntoPages(source);
     const strip = (value: string) => value.replace(/\s+/g, "");
     expect(strip(pages.join(""))).toBe(strip(source));
+  });
+});
+
+describe("renderMarkdown never lets book text become markup", () => {
+  // The guarantee is that no ELEMENT is created from book text. Dangerous
+  // strings may still appear, but only escaped, as visible characters.
+  it("escapes raw HTML instead of passing it through", () => {
+    const html = renderMarkdown('<script>alert(1)</script>\n\n<img src=x onerror="alert(1)">');
+    expect(html).not.toMatch(/<script/i);
+    expect(html).not.toMatch(/<img/i);
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("escapes inline HTML mixed into a paragraph", () => {
+    const html = renderMarkdown("سالام <b onmouseover='x()'>dünya</b>");
+    // No <b> element, so the handler is inert text rather than an attribute.
+    expect(html).not.toMatch(/<b[\s>]/i);
+    expect(html).toContain("&lt;b");
+  });
+
+  it("refuses javascript: links", () => {
+    const html = renderMarkdown("[بېسىڭ](javascript:alert(1))");
+    // markdown-it declines to build the anchor at all, leaving plain text.
+    expect(html).not.toMatch(/<a\s/i);
+    expect(html).toContain("<p>");
+  });
+
+  it("does build ordinary links", () => {
+    const html = renderMarkdown("[سىلتەم](https://example.org/a)");
+    expect(html).toContain('<a href="https://example.org/a"');
+  });
+
+  it("still renders ordinary Markdown structure", () => {
+    const html = renderMarkdown("# ماۋزۇ\n\n**توم** ۋە *يانتۇ*\n\n- بىر\n- ئىككى");
+    expect(html).toContain("<h1>");
+    expect(html).toContain("<strong>");
+    expect(html).toContain("<em>");
+    expect(html).toContain("<li>");
+  });
+
+  it("renders GFM tables", () => {
+    const html = renderMarkdown("| a | b |\n| --- | --- |\n| 1 | 2 |");
+    expect(html).toContain("<table>");
+    expect(html).toContain("<th>");
+    expect(html).toContain("<td>");
   });
 });
 

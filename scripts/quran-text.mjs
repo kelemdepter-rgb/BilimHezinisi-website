@@ -3,7 +3,13 @@
  * `scripts/seed-quran.js` so the web and the desktop hold byte-identical text.
  *
  * Kept free of I/O and of the Supabase client so `scripts/seed-quran.mjs` and
- * `tests/unit/quran-text.test.ts` can both import it.
+ * `tests/unit/quran-text.test.ts` can both import it. The JSDoc types below
+ * are what the TypeScript test file sees, so they are load-bearing.
+ *
+ * @typedef {Record<number, Record<number, string>>} VerseMap
+ *   sura number → aya number → text
+ * @typedef {{ sura: number, aya: number, text_ar: string, text_ar_simple: string, text_ug: string }} AyaRow
+ * @typedef {{ number: number, name_ar: string, name_ug: string, name_translit: string, revelation: string, aya_count: number }} SuraRow
  */
 
 /** 114 suras: Arabic name, Uyghur name, transliteration, revelation, aya count. */
@@ -131,6 +137,10 @@ export const TOTAL_AYAS = 6236;
  * Strip tashkil and unify alif variants, producing the `text_ar_simple`
  * column that search runs against.
  */
+/**
+ * @param {string | null | undefined} text
+ * @returns {string}
+ */
 export function stripTashkil(text) {
   if (!text) return '';
   return String(text)
@@ -169,6 +179,10 @@ const BASMALA_NORMALIZED = 'بسم الله الرحمن الرحيم';
  * every encoding variant, matched on the diacritic/alif-normalized form.
  * Text that does not open with the basmala comes back untouched.
  */
+/**
+ * @param {string | null | undefined} text
+ * @returns {string}
+ */
 export function stripBasmalaPrefix(text) {
   if (!text) return text;
 
@@ -201,6 +215,10 @@ export function stripBasmalaPrefix(text) {
  * Remove the tafsir citation markers — (1), (2،3), [12] — that the Saleh
  * translation carries inline.
  */
+/**
+ * @param {string | null | undefined} text
+ * @returns {string}
+ */
 export function cleanUyghurTranslation(text) {
   if (!text) return '';
   return String(text)
@@ -214,7 +232,12 @@ export function cleanUyghurTranslation(text) {
  * Parse the Tanzil plain-text format: `sura|aya|text`, one per line, with
  * `#` comment lines. Returns `{ [sura]: { [aya]: text } }`.
  */
+/**
+ * @param {string} content
+ * @returns {VerseMap}
+ */
 export function parseTanzil(content) {
+  /** @type {VerseMap} */
   const map = {};
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -235,7 +258,12 @@ export function parseTanzil(content) {
  * directly, because the file is machine-generated and the web project should
  * not carry an HTML parser for one script. Returns `{ [sura]: { [aya]: text } }`.
  */
+/**
+ * @param {string} xmlContent
+ * @returns {VerseMap}
+ */
 export function parseUyghurXml(xmlContent) {
+  /** @type {VerseMap} */
   const map = {};
   const suraPattern = /<sura\b[^>]*\bnumber="(\d+)"[^>]*>([\s\S]*?)<\/sura>/g;
   const ayaPattern = /<aya\b[^>]*\bnumber="(\d+)"[^>]*>([\s\S]*?)<\/aya>/g;
@@ -273,7 +301,13 @@ export function parseUyghurXml(xmlContent) {
  * Throws when the Arabic side is incomplete — a missing verse must never be
  * written as an empty string.
  */
+/**
+ * @param {VerseMap} arMap
+ * @param {VerseMap} ugMap
+ * @returns {AyaRow[]}
+ */
 export function buildAyaRows(arMap, ugMap) {
+  /** @type {AyaRow[]} */
   const rows = [];
   for (const meta of SURA_META) {
     for (let an = 1; an <= meta.count; an++) {
@@ -294,6 +328,7 @@ export function buildAyaRows(arMap, ugMap) {
 }
 
 /** The 114 sura rows, in the shape `quran_suras` stores. */
+/** @returns {SuraRow[]} */
 export function buildSuraRows() {
   return SURA_META.map((s) => ({
     number: s.n,
@@ -310,8 +345,15 @@ export function buildSuraRows() {
  * seeder refuses to write when any are present) and soft `warnings` (missing
  * translations, which are reported rather than hidden).
  */
+/**
+ * @param {VerseMap} arMap
+ * @param {VerseMap} ugMap
+ * @returns {{ errors: string[], warnings: string[], totalAr: number }}
+ */
 export function checkIntegrity(arMap, ugMap) {
+  /** @type {string[]} */
   const errors = [];
+  /** @type {string[]} */
   const warnings = [];
 
   let totalAr = 0;

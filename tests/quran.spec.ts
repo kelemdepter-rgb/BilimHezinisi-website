@@ -28,6 +28,20 @@ async function scrollDownAndBackUp(page: Page) {
   await page.waitForTimeout(250);
 }
 
+/**
+ * Reveal a verse's action row. Tapping the medallion TOGGLES it, and a deep
+ * link (?aya=) already arrives with the verse selected, so tapping blindly
+ * would close what we came to use.
+ */
+async function openAyaActions(page: Page, aya: number) {
+  const actions = page.locator(`[data-testid="aya"][data-aya="${aya}"] [data-testid="aya-actions"]`);
+  if (!(await actions.isVisible())) {
+    await page.locator(`[data-testid="aya"][data-aya="${aya}"] [data-testid="aya-number"]`).click();
+  }
+  await expect(actions).toBeVisible();
+  return actions;
+}
+
 /** The element actually on top at a control's centre — catches covered buttons. */
 async function topMostTestIdAt(page: Page, testId: string): Promise<string | null> {
   const box = await page.getByTestId(testId).boundingBox();
@@ -199,9 +213,7 @@ test.describe("mushaf", () => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await page.goto("/quran/112");
 
-    await page.locator('[data-testid="aya"][data-aya="1"] [data-testid="aya-number"]').click();
-    const actions = page.locator('[data-testid="aya"][data-aya="1"] [data-testid="aya-actions"]');
-    await expect(actions).toBeVisible();
+    const actions = await openAyaActions(page, 1);
 
     // Compare against what the page actually renders rather than a re-typed
     // string: Arabic has several encodings for the same-looking word.
@@ -358,8 +370,7 @@ test.describe("aya bookmarks (signed in)", () => {
 
   test("bookmarks an aya, lists it under my bookmarks, then removes it", async ({ page }) => {
     await page.goto("/quran/113");
-    await page.locator('[data-testid="aya"][data-aya="1"] [data-testid="aya-number"]').click();
-    const bookmark = page.locator('[data-testid="aya"][data-aya="1"] [data-testid="aya-bookmark"]');
+    const bookmark = (await openAyaActions(page, 1)).getByTestId("aya-bookmark");
     await expect(bookmark).toBeVisible();
 
     // Start from a known state — an earlier run may have left it bookmarked.
@@ -374,10 +385,10 @@ test.describe("aya bookmarks (signed in)", () => {
 
     // It survives a reload, so it really reached the database.
     await page.reload();
-    await page.locator('[data-testid="aya"][data-aya="1"] [data-testid="aya-number"]').click();
-    await expect(
-      page.locator('[data-testid="aya"][data-aya="1"] [data-testid="aya-bookmark"]'),
-    ).toHaveAttribute("aria-pressed", "true");
+    await expect((await openAyaActions(page, 1)).getByTestId("aya-bookmark")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
     await page.goto("/my/bookmarks");
     const entry = page.getByTestId("quran-bookmark-jump").filter({ hasText: "فەلەق" });
@@ -386,8 +397,7 @@ test.describe("aya bookmarks (signed in)", () => {
     await expect(page).toHaveURL(/\/quran\/113\?aya=1/);
 
     // Clean up so the next run starts from the same state.
-    await page.locator('[data-testid="aya"][data-aya="1"] [data-testid="aya-number"]').click();
-    const again = page.locator('[data-testid="aya"][data-aya="1"] [data-testid="aya-bookmark"]');
+    const again = (await openAyaActions(page, 1)).getByTestId("aya-bookmark");
     await again.click();
     await expect(again).toHaveAttribute("aria-pressed", "false");
   });

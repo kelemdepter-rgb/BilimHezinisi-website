@@ -64,16 +64,17 @@ export function findMatches(text: string, query: string): Match[] {
     if (at === -1) break;
     const start = collapsedMap[at];
     const lastIndex = at + needle.length - 1;
-    const end = (collapsedMap[lastIndex] ?? start) + 1;
+    let end = (collapsedMap[lastIndex] ?? start) + 1;
+    // Carry any combining marks on the final letter into the match — a
+    // highlight that stops before a verse's last kasra looks broken.
+    while (end < text.length && ug_normalize_client(text[end]) === "") end++;
     matches.push({ start, end });
     from = at + needle.length;
   }
   return matches;
 }
 
-/** Split `text` into alternating plain/match segments for rendering. */
-export function toSegments(text: string, query: string): Segment[] {
-  const matches = findMatches(text, query);
+function segmentsFrom(text: string, matches: Match[]): Segment[] {
   if (matches.length === 0) return [{ text, match: false }];
 
   const segments: Segment[] = [];
@@ -87,6 +88,30 @@ export function toSegments(text: string, query: string): Segment[] {
   }
   if (cursor < text.length) segments.push({ text: text.slice(cursor), match: false });
   return segments;
+}
+
+/** Split `text` into alternating plain/match segments for rendering. */
+export function toSegments(text: string, query: string): Segment[] {
+  return segmentsFrom(text, findMatches(text, query));
+}
+
+/**
+ * The same, for several terms at once — what a boolean query needs, since its
+ * words match in any order and need not be adjacent. Overlapping hits are
+ * merged so a character is never wrapped twice.
+ */
+export function toSegmentsForTerms(text: string, terms: string[]): Segment[] {
+  const found = terms
+    .flatMap((term) => findMatches(text, term))
+    .sort((a, b) => a.start - b.start || b.end - a.end);
+
+  const merged: Match[] = [];
+  for (const match of found) {
+    const last = merged[merged.length - 1];
+    if (last && match.start <= last.end) last.end = Math.max(last.end, match.end);
+    else merged.push({ ...match });
+  }
+  return segmentsFrom(text, merged);
 }
 
 /**
@@ -119,4 +144,20 @@ export function highlightTermsFromQuery(query: string): string {
     .split(/\s+/)
     .filter((token) => token && token.toUpperCase() !== "OR" && !token.startsWith("-"))
     .join(" ");
+}
+
+/**
+ * Every term a query asks for: quoted phrases stay whole, the remaining words
+ * stand on their own, and OR / -excluded tokens are dropped. Use with
+ * toSegmentsForTerms to highlight a result the way the RPC matched it.
+ */
+export function highlightTermList(query: string): string[] {
+  const phrases = [...query.matchAll(/"([^"]+)"/g)]
+    .map((match) => match[1].trim())
+    .filter(Boolean);
+  const words = query
+    .replace(/"[^"]*"/g, " ")
+    .split(/\s+/)
+    .filter((token) => token && token.toUpperCase() !== "OR" && !token.startsWith("-"));
+  return [...phrases, ...words];
 }

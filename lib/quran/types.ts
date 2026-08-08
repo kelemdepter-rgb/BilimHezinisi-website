@@ -16,7 +16,12 @@ export type Aya = {
   text_ug: string;
 };
 
-/** One row of search_quran (migration 0007). */
+/**
+ * One row of search_quran (migration 0008). The verses come back whole and
+ * unmodified — the Uthmani spelling with its tashkil — and the query is
+ * highlighted client-side against that original text. See AyaText for why
+ * the database cannot do the highlighting without damaging the verse.
+ */
 export type QuranHit = {
   sura: number;
   aya: number;
@@ -24,7 +29,5 @@ export type QuranHit = {
   sura_name_ug: string;
   text_ar: string;
   text_ug: string;
-  snippet_ar: string;
-  snippet_ug: string;
   rank: number;
 };

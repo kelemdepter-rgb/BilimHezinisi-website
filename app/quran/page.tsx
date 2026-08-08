@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
-import { AyaSnippet } from "@/components/quran/aya-snippet";
+import { AyaText } from "@/components/quran/aya-text";
 import { SuraList } from "@/components/quran/sura-list";
 import { getSuras, runQuranSearch } from "@/lib/quran/data";
 import { toArabicNumerals } from "@/lib/quran/format";
+import { highlightTermList } from "@/lib/reader/highlight";
 
 export const metadata: Metadata = {
   title: "قۇرئان كەرىم",
@@ -26,6 +27,8 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
 
   const pageHref = (next: number) =>
     `/quran?q=${encodeURIComponent(query)}${next > 1 ? `&p=${next}` : ""}`;
+
+  const terms = highlightTermList(query);
 
   return (
     <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
@@ -95,12 +98,13 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
                           {toArabicNumerals(hit.aya)}-ئايەت
                         </span>
                       </span>
-                      <span className="quran-face mt-1.5 block text-[19px] leading-9 text-ink">
-                        <AyaSnippet snippet={hit.snippet_ar} />
+                      {/* The full Uthmani verse, tashkil and all. */}
+                      <span className="quran-face mt-1.5 block text-[21px] leading-[2.1] text-ink">
+                        <AyaText text={hit.text_ar} terms={terms} />
                       </span>
-                      {hit.snippet_ug && (
+                      {hit.text_ug && (
                         <span className="mt-1 block text-[13.5px] leading-7 text-ink2">
-                          <AyaSnippet snippet={hit.snippet_ug} />
+                          <AyaText text={hit.text_ug} terms={terms} />
                         </span>
                       )}
                     </Link>

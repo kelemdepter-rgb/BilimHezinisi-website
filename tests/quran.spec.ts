@@ -279,7 +279,20 @@ test.describe("quran search", () => {
       await expect(page.getByTestId("quran-search-results")).toBeVisible();
       const hit = page.locator('[data-testid="quran-search-result"][data-sura="1"][data-aya="1"]');
       await expect(hit, `«${query}» must find 1:1`).toHaveCount(1);
-      await expect(hit.locator("mark").first(), "the match must be highlighted").toBeVisible();
+
+      // Results must show the Uthmani verse as it is written, vowel marks and
+      // all — the highlight is applied to the original text, not to the
+      // stripped form the index matched on. Asserted by counting the combining
+      // marks rather than against a re-typed verse, which would only test
+      // whether two encodings of the same-looking word happen to agree.
+      const marked = hit.locator("mark").first();
+      await expect(marked, "the match must be highlighted").toBeVisible();
+      const markedText = await marked.innerText();
+      const withoutTashkil = markedText.replace(/[ً-ٰٟۖ-ۭـ]/g, "");
+      expect(
+        markedText.length - withoutTashkil.length,
+        `«${query}» must keep the verse's tashkil`,
+      ).toBeGreaterThan(5);
     }
   });
 

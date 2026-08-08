@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   findMatches,
+  highlightTermList,
   highlightTermsFromQuery,
   parseMarkedSnippet,
   toSegments,
+  toSegmentsForTerms,
 } from "@/lib/reader/highlight";
 import {
   clampPosition,
@@ -59,6 +61,48 @@ describe("findMatches", () => {
       { start: 0, end: 2 },
       { start: 2, end: 4 },
     ]);
+  });
+
+  it("carries the final letter's vowel marks into the match", () => {
+    // Searching «الحكيم» inside the Uthmani ٱلْحَكِيمُ must not stop before the
+    // closing damma, or the highlight ends mid-letter.
+    const text = "ٱلْحَكِيمُ";
+    const [match] = findMatches(text, "الحكيم");
+    expect(text.slice(match.start, match.end)).toBe(text);
+  });
+});
+
+describe("highlightTermList", () => {
+  it("keeps a quoted phrase whole", () => {
+    expect(highlightTermList('"بسم الله" ھەققىدە')).toEqual(["بسم الله", "ھەققىدە"]);
+  });
+
+  it("splits the remaining words and drops the operators", () => {
+    expect(highlightTermList("بىلىم OR خەزىنە -كىتاب")).toEqual(["بىلىم", "خەزىنە"]);
+  });
+
+  it("returns nothing for an empty query", () => {
+    expect(highlightTermList("   ")).toEqual([]);
+  });
+});
+
+describe("toSegmentsForTerms", () => {
+  it("highlights every term wherever it appears", () => {
+    const text = "بىلىم كۈچتۇر ۋە خەزىنە نۇردۇر";
+    const segments = toSegmentsForTerms(text, ["بىلىم", "خەزىنە"]);
+    expect(segments.map((s) => s.text).join("")).toBe(text);
+    expect(segments.filter((s) => s.match).map((s) => s.text)).toEqual(["بىلىم", "خەزىنە"]);
+  });
+
+  it("merges overlapping terms so no character is wrapped twice", () => {
+    const segments = toSegmentsForTerms("بىلىم خەزىنىسى", ["بىلىم خەزىنىسى", "خەزىنىسى"]);
+    expect(segments.map((s) => s.text).join("")).toBe("بىلىم خەزىنىسى");
+    expect(segments.filter((s) => s.match)).toHaveLength(1);
+  });
+
+  it("leaves the text untouched when no term matches", () => {
+    expect(toSegmentsForTerms("ھېچنېمە", ["يوق"])).toEqual([{ text: "ھېچنېمە", match: false }]);
+    expect(toSegmentsForTerms("ھېچنېمە", [])).toEqual([{ text: "ھېچنېمە", match: false }]);
   });
 });
 

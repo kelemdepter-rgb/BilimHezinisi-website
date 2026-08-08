@@ -33,11 +33,13 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
   }
 
   /**
-   * The reader owns the whole screen: it carries its own sticky toolbars, and
-   * stacking those under the site header would put two sticky bars at top: 0
-   * and cost scarce vertical space on a phone.
+   * Reading surfaces own the whole screen: they carry their own sticky
+   * toolbars, and stacking those under the site header would put two sticky
+   * bars at top: 0 and cost scarce vertical space on a phone. The mushaf
+   * (a single sura) reads exactly like a book, so it is bare too — /quran
+   * itself keeps the shell, being an index page.
    */
-  const bare = /^\/books\/[^/]+\/read$/.test(pathname);
+  const bare = /^\/books\/[^/]+\/read$/.test(pathname) || /^\/quran\/[^/]+$/.test(pathname);
 
   // Lock body scroll only while the drawer is open (mobile rule: the page
   // must scroll normally again the moment it closes).
@@ -72,17 +74,21 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
             <Icon name="menu" className="ic-lg" />
           </button>
 
-          <Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="باش بەت — بىلىم خەزىنىسى">
+          {/* The brand is the one element allowed to shrink, so adding a nav
+              control can never push the row past 360 px. */}
+          <Link href="/" className="flex min-w-0 items-center gap-2.5" aria-label="باش بەت — بىلىم خەزىنىسى">
             <Image
               src={brandMark}
               alt=""
               width={30}
               height={30}
               priority
-              className="rounded-[7px] shadow-sm ring-1 ring-bd"
+              className="shrink-0 rounded-[7px] shadow-sm ring-1 ring-bd"
             />
-            <span className="flex flex-col gap-0.5 leading-none">
-              <span className="text-[15px] font-bold tracking-[.2px] text-ink">بىلىم خەزىنىسى</span>
+            <span className="flex min-w-0 flex-col gap-0.5 leading-none">
+              <span className="truncate text-[15px] font-bold tracking-[.2px] text-ink">
+                بىلىم خەزىنىسى
+              </span>
               <span className="hidden font-sans text-[8px] font-bold tracking-[1.6px] text-ink3 sm:block">
                 BILIM HEZINISI
               </span>
@@ -100,7 +106,11 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
             />
           </form>
 
-          <div className="ms-auto flex items-center gap-0.5 sm:gap-1">
+          <div className="ms-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
+            <Link href="/quran" className="hbtn" data-testid="quran-link" title="قۇرئان كەرىم">
+              <Icon name="mosque" />
+              <span className="hidden sm:inline">قۇرئان</span>
+            </Link>
             <button
               type="button"
               className="ibtn md:hidden"
@@ -223,44 +233,57 @@ function SidebarContent({ categories }: { categories: Category[] }) {
     categories.filter((category) => category.parent_id === parentId);
 
   return (
-    <nav aria-label="كىتاب تۈرلىرى">
-      <h2 className="mb-3 hidden items-center gap-2 text-[13px] font-bold text-ink2 lg:flex">
-        <Icon name="layers" className="text-am" />
-        تۈرلەر
-      </h2>
-      {categories.length > 0 && (
+    <>
+      <nav aria-label="بۆلۈملەر" className="mb-4 border-b border-bd pb-3">
         <Link
-          href="/"
-          data-testid="category-all"
-          className="mb-1 flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+          href="/quran"
+          data-testid="quran-sidebar-link"
+          className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
         >
-          <Icon name="layers" className="text-am" />
-          ھەممە كىتابلار
+          <Icon name="mosque" className="text-am" />
+          قۇرئان كەرىم
         </Link>
-      )}
-      {topLevel.length === 0 ? (
-        <p className="rounded-[var(--radius)] bg-ab px-3 py-3 text-[13px] leading-6 text-ink2">
-          تۈرلەر تېخى قوشۇلمىغان. كىتابلار قوشۇلغاندا تۈرلەر مۇشۇ يەردە كۆرۈنىدۇ.
-        </p>
-      ) : (
-        <ul className="space-y-0.5">
-          {topLevel.map((category) => (
-            <li key={category.id}>
-              <CategoryRow category={category} />
-              {childrenOf(category.id).length > 0 && (
-                <ul className="ms-4 mt-0.5 space-y-0.5 border-s border-bd ps-2">
-                  {childrenOf(category.id).map((child) => (
-                    <li key={child.id}>
-                      <CategoryRow category={child} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </nav>
+      </nav>
+
+      <nav aria-label="كىتاب تۈرلىرى">
+        <h2 className="mb-3 hidden items-center gap-2 text-[13px] font-bold text-ink2 lg:flex">
+          <Icon name="layers" className="text-am" />
+          تۈرلەر
+        </h2>
+        {categories.length > 0 && (
+          <Link
+            href="/"
+            data-testid="category-all"
+            className="mb-1 flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+          >
+            <Icon name="layers" className="text-am" />
+            ھەممە كىتابلار
+          </Link>
+        )}
+        {topLevel.length === 0 ? (
+          <p className="rounded-[var(--radius)] bg-ab px-3 py-3 text-[13px] leading-6 text-ink2">
+            تۈرلەر تېخى قوشۇلمىغان. كىتابلار قوشۇلغاندا تۈرلەر مۇشۇ يەردە كۆرۈنىدۇ.
+          </p>
+        ) : (
+          <ul className="space-y-0.5">
+            {topLevel.map((category) => (
+              <li key={category.id}>
+                <CategoryRow category={category} />
+                {childrenOf(category.id).length > 0 && (
+                  <ul className="ms-4 mt-0.5 space-y-0.5 border-s border-bd ps-2">
+                    {childrenOf(category.id).map((child) => (
+                      <li key={child.id}>
+                        <CategoryRow category={child} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </nav>
+    </>
   );
 }
 

@@ -75,6 +75,19 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
         بىر سۆزنى چىقىرىۋېتىش ئۈچۈن ئالدىغا <span dir="ltr">-</span> قويۇڭ.
       </p>
 
+      {/* Book search and Quran search stay separate: this page only ever
+          returns books, and the Quran has its own page and its own RPC. */}
+      <p className="mt-2 text-[12.5px] text-ink3">
+        بۇ بەت پەقەت كىتابلاردىن ئىزدەيدۇ.{" "}
+        <Link
+          href={query ? `/quran?q=${encodeURIComponent(query)}` : "/quran"}
+          className="text-am underline underline-offset-2"
+          data-testid="search-quran-link"
+        >
+          قۇرئاندىن ئىزدەش
+        </Link>
+      </p>
+
       {!query ? (
         <p className="paper mt-5 p-6 text-center text-[13.5px] text-ink2" data-testid="search-idle">
           ئىزدەش ئۈچۈن يۇقىرىدىكى رامكىغا سۆز كىرگۈزۈڭ.

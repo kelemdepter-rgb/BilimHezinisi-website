@@ -16,6 +16,14 @@ const supabaseHost = (() => {
 })();
 
 const nextConfig: NextConfig = {
+  /**
+   * The dev-only route indicator is pinned to a viewport corner, where it
+   * lands on top of the reader's and the mushaf's sticky bottom bars at phone
+   * widths — it swallows taps on the jump button both for whoever is testing
+   * on a real phone and for Playwright's "no control may be covered" checks.
+   * Compile and runtime errors are still surfaced without it.
+   */
+  devIndicators: false,
   images: {
     formats: ["image/webp"],
     // Covers are small; these are the only widths worth generating.

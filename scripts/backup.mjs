@@ -96,6 +96,39 @@ async function* records() {
     if (pages % 5000 === 0) console.log(`  pages: ${pages}…`);
   }
   console.log(`  pages: ${pages}`);
+
+  // Quran: seeded from migration-data/, but those source files are gitignored
+  // and live only on this computer, so the backup carries the verses too.
+  // Identity ids are left out on purpose — both tables have natural keys
+  // (number, and sura+aya), which is what the restore upserts on.
+  let suras = 0;
+  for await (const row of readAll(
+    "quran_suras",
+    "number, name_ar, name_ug, name_translit, revelation, aya_count",
+    "number",
+  )) {
+    suras++;
+    yield { type: "quran_sura", data: row };
+  }
+  console.log(`  quran suras: ${suras}`);
+
+  let ayas = 0;
+  for (let start = 0; ; start += PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("quran_ayas")
+      .select("sura, aya, text_ar, text_ar_simple, text_ug")
+      .order("sura", { ascending: true })
+      .order("aya", { ascending: true })
+      .range(start, start + PAGE_SIZE - 1);
+    if (error) throw new Error(`quran_ayas: ${error.message}`);
+    if (!data || data.length === 0) break;
+    for (const row of data) {
+      ayas++;
+      yield { type: "quran_aya", data: row };
+    }
+    if (data.length < PAGE_SIZE) break;
+  }
+  console.log(`  quran ayas: ${ayas}`);
 }
 
 async function* lines() {

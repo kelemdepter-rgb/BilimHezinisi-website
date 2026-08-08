@@ -36,16 +36,23 @@ const supabase = createClient(url, key, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
-const buffers = { category: [], book: [], page: [] };
-const counts = { category: 0, book: 0, page: 0 };
+const TARGETS = {
+  category: { table: "categories", onConflict: "id" },
+  book: { table: "books", onConflict: "id" },
+  page: { table: "book_pages", onConflict: "book_id,page_no" },
+  quran_sura: { table: "quran_suras", onConflict: "number" },
+  quran_aya: { table: "quran_ayas", onConflict: "sura,aya" },
+};
+
+const buffers = { category: [], book: [], page: [], quran_sura: [], quran_aya: [] };
+const counts = { category: 0, book: 0, page: 0, quran_sura: 0, quran_aya: 0 };
 
 async function flush(kind, force = false) {
   const rows = buffers[kind];
   if (rows.length === 0 || (!force && rows.length < BATCH)) return;
   counts[kind] += rows.length;
   if (!dryRun) {
-    const table = kind === "page" ? "book_pages" : kind === "book" ? "books" : "categories";
-    const onConflict = kind === "page" ? "book_id,page_no" : "id";
+    const { table, onConflict } = TARGETS[kind];
     const { error } = await supabase.from(table).upsert(rows, { onConflict });
     if (error) throw new Error(`${table}: ${error.message}`);
   }
@@ -81,17 +88,29 @@ for await (const line of reader) {
     buffers.page.push(record.data);
     await flush("page");
     if (counts.page % 2000 === 0 && counts.page > 0) console.log(`  pages: ${counts.page}…`);
+  } else if (record.type === "quran_sura") {
+    await flush("page", true);
+    buffers.quran_sura.push(record.data);
+    await flush("quran_sura");
+  } else if (record.type === "quran_aya") {
+    // Ayas reference quran_suras.number, so the suras must land first.
+    await flush("quran_sura", true);
+    buffers.quran_aya.push(record.data);
+    await flush("quran_aya");
   }
 }
 
 await flush("category", true);
 await flush("book", true);
 await flush("page", true);
+await flush("quran_sura", true);
+await flush("quran_aya", true);
 
 console.log(
-  `\nDone — categories: ${counts.category}, books: ${counts.book}, pages: ${counts.page}${
-    dryRun ? " (nothing written)" : ""
-  }`,
+  `\nDone — categories: ${counts.category}, books: ${counts.book}, pages: ${counts.page}` +
+    `, quran suras: ${counts.quran_sura}, quran ayas: ${counts.quran_aya}${
+      dryRun ? " (nothing written)" : ""
+    }`,
 );
 if (!dryRun) {
   console.log("Categories keep their original ids, so book links stay intact.");

@@ -72,6 +72,21 @@ export default defineConfig({
         },
       },
       {
+        // Quran specs run ANONYMOUSLY — /quran must work without an account.
+        // The bookmark block opts into the staff state itself, which is why
+        // the setup project still has to run first.
+        name: `quran-${viewport.name}`,
+        testMatch: /quran\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,

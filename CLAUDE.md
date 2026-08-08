@@ -16,13 +16,16 @@ modify anything there from this project).
 - **Next.js (App Router) + TypeScript + Tailwind CSS.** Next.js Route Handlers / Server
   Actions ARE the Node.js backend — no separate Express server.
 - **Supabase**: Postgres (data + full-text search), Auth (email/password), Storage
-  (optional original book files, covers). Free tier now; Pro later — nothing may depend
-  on paid-only features.
-- **Vercel** hosting; git push → auto deploy. GitHub account: `kelemdepter-rgb`.
-- **Gemini AI — LAST phase only.** Called exclusively from server routes with a
-  server-side paid key; SSE streaming; STRICT user-selected model (never silently
-  switch models); per-user daily quotas; usage logged. Port prompts/logic from desktop
-  `ai.js` and `_mobile-ai-reference/`.
+  (optional original book files, covers). **Free tier permanently — the owner has no
+  budget. Nothing may require a paid plan, now or later.**
+- **Vercel** hosting (Hobby, non-commercial free library); git push → auto deploy.
+  GitHub account: `kelemdepter-rgb`.
+- **Gemini AI — LAST phase, bring-your-own-key.** The owner does NOT pay for AI.
+  Each signed-in user supplies their OWN Gemini key (Google's free tier is enough),
+  stored per user and never exposed to anyone else; calls still go through server
+  routes only (the key never reaches another user's browser). SSE streaming; STRICT
+  user-selected model (never silently switch); per-user usage shown to that user.
+  Port prompts/logic from desktop `ai.js` and `_mobile-ai-reference/`.
 
 ## Core Principles
 - UI is Uyghur, **RTL mandatory** (`<html lang="ug" dir="rtl">`). Code, comments, and

@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { MyAnnotation } from "@/components/my/annotation-list";
+import type { MyQuranBookmark } from "@/components/my/quran-bookmark-list";
 
 type Row = {
   id: number;
@@ -50,4 +51,45 @@ export async function getMyAnnotations(
     grouped.set(book.id, group);
   }
   return [...grouped.values()];
+}
+
+/**
+ * The signed-in user's bookmarked ayas. Sura names come from one extra read
+ * of the 114-row sura table rather than a per-row join — quran_bookmarks is
+ * keyed by (sura, aya), which PostgREST cannot embed as a composite.
+ *
+ * Returns null when nobody is signed in, matching getMyAnnotations.
+ */
+export async function getMyQuranBookmarks(): Promise<MyQuranBookmark[] | null> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return [];
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const [bookmarks, suras] = await Promise.all([
+    supabase
+      .from("quran_bookmarks")
+      .select("id, sura, aya, created_at")
+      .eq("user_id", user.id)
+      .order("sura", { ascending: true })
+      .order("aya", { ascending: true }),
+    supabase.from("quran_suras").select("number, name_ar, name_ug"),
+  ]);
+
+  type SuraRow = { number: number; name_ar: string; name_ug: string };
+  const names = new Map<number, SuraRow>(
+    ((suras.data as SuraRow[] | null) ?? []).map((row) => [row.number, row]),
+  );
+
+  type BookmarkRow = { id: number; sura: number; aya: number; created_at: string };
+  return ((bookmarks.data as BookmarkRow[] | null) ?? []).map((row) => ({
+    id: row.id,
+    sura: row.sura,
+    aya: row.aya,
+    suraNameAr: names.get(row.sura)?.name_ar ?? "",
+    suraNameUg: names.get(row.sura)?.name_ug ?? String(row.sura),
+    createdAt: String(row.created_at).slice(0, 10),
+  }));
 }

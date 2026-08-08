@@ -9,10 +9,17 @@ import type { ActionResult } from "@/lib/admin/messages";
  * tables to their owner; the explicit user check is a second gate so a
  * mistyped id can never touch someone else's row.
  */
+const TABLES: Record<string, string> = {
+  bookmark: "bookmarks",
+  note: "book_notes",
+  "quran-bookmark": "quran_bookmarks",
+};
+
 export async function deleteMyAnnotationAction(formData: FormData): Promise<ActionResult> {
   const kind = String(formData.get("kind") ?? "");
   const id = Number(formData.get("id"));
-  if ((kind !== "bookmark" && kind !== "note") || !Number.isInteger(id)) {
+  const table = TABLES[kind];
+  if (!table || !Number.isInteger(id)) {
     return { ok: false, error: "مەشغۇلات مەغلۇپ بولدى." };
   }
 
@@ -24,7 +31,6 @@ export async function deleteMyAnnotationAction(formData: FormData): Promise<Acti
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, error: "ھېساباتقا كىرىشىڭىز كېرەك." };
 
-  const table = kind === "bookmark" ? "bookmarks" : "book_notes";
   const { error } = await supabase.from(table).delete().eq("id", id).eq("user_id", user.id);
   if (error) return { ok: false, error: "ئۆچۈرگىلى بولمىدى." };
 

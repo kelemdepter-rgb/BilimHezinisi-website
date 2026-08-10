@@ -107,7 +107,7 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
           </form>
 
           <div className="ms-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
-            <Link href="/quran" className="hbtn" data-testid="quran-link" title="قۇرئان كەرىم">
+            <Link href="/quran" className="hbtn" data-testid="quran-link" title="قۇرئان كەرىم" aria-label="قۇرئان كەرىم">
               <Icon name="mosque" />
               <span className="hidden sm:inline">قۇرئان</span>
             </Link>
@@ -124,7 +124,7 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
             {session ? (
               <>
                 {(session.role === "admin" || session.role === "uploader") && (
-                  <Link href="/admin" className="hbtn" title="باشقۇرۇش سۇپىسى">
+                  <Link href="/admin" className="hbtn" title="باشقۇرۇش سۇپىسى" aria-label="باشقۇرۇش سۇپىسى">
                     <Icon name="settings" />
                     <span className="hidden sm:inline">باشقۇرۇش</span>
                   </Link>
@@ -142,7 +142,7 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
                 </form>
               </>
             ) : (
-              <Link href="/login" className="hbtn" data-testid="login-link">
+              <Link href="/login" className="hbtn" data-testid="login-link" aria-label="ھېساباتقا كىرىش">
                 <Icon name="log-in" />
                 <span className="hidden sm:inline">كىرىش</span>
               </Link>

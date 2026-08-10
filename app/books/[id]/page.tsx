@@ -143,12 +143,14 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
           <h1 className="text-2xl font-bold leading-relaxed">{book.title}</h1>
           {book.author && <p className="mt-1.5 text-[15px] text-ink2">{book.author}</p>}
 
-          <dl className="mt-4 flex flex-wrap gap-2 text-[12.5px]">
+          {/* A plain list, not a <dl>: these are single facts, not term and
+              definition pairs, and a <dl> holding bare spans is invalid. */}
+          <ul className="mt-4 flex flex-wrap gap-2 text-[12.5px]">
             {book.page_count > 0 && <Fact icon="file-text" text={`${book.page_count} بەت`} />}
             {book.date && <Fact icon="clock" text={book.date} />}
             {book.format && <Fact icon="tag" text={book.format} />}
             {trail.length > 0 && <Fact icon="layers" text={trail[trail.length - 1].name} />}
-          </dl>
+          </ul>
 
           {progress && progress.pageNo > 1 && (
             <p className="mt-4 rounded-[var(--radius)] bg-ab px-3.5 py-2.5 text-[13px]" data-testid="book-progress">
@@ -201,9 +203,9 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
 
 function Fact({ icon, text }: { icon: "file-text" | "clock" | "tag" | "layers"; text: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-bg2 px-3 py-1.5 text-ink2">
+    <li className="inline-flex items-center gap-1.5 rounded-full bg-bg2 px-3 py-1.5 text-ink2">
       <Icon name={icon} />
       {text}
-    </span>
+    </li>
   );
 }

@@ -50,6 +50,21 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
 
   return (
     <html lang="ug" dir="rtl" suppressHydrationWarning {...(theme ? { "data-theme": theme } : {})}>
+      <head>
+        {/*
+          Every page is set in UKIJ Ekran, but a @font-face is only discovered
+          after the CSS parses, so the first paint uses a fallback and the whole
+          page reflows when the real font lands. Preloading it removes that
+          shift — the single biggest layout-stability win here.
+        */}
+        <link
+          rel="preload"
+          href="/fonts/ukijekran.ttf"
+          as="font"
+          type="font/ttf"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="min-h-dvh">
         <IconSprite />
         <AppShell theme={theme} session={session} categories={categories}>

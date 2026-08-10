@@ -31,10 +31,10 @@ export function BookCard({
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[14.5px] font-bold text-ink">{book.title}</span>
-            <span className="mt-0.5 block truncate text-[12.5px] text-ink3">
+            <span className="mt-0.5 block truncate text-[12.5px] text-ink2">
               {book.author || "ئاپتور كۆرسىتىلمىگەن"}
             </span>
-            {meta && <span className="mt-0.5 block truncate text-[12px] text-ink3">{meta}</span>}
+            {meta && <span className="mt-0.5 block truncate text-[12px] text-ink2">{meta}</span>}
           </span>
           <Icon name="book-open" className="shrink-0 text-am" />
         </Link>
@@ -59,10 +59,10 @@ export function BookCard({
         </span>
         <span className="flex min-w-0 flex-1 flex-col p-3">
           <span className="line-clamp-2 text-[13.5px] font-bold leading-6 text-ink">{book.title}</span>
-          <span className="mt-1 truncate text-[12px] text-ink3">
+          <span className="mt-1 truncate text-[12px] text-ink2">
             {book.author || "ئاپتور كۆرسىتىلمىگەن"}
           </span>
-          {meta && <span className="mt-auto pt-2 truncate text-[11.5px] text-ink3">{meta}</span>}
+          {meta && <span className="mt-auto pt-2 truncate text-[12px] text-ink2">{meta}</span>}
         </span>
       </Link>
     </li>

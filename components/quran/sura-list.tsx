@@ -65,7 +65,7 @@ export function SuraList({
                     {sura.name_ug} · {revelationLabel(sura.revelation)}
                   </span>
                 </span>
-                <span className="shrink-0 text-[11.5px] text-ink3" dir="ltr">
+                <span className="shrink-0 text-[12px] text-ink2" dir="ltr">
                   {sura.aya_count}
                 </span>
               </Link>

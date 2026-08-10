@@ -141,7 +141,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
                     <span className="text-[14.5px] font-bold text-ink">{hit.title}</span>
                     {hit.author && <span className="text-[12.5px] text-ink3">{hit.author}</span>}
                     {hit.page_no > 0 && (
-                      <span className="ms-auto rounded-full bg-bg2 px-2.5 py-0.5 text-[11.5px] text-ink2">
+                      <span className="ms-auto rounded-full bg-bg2 px-2.5 py-0.5 text-[12px] text-ink2">
                         {hit.page_no}-بەت
                       </span>
                     )}

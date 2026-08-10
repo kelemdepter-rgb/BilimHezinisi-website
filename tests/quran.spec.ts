@@ -387,9 +387,12 @@ test.describe("aya bookmarks (signed in)", () => {
     await expect(bookmark).toBeVisible();
 
     // Start from a known state — an earlier run may have left it bookmarked.
+    // Wait for that toast to clear too, or the assertion below can read the
+    // "removed" message instead of the "added" one it is looking for.
     if ((await bookmark.getAttribute("aria-pressed")) === "true") {
       await bookmark.click();
       await expect(bookmark).toHaveAttribute("aria-pressed", "false");
+      await expect(page.getByTestId("quran-toast")).toHaveText("", { timeout: 5000 });
     }
 
     await bookmark.click();
@@ -409,9 +412,13 @@ test.describe("aya bookmarks (signed in)", () => {
     await entry.click();
     await expect(page).toHaveURL(/\/quran\/113\?aya=1/);
 
-    // Clean up so the next run starts from the same state.
+    // Clean up so the next viewport's run starts from the same state. The
+    // button flips optimistically, so waiting on aria-pressed alone would let
+    // the test end before the DELETE reached the database — the toast is
+    // posted only after that write resolves.
     const again = (await openAyaActions(page, 1)).getByTestId("aya-bookmark");
     await again.click();
     await expect(again).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("quran-toast")).toHaveText("خەتكۈچ ئېلىۋېتىلدى");
   });
 });

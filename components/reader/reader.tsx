@@ -483,7 +483,7 @@ export function Reader({
             data-testid="reader-page"
             className="reader-page mb-8 break-after-page"
           >
-            <p className="mb-2 text-center text-[11.5px] text-ink3 print:text-[10px]">{page.page_no}</p>
+            <p className="mb-2 text-center text-[12px] text-ink3 print:text-[10px]">{page.page_no}</p>
             {contentFormat === "markdown" ? (
               <MarkdownContent source={page.content} />
             ) : (

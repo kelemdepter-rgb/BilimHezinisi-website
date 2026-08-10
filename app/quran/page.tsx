@@ -11,6 +11,12 @@ export const metadata: Metadata = {
   title: "قۇرئان كەرىم",
   description:
     "قۇرئان كەرىمنىڭ ئوسمانىي خەت نۇسخىسى ۋە مۇھەممەد سالىھ ئۇيغۇرچە تەرجىمىسى — سۈرە بويىچە ئوقۇش ۋە ئىزدەش.",
+  alternates: { canonical: "/quran" },
+  openGraph: {
+    title: "قۇرئان كەرىم",
+    description: "ئوسمانىي خەت نۇسخىسى ۋە ئۇيغۇرچە تەرجىمىسى بىلەن، ھېساباتسىز.",
+    url: "/quran",
+  },
 };
 
 const PAGE_SIZE = 20;

@@ -10,14 +10,46 @@ import {
   getBookDetail,
   getReadingProgress,
 } from "@/lib/library";
+import { SITE_NAME, absoluteUrl, jsonLd } from "@/lib/seo";
 
 export async function generateMetadata({ params }: PageProps<"/books/[id]">): Promise<Metadata> {
   const { id } = await params;
   const book = await getBookDetail(Number(id));
-  if (!book) return { title: "كىتاب تېپىلمىدى" };
+  if (!book) return { title: "كىتاب تېپىلمىدى", robots: { index: false, follow: false } };
+
+  const description =
+    book.description || `${book.title}${book.author ? ` — ${book.author}` : ""}. ${SITE_NAME}دىن ھېساباتسىز ئوقۇڭ.`;
+  const canonical = `/books/${book.id}`;
+
+  // A draft is visible to staff only, so it must never be advertised: no
+  // indexing, and no share card carrying its title.
+  if (book.status !== "published") {
+    return { title: book.title, description, robots: { index: false, follow: false } };
+  }
+
+  // With a cover, share the cover. Without one, the site's card
+  // (app/opengraph-image.tsx) is what Next attaches, and the title and author
+  // still reach the preview as og:title / og:description text.
+  const coverUrl = await coverUrlFor(book.cover_path);
+  const images = coverUrl ? [{ url: coverUrl, alt: book.title }] : undefined;
+
   return {
     title: book.title,
-    description: book.description || `${book.title}${book.author ? ` — ${book.author}` : ""}`,
+    description,
+    alternates: { canonical },
+    openGraph: {
+      type: "book",
+      title: book.title,
+      description,
+      url: canonical,
+      ...(images ? { images } : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: book.title,
+      description,
+      ...(images ? { images: images.map((image) => image.url) } : {}),
+    },
   };
 }
 
@@ -43,6 +75,35 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
 
   return (
     <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
+      {/* Structured data, so a search engine can present this as a book
+          rather than as an anonymous page. Drafts describe nothing. */}
+      {!isDraft && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: jsonLd({
+              "@context": "https://schema.org",
+              "@type": "Book",
+              name: book.title,
+              url: absoluteUrl(`/books/${book.id}`),
+              inLanguage: book.language || "ug",
+              ...(book.author ? { author: { "@type": "Person", name: book.author } } : {}),
+              ...(book.description ? { description: book.description } : {}),
+              ...(book.date ? { datePublished: book.date } : {}),
+              ...(book.page_count > 0 ? { numberOfPages: book.page_count } : {}),
+              ...(coverUrl ? { image: coverUrl } : {}),
+              ...(trail.length > 0 ? { genre: trail[trail.length - 1].name } : {}),
+              isAccessibleForFree: true,
+              publisher: { "@type": "Organization", name: SITE_NAME, url: absoluteUrl("/") },
+              potentialAction: {
+                "@type": "ReadAction",
+                target: absoluteUrl(`/books/${book.id}/read`),
+              },
+            }),
+          }}
+        />
+      )}
+
       {trail.length > 0 && (
         <nav aria-label="تۈر يولى" className="mb-4 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink3">
           <Link href="/" className="hover:text-ink">

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Icon } from "@/components/icons";
 import { LibraryBrowser } from "@/components/library/library-browser";
@@ -5,9 +6,32 @@ import { RecentStrip } from "@/components/library/recent-strip";
 import { getCategories, getSessionInfo } from "@/lib/data";
 import { coverUrlMap, getRecentReads, listBooks } from "@/lib/library";
 import { LIBRARY_PAGE_SIZE, VIEW_COOKIE, type BookSort } from "@/lib/library-types";
+import { SITE_DESCRIPTION, SITE_NAME, absoluteUrl, jsonLd } from "@/lib/seo";
 
 function parseSort(value: unknown): BookSort {
   return value === "title" || value === "author" ? value : "new";
+}
+
+/**
+ * A category view is the same page with ?cat=, so it needs its own title and
+ * its own canonical — otherwise every category competes with the home page
+ * for the same URL.
+ */
+export async function generateMetadata({ searchParams }: PageProps<"/">): Promise<Metadata> {
+  const params = await searchParams;
+  const categoryId = typeof params.cat === "string" && params.cat ? Number(params.cat) : null;
+  if (!categoryId || !Number.isFinite(categoryId)) return { alternates: { canonical: "/" } };
+
+  const category = (await getCategories()).find((item) => item.id === categoryId);
+  if (!category) return { alternates: { canonical: "/" } };
+
+  const description = `«${category.name}» تۈرىدىكى ئۇيغۇرچە كىتابلار — ${SITE_NAME}دىن ھېساباتسىز ئوقۇڭ.`;
+  return {
+    title: category.name,
+    description,
+    alternates: { canonical: `/?cat=${category.id}` },
+    openGraph: { title: category.name, description, url: `/?cat=${category.id}` },
+  };
 }
 
 export default async function HomePage({ searchParams }: PageProps<"/">) {
@@ -38,6 +62,32 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
   return (
     <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
+      {/* Tells search engines what this site is and how to search it, so a
+          result can offer the library's own search box. */}
+      {!categoryId && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: jsonLd({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              name: SITE_NAME,
+              url: absoluteUrl("/"),
+              description: SITE_DESCRIPTION,
+              inLanguage: "ug",
+              potentialAction: {
+                "@type": "SearchAction",
+                target: {
+                  "@type": "EntryPoint",
+                  urlTemplate: absoluteUrl("/search?q={search_term_string}"),
+                },
+                "query-input": "required name=search_term_string",
+              },
+            }),
+          }}
+        />
+      )}
+
       {!session && total === 0 && (
         <section className="paper grain relative mb-6 overflow-hidden p-6 sm:p-8">
           <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--gold),var(--am),var(--gold))]" />

@@ -16,11 +16,17 @@ export async function generateMetadata({ params }: PageProps<"/quran/[sura]">): 
   const suraNumber = parseSura(sura);
   if (suraNumber === null) return { title: "قۇرئان كەرىم" };
   const found = (await getSuras()).find((item) => item.number === suraNumber);
+  if (!found) return { title: "قۇرئان كەرىم" };
+
+  const title = `${found.name_ug} سۈرىسى`;
+  const description = `${found.name_ar} — ${found.name_ug} سۈرىسى، ${found.aya_count} ئايەت. ئەرەبچە مەتنى ۋە ئۇيغۇرچە تەرجىمىسى.`;
+  // ?aya= only scrolls; it is the same sura.
+  const canonical = `/quran/${found.number}`;
   return {
-    title: found ? `${found.name_ug} سۈرىسى` : "قۇرئان كەرىم",
-    description: found
-      ? `${found.name_ar} — ${found.name_ug} سۈرىسى، ${found.aya_count} ئايەت. ئەرەبچە مەتنى ۋە ئۇيغۇرچە تەرجىمىسى.`
-      : undefined,
+    title,
+    description,
+    alternates: { canonical },
+    openGraph: { title, description, url: canonical },
   };
 }
 

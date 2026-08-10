@@ -6,7 +6,17 @@ import { getCategories } from "@/lib/data";
 import { highlightTermsFromQuery } from "@/lib/reader/highlight";
 import { runBookSearch } from "@/lib/search";
 
-export const metadata: Metadata = { title: "ئىزدەش" };
+/**
+ * Result pages are thin and endless in number, so they stay out of the index
+ * while their links are still followed — the books themselves are what should
+ * rank. The search page itself remains indexable.
+ */
+export const metadata: Metadata = {
+  title: "ئىزدەش",
+  description: "«بىلىم خەزىنىسى» كۇتۇپخانىسىدىكى بارلىق كىتابلارنىڭ ئىچىدىن سۆز ۋە ئىبارە ئىزدەڭ.",
+  alternates: { canonical: "/search" },
+  robots: { index: true, follow: true },
+};
 
 const PAGE_SIZE = 20;
 

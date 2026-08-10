@@ -4,15 +4,36 @@ import "./globals.css";
 import { IconSprite } from "@/components/icons";
 import { AppShell } from "@/components/app-shell";
 import { getCategories, getSessionInfo } from "@/lib/data";
+import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/seo";
 import { THEME_COOKIE, isTheme } from "@/lib/theme";
 
 export const metadata: Metadata = {
+  // Everything relative below (canonicals, OG images) resolves against this.
+  metadataBase: new URL(siteUrl()),
   title: {
-    default: "بىلىم خەزىنىسى",
-    template: "%s — بىلىم خەزىنىسى",
+    default: SITE_NAME,
+    template: `%s — ${SITE_NAME}`,
   },
-  description:
-    "«بىلىم خەزىنىسى» — ئۇيغۇرچە ئېلكىتابلارنى ئوقۇش، ئىزدەش ۋە ساقلاشقا قولايلىق ئوچۇق كۇتۇپخانا.",
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    locale: "ug",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: "/",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export const viewport: Viewport = {

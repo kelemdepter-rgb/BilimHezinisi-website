@@ -14,7 +14,20 @@ const WINDOW_SIZE = 8;
 export async function generateMetadata({ params }: PageProps<"/books/[id]/read">): Promise<Metadata> {
   const { id } = await params;
   const book = await getBookDetail(Number(id));
-  return { title: book ? `${book.title} — ئوقۇش` : "ئوقۇش" };
+  if (!book) return { title: "ئوقۇش", robots: { index: false, follow: false } };
+
+  // ?page= and ?q= are the same text at a different scroll position, so they
+  // all point back at the clean reading URL. Drafts stay out of the index.
+  const canonical = `/books/${book.id}/read`;
+  if (book.status !== "published") {
+    return { title: `${book.title} — ئوقۇش`, robots: { index: false, follow: false } };
+  }
+  return {
+    title: `${book.title} — ئوقۇش`,
+    description: `${book.title}${book.author ? ` — ${book.author}` : ""}. تور بەتتە ھېساباتسىز ئوقۇڭ.`,
+    alternates: { canonical },
+    openGraph: { type: "book", title: book.title, url: canonical },
+  };
 }
 
 export default async function ReadPage({ params, searchParams }: PageProps<"/books/[id]/read">) {

@@ -32,18 +32,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [...staticPages, ...suraPages];
 
-  // Only the columns the sitemap needs, so this stays small at hundreds of
-  // books. Drafts are excluded here AND by RLS — the anon key is what runs it.
-  const [{ data: books }, categories] = await Promise.all([
-    supabase
+  // Only the columns the sitemap needs, and read in pages: migration 0009 caps
+  // an anonymous request at 1,000 rows, so a single query would quietly stop
+  // listing books once the library outgrew it. Drafts are excluded here AND by
+  // RLS — the anon key is what runs this.
+  const PAGE = 500;
+  const books: { id: number; updated_at: string }[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
       .from("books")
       .select("id, updated_at")
       .eq("status", "published")
-      .order("id", { ascending: true }),
-    getCategories(),
-  ]);
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error || !data || data.length === 0) break;
+    books.push(...(data as { id: number; updated_at: string }[]));
+    if (data.length < PAGE) break;
+  }
 
-  const bookPages: MetadataRoute.Sitemap = ((books as { id: number; updated_at: string }[] | null) ?? [])
+  const categories = await getCategories();
+
+  const bookPages: MetadataRoute.Sitemap = books
     .flatMap((book) => [
       {
         url: absoluteUrl(`/books/${book.id}`),

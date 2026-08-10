@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureAdminBootstrap } from "@/lib/auth/bootstrap";
+import { SIGN_IN_RULE, SIGN_UP_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
 
 /**
  * Supabase auth error code → query key understood by the login/register
@@ -46,6 +47,11 @@ export async function signInAction(formData: FormData) {
   const password = String(formData.get("password") ?? "");
   if (!email || !password) redirect("/login?xata=empty");
 
+  // Turned away before the request reaches Supabase at all.
+  if (isRateLimited(`signin:${await callerKey()}`, SIGN_IN_RULE)) {
+    redirect("/login?xata=rate_limit");
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) redirect("/login?xata=config");
 
@@ -64,6 +70,11 @@ export async function signUpAction(formData: FormData) {
   const displayName = String(formData.get("display_name") ?? "").trim();
   if (!email || !password) redirect("/register?xata=empty");
   if (password.length < 6) redirect("/register?xata=short");
+
+  // Each signup costs an email send, which is the scarcest thing here.
+  if (isRateLimited(`signup:${await callerKey()}`, SIGN_UP_RULE)) {
+    redirect("/register?xata=rate_limit");
+  }
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) redirect("/register?xata=config");

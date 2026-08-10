@@ -55,6 +55,10 @@ export type QuranSearchOutcome = {
  *
  * Asks for one row beyond the page size to learn whether a next page exists.
  */
+/** Ceilings applied here, not only in the UI — the query string is a visitor's. */
+const MAX_LIMIT = 50;
+const MAX_OFFSET = 1000;
+
 export async function runQuranSearch(input: {
   query: string;
   limit: number;
@@ -66,19 +70,22 @@ export async function runQuranSearch(input: {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return empty;
 
+  const limit = Math.min(Math.max(1, Math.floor(input.limit)), MAX_LIMIT);
+  const offset = Math.min(Math.max(0, Math.floor(input.offset)), MAX_OFFSET);
+
   const started = Date.now();
   const { data, error } = await supabase.rpc("search_quran", {
     q: input.query,
-    lim: input.limit + 1,
-    off: input.offset,
+    lim: limit + 1,
+    off: offset,
   });
   const elapsedMs = Date.now() - started;
 
   const rows = (data as QuranHit[] | null) ?? [];
   return {
-    hits: rows.slice(0, input.limit),
+    hits: rows.slice(0, limit),
     elapsedMs,
     failed: Boolean(error),
-    moreAvailable: rows.length > input.limit,
+    moreAvailable: rows.length > limit,
   };
 }

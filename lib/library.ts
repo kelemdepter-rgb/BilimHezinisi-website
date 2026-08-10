@@ -25,6 +25,14 @@ const ORDER: Record<BookSort, { column: string; ascending: boolean }> = {
 };
 
 /**
+ * listBooks is reachable from a Server Action, so its arguments arrive from
+ * the network however the UI is written. A deep OFFSET makes Postgres walk
+ * every row before it, so both ends are clamped here — the one place every
+ * caller passes through.
+ */
+const MAX_OFFSET = 5000;
+
+/**
  * One query for the page of books plus an exact count — no per-book follow-up
  * requests. Category names are resolved from the already-loaded tree.
  */
@@ -37,9 +45,9 @@ export async function listBooks(options: {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { books: [], total: 0 };
 
-  const limit = options.limit ?? LIBRARY_PAGE_SIZE;
-  const offset = options.offset ?? 0;
-  const order = ORDER[options.sort ?? "new"];
+  const limit = Math.min(Math.max(1, Math.floor(options.limit ?? LIBRARY_PAGE_SIZE)), LIBRARY_PAGE_SIZE);
+  const offset = Math.min(Math.max(0, Math.floor(options.offset ?? 0)), MAX_OFFSET);
+  const order = ORDER[options.sort ?? "new"] ?? ORDER.new;
 
   let request = supabase
     .from("books")

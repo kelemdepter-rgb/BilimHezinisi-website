@@ -72,6 +72,17 @@ export default defineConfig({
         },
       },
       {
+        // Security and crawler rules: anonymous by definition, and viewport
+        // independent, so they run once at the desktop size only.
+        name: `security-${viewport.name}`,
+        testMatch: /security\.spec\.ts/,
+        testIgnore: viewport.mobile ? /./ : undefined,
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+        },
+      },
+      {
         // Quran specs run ANONYMOUSLY — /quran must work without an account.
         // The bookmark block opts into the staff state itself, which is why
         // the setup project still has to run first.

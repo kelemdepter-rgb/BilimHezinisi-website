@@ -19,12 +19,20 @@ export const metadata: Metadata = {
 };
 
 const PAGE_SIZE = 20;
+/**
+ * Anonymous visitors control `p`, and a deep OFFSET makes Postgres walk every
+ * row before it. Nobody pages 50 screens into a result list, so the depth is
+ * capped server-side rather than trusted from the URL.
+ */
+const MAX_PAGE = 50;
+/** A pathological query string costs tokenizing time; nothing useful is this long. */
+const MAX_QUERY_CHARS = 200;
 
 export default async function SearchPage({ searchParams }: PageProps<"/search">) {
   const params = await searchParams;
-  const query = typeof params.q === "string" ? params.q.trim() : "";
+  const query = typeof params.q === "string" ? params.q.trim().slice(0, MAX_QUERY_CHARS) : "";
   const categoryId = typeof params.cat === "string" && params.cat ? Number(params.cat) : null;
-  const pageNo = Math.max(1, Number(params.p ?? 1) || 1);
+  const pageNo = Math.min(MAX_PAGE, Math.max(1, Number(params.p ?? 1) || 1));
   const offset = (pageNo - 1) * PAGE_SIZE;
 
   const categories = await getCategories();

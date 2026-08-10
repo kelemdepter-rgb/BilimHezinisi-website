@@ -20,11 +20,14 @@ export const metadata: Metadata = {
 };
 
 const PAGE_SIZE = 20;
+/** Same reasoning as the book search: `p` and `q` come from the visitor. */
+const MAX_PAGE = 50;
+const MAX_QUERY_CHARS = 200;
 
 export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
   const params = await searchParams;
-  const query = typeof params.q === "string" ? params.q.trim() : "";
-  const pageNo = Math.max(1, Number(params.p ?? 1) || 1);
+  const query = typeof params.q === "string" ? params.q.trim().slice(0, MAX_QUERY_CHARS) : "";
+  const pageNo = Math.min(MAX_PAGE, Math.max(1, Number(params.p ?? 1) || 1));
 
   const [suras, search] = await Promise.all([
     getSuras(),

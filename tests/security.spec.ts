@@ -131,6 +131,60 @@ test.describe("row level security", () => {
   });
 });
 
+test.describe("search holds up on a real library", () => {
+  /**
+   * Search broke once already, and only after real books arrived: under RLS
+   * the index went unused, and ranking re-derived a tsvector from every
+   * matching page. Both failures showed up as a statement timeout for
+   * ANONYMOUS callers only — the service role bypasses RLS and stayed fast, so
+   * these run on the anon key deliberately.
+   *
+   * The assertion is "answers at all", not a millisecond budget: a timeout is
+   * unambiguous, while a latency threshold would flake on a busy laptop.
+   */
+  test("a word on almost every page still returns results", async () => {
+    const service = serviceClient();
+    const { count: pages } = await service
+      .from("book_pages")
+      .select("book_id", { count: "exact", head: true });
+    test.skip((pages ?? 0) < 500, "library too small for this to mean anything");
+
+    // Take a word from a real page, so the term is guaranteed to be common.
+    const { data: sample } = await service.from("book_pages").select("content").limit(1).single();
+    const content = (sample as { content: string } | null)?.content ?? "";
+    const word = content
+      .split(/\s+/)
+      .filter((token: string) => token.length >= 5 && /^[\p{L}]+$/u.test(token))[0];
+    test.skip(!word, "no usable word in the sample page");
+
+    const anon = anonClient();
+    const { data, error } = await anon.rpc("search_books", {
+      q: word,
+      category_id: null,
+      lim: 20,
+      off: 0,
+    });
+    expect(error, `search for «${word}» must not time out`).toBeNull();
+    expect((data ?? []).length, "a common word must return a full page of hits").toBeGreaterThan(0);
+  });
+
+  test("a query matching nothing comes back off the index", async () => {
+    // The clearest signal that the index is being used: no matches must not
+    // mean a full scan of every page.
+    const anon = anonClient();
+    const started = Date.now();
+    const { data, error } = await anon.rpc("search_books", {
+      q: "زززققق-يوق-سۆز",
+      category_id: null,
+      lim: 20,
+      off: 0,
+    });
+    expect(error).toBeNull();
+    expect(data ?? []).toEqual([]);
+    expect(Date.now() - started, "an empty result must be fast").toBeLessThan(2500);
+  });
+});
+
 test.describe("crawler rules", () => {
   test("robots.txt keeps crawlers out of the admin area and personal pages", async ({ request }) => {
     const body = await (await request.get("/robots.txt")).text();

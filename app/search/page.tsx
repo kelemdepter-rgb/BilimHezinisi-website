@@ -21,10 +21,11 @@ export const metadata: Metadata = {
 const PAGE_SIZE = 20;
 /**
  * Anonymous visitors control `p`, and a deep OFFSET makes Postgres walk every
- * row before it. Nobody pages 50 screens into a result list, so the depth is
- * capped server-side rather than trusted from the URL.
+ * row before it. The ceiling also matches what search_books actually ranks —
+ * 300 candidate pages (migration 0014) — so paging cannot run past the end of
+ * the ranked set into empty pages.
  */
-const MAX_PAGE = 50;
+const MAX_PAGE = 15;
 /** A pathological query string costs tokenizing time; nothing useful is this long. */
 const MAX_QUERY_CHARS = 200;
 
@@ -37,7 +38,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
 
   const categories = await getCategories();
 
-  const { hits, elapsedMs, failed, moreAvailable } = await runBookSearch({
+  const { hits, elapsedMs, failed, moreAvailable, tooCommon } = await runBookSearch({
     query,
     categoryId: categoryId && Number.isFinite(categoryId) ? categoryId : null,
     limit: PAGE_SIZE,
@@ -125,6 +126,22 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
         </div>
       ) : (
         <>
+          {/* The word matched more pages than the database ranks. Results are
+              still shown — they are simply the best of an early slice, not of
+              everything — and the reader is told how to narrow it. */}
+          {tooCommon && (
+            <p
+              className="mt-4 flex items-start gap-2 rounded-[var(--radius)] bg-ab px-3.5 py-3 text-[13px] leading-7"
+              data-testid="search-too-common"
+            >
+              <Icon name="info" className="mt-1 shrink-0 text-am" />
+              <span>
+                «{query}» بەك كۆپ بەتتە بار. تۆۋەندىكىسى دەسلەپكى نەتىجىلەر — تېخىمۇ ئېنىق
+                تېپىش ئۈچۈن يەنە بىر سۆز قوشۇڭ، ياكى ئىبارىنى قوش تىرناققا ئېلىڭ.
+              </span>
+            </p>
+          )}
+
           <p className="mt-4 text-[13px] text-ink3" data-testid="search-meta">
             بۇ بەتتە {hits.length} نەتىجە · {(elapsedMs / 1000).toFixed(2)} سېكۇنت
           </p>

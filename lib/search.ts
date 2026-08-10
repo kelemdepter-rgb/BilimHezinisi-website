@@ -8,6 +8,8 @@ export type SearchHit = {
   page_no: number;
   snippet: string;
   rank: number;
+  /** True when the word matched more pages than the RPC is willing to rank. */
+  capped?: boolean;
 };
 
 export type SearchOutcome = {
@@ -15,6 +17,12 @@ export type SearchOutcome = {
   elapsedMs: number;
   failed: boolean;
   moreAvailable: boolean;
+  /**
+   * The query matched more pages than search_books ranks (migration 0014), so
+   * these are the best of an early slice rather than of everything. The page
+   * says so and suggests a second word.
+   */
+  tooCommon: boolean;
 };
 
 /**
@@ -24,9 +32,13 @@ export type SearchOutcome = {
  * Asks for one row beyond the page size to know whether a next page exists,
  * which avoids a second counting query.
  */
-/** Ceilings applied here, not only in the UI — the query string is a visitor's. */
+/**
+ * Ceilings applied here, not only in the UI — the query string is a visitor's.
+ * The offset ceiling matches the 300 candidate pages search_books ranks
+ * (migration 0014); past that there is nothing left to page into.
+ */
 const MAX_LIMIT = 50;
-const MAX_OFFSET = 1000;
+const MAX_OFFSET = 300;
 
 export async function runBookSearch(input: {
   query: string;
@@ -34,7 +46,13 @@ export async function runBookSearch(input: {
   limit: number;
   offset: number;
 }): Promise<SearchOutcome> {
-  const empty: SearchOutcome = { hits: [], elapsedMs: 0, failed: false, moreAvailable: false };
+  const empty: SearchOutcome = {
+    hits: [],
+    elapsedMs: 0,
+    failed: false,
+    moreAvailable: false,
+    tooCommon: false,
+  };
   if (!input.query) return empty;
 
   const supabase = await createSupabaseServerClient();
@@ -58,5 +76,7 @@ export async function runBookSearch(input: {
     elapsedMs,
     failed: Boolean(error),
     moreAvailable: rows.length > limit,
+    // Every row carries the same flag, so the first one answers for all.
+    tooCommon: Boolean(rows[0]?.capped),
   };
 }

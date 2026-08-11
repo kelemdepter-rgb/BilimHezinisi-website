@@ -1,10 +1,31 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
-import { Snippet } from "@/components/search/snippet";
+import { BookResults, type BookGroup } from "@/components/search/book-results";
 import { getCategories } from "@/lib/data";
 import { highlightTermsFromQuery } from "@/lib/reader/highlight";
-import { runBookSearch } from "@/lib/search";
+import { runBookSearch, type SearchHit } from "@/lib/search";
+
+/**
+ * Results arrive one page-hit per row. A book that mentions the word forty
+ * times would fill the whole screen and still hide the other thirty-seven, so
+ * they are gathered under their book — best-ranked book first, which the RPC's
+ * order already gives.
+ */
+function groupByBook(hits: SearchHit[]): BookGroup[] {
+  const groups = new Map<number, BookGroup>();
+  for (const hit of hits) {
+    const group = groups.get(hit.book_id) ?? {
+      bookId: hit.book_id,
+      title: hit.title,
+      author: hit.author,
+      hits: [],
+    };
+    group.hits.push(hit);
+    groups.set(hit.book_id, group);
+  }
+  return [...groups.values()];
+}
 
 /**
  * Result pages are thin and endless in number, so they stay out of the index
@@ -146,30 +167,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
             بۇ بەتتە {hits.length} نەتىجە · {(elapsedMs / 1000).toFixed(2)} سېكۇنت
           </p>
 
-          <ul className="mt-3 space-y-2" data-testid="search-results">
-            {hits.map((hit) => (
-              <li key={`${hit.book_id}-${hit.page_no}`}>
-                <Link
-                  href={`/books/${hit.book_id}/read?page=${Math.max(1, hit.page_no)}&q=${encodeURIComponent(term)}`}
-                  data-testid="search-result"
-                  className="paper block p-3.5 hover:shadow-[var(--shadow-2)]"
-                >
-                  <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                    <span className="text-[14.5px] font-bold text-ink">{hit.title}</span>
-                    {hit.author && <span className="text-[12.5px] text-ink3">{hit.author}</span>}
-                    {hit.page_no > 0 && (
-                      <span className="ms-auto rounded-full bg-bg2 px-2.5 py-0.5 text-[12px] text-ink2">
-                        {hit.page_no}-بەت
-                      </span>
-                    )}
-                  </span>
-                  <span className="mt-1.5 block text-[13.5px] leading-7 text-ink2">
-                    <Snippet snippet={hit.snippet} />
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <BookResults groups={groupByBook(hits)} term={term} />
 
           {(pageNo > 1 || moreAvailable) && (
             <nav className="mt-5 flex items-center justify-center gap-2" aria-label="بەت تەرتىپى">

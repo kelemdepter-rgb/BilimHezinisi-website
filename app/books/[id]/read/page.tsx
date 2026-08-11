@@ -48,6 +48,9 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/boo
 
   const requestedPage = typeof query.page === "string" ? Number(query.page) : NaN;
   const highlight = typeof query.q === "string" ? query.q : "";
+  // ?m= addresses one occurrence within the requested page, so a result from
+  // the search page's expanded list lands on that exact word.
+  const requestedMatch = typeof query.m === "string" ? Number(query.m) : NaN;
 
   // Anonymous readers restore from localStorage in the client; the server
   // window still has to include an explicitly requested page.
@@ -83,6 +86,7 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/boo
       theme={isTheme(rawTheme) ? rawTheme : null}
       jumpToPage={Number.isFinite(requestedPage) ? position.pageNo : null}
       highlight={highlight}
+      jumpToMatch={Number.isInteger(requestedMatch) && requestedMatch >= 0 ? requestedMatch : null}
     />
   );
 }

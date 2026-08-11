@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
 import { MarkdownContent } from "@/components/reader/markdown-content";
-import { toSegments } from "@/lib/reader/highlight";
+import { findMatches, toSegments } from "@/lib/reader/highlight";
 import type { ContentFormat } from "@/lib/books/types";
 import {
   addBookmark,
@@ -50,6 +50,7 @@ export function Reader({
   theme,
   jumpToPage,
   highlight,
+  jumpToMatch,
 }: {
   bookId: number;
   title: string;
@@ -61,6 +62,7 @@ export function Reader({
   theme: Theme | null;
   jumpToPage: number | null;
   highlight: string;
+  jumpToMatch: number | null;
 }) {
   const [pages, setPages] = useState<BookPage[]>(initialPages);
   const settings = useSyncExternalStore(
@@ -245,6 +247,36 @@ export function Reader({
     });
   }, [bookId, initialPosition, jumpToPage, pageCount, signedIn]);
 
+  /**
+   * Arriving from the search page, the term is highlighted but nothing knows
+   * where the other occurrences are — so the ↑ ↓ controls had nothing to step
+   * through and stayed hidden. Collect them up front, without moving the
+   * reader: the ?page= jump above already put it in the right place.
+   */
+  const matchesLoaded = useRef(false);
+  useEffect(() => {
+    if (matchesLoaded.current || !highlight.trim()) return;
+    matchesLoaded.current = true;
+    void searchInBook(bookId, highlight)
+      .then((hits) => {
+        setFindHits(hits);
+        // Arriving on a specific occurrence (?m= from the search page's
+        // expanded list): select it so ↑ ↓ continue from there and the word
+        // itself is marked, not just its page.
+        if (jumpToMatch === null || jumpToPage === null) return;
+        let position = 0;
+        for (const page of hits) {
+          const count = findMatches(page.content, highlight).length;
+          if (page.page_no === jumpToPage) {
+            setFindIndex(position + Math.min(jumpToMatch, Math.max(0, count - 1)));
+            return;
+          }
+          position += count;
+        }
+      })
+      .catch(() => undefined);
+  }, [bookId, highlight, jumpToMatch, jumpToPage]);
+
   const goToPage = useCallback(
     async (pageNo: number) => {
       const target = Math.min(Math.max(1, Math.floor(pageNo)), Math.max(1, pageCount));
@@ -269,28 +301,70 @@ export function Reader({
     [bookId, pageCount],
   );
 
+  /**
+   * Every occurrence of the term, flattened across the pages that contain it —
+   * a page can hold the word many times, and stepping page-by-page would skip
+   * all but the first. Positions come from findMatches, so a term still lines
+   * up with text carrying Arabic diacritics.
+   */
+  const occurrences = useMemo(() => {
+    const term = activeTerm.trim();
+    if (!term) return [] as { pageNo: number; index: number }[];
+    return findHits.flatMap((page) =>
+      findMatches(page.content, term).map((_, index) => ({ pageNo: page.page_no, index })),
+    );
+  }, [findHits, activeTerm]);
+
+  /** Bring one occurrence into view, loading its page first when needed. */
+  const goToOccurrence = useCallback(
+    async (position: number) => {
+      const target = occurrences[position];
+      if (!target) return;
+      setFindIndex(position);
+
+      const selector = `[data-page-no="${target.pageNo}"] [data-match="${target.index}"]`;
+      let node = containerRef.current?.querySelector<HTMLElement>(selector);
+      if (!node) {
+        await goToPage(target.pageNo);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        node = containerRef.current?.querySelector<HTMLElement>(selector) ?? undefined;
+      }
+      // A Markdown book renders without marks; the page itself is the target.
+      if (node) node.scrollIntoView({ behavior: "smooth", block: "center" });
+      else await goToPage(target.pageNo);
+    },
+    [goToPage, occurrences],
+  );
+
+  const collectHits = useCallback(
+    async (term: string) => {
+      if (!term.trim()) {
+        setFindHits([]);
+        return [] as BookPage[];
+      }
+      try {
+        const hits = await searchInBook(bookId, term);
+        setFindHits(hits);
+        return hits;
+      } catch {
+        setError("كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.");
+        return [] as BookPage[];
+      }
+    },
+    [bookId],
+  );
+
   async function runFind(term: string) {
     setFindTerm(term);
     setActiveTerm(term);
-    if (!term.trim()) {
-      setFindHits([]);
-      return;
-    }
-    try {
-      const hits = await searchInBook(bookId, term);
-      setFindHits(hits);
-      setFindIndex(0);
-      if (hits[0]) await goToPage(hits[0].page_no);
-    } catch {
-      setError("كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.");
-    }
+    setFindIndex(0);
+    const hits = await collectHits(term);
+    if (hits[0]) await goToPage(hits[0].page_no);
   }
 
   async function stepFind(delta: 1 | -1) {
-    if (findHits.length === 0) return;
-    const next = (findIndex + delta + findHits.length) % findHits.length;
-    setFindIndex(next);
-    await goToPage(findHits[next].page_no);
+    if (occurrences.length === 0) return;
+    await goToOccurrence((findIndex + delta + occurrences.length) % occurrences.length);
   }
 
   async function createBookmark() {
@@ -363,6 +437,40 @@ export function Reader({
             <span className="text-[15px] font-bold">A+</span>
           </button>
           <ThemeToggle initial={theme} />
+
+          {/* Step through the term's occurrences without opening anything —
+              this is the control that was missing when a reader arrived here
+              from the search page. */}
+          {occurrences.length > 0 && (
+            <span className="flex shrink-0 items-center" data-testid="match-nav">
+              <button
+                type="button"
+                className="ibtn"
+                data-testid="match-prev"
+                aria-label="ئالدىنقى تېپىلغان سۆز"
+                onClick={() => void stepFind(-1)}
+              >
+                <Icon name="chevron-up" className="ic-lg" />
+              </button>
+              <button
+                type="button"
+                className="ibtn"
+                data-testid="match-next"
+                aria-label="كېيىنكى تېپىلغان سۆز"
+                onClick={() => void stepFind(1)}
+              >
+                <Icon name="chevron-down" className="ic-lg" />
+              </button>
+              <span
+                className="whitespace-nowrap px-1 text-[12.5px] tabular-nums text-ink2"
+                data-testid="match-count"
+                dir="ltr"
+              >
+                {findIndex + 1}/{occurrences.length}
+              </span>
+            </span>
+          )}
+
           <button
             type="button"
             className="ibtn"
@@ -489,15 +597,31 @@ export function Reader({
             ) : (
               <div className="whitespace-pre-wrap break-words">
                 {activeTerm.trim()
-                  ? toSegments(page.content, activeTerm).map((segment, index) =>
-                      segment.match ? (
-                        <mark key={index} className="rounded bg-ab2 px-0.5 text-ink">
-                          {segment.text}
-                        </mark>
-                      ) : (
-                        <span key={index}>{segment.text}</span>
-                      ),
-                    )
+                  ? (() => {
+                      // Number the marks within the page so ↑ ↓ can address one
+                      // occurrence, and flag the one currently stepped to.
+                      let matchNo = -1;
+                      const active = occurrences[findIndex];
+                      return toSegments(page.content, activeTerm).map((segment, index) => {
+                        if (!segment.match) return <span key={index}>{segment.text}</span>;
+                        matchNo += 1;
+                        const isActive =
+                          active?.pageNo === page.page_no && active.index === matchNo;
+                        return (
+                          <mark
+                            key={index}
+                            data-match={matchNo}
+                            className={
+                              isActive
+                                ? "rounded bg-am px-0.5 font-semibold text-at"
+                                : "rounded bg-ab2 px-0.5 text-ink"
+                            }
+                          >
+                            {segment.text}
+                          </mark>
+                        );
+                      });
+                    })()
                   : page.content}
               </div>
             )}

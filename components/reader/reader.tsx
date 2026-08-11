@@ -329,8 +329,11 @@ export function Reader({
         await new Promise((resolve) => requestAnimationFrame(resolve));
         node = containerRef.current?.querySelector<HTMLElement>(selector) ?? undefined;
       }
+      // Instant, not smooth: stepping matches is a find-next, and the browser's
+      // own find jumps rather than animates — over hundreds of pages a smooth
+      // scroll would be a long slide past text nobody asked to read.
       // A Markdown book renders without marks; the page itself is the target.
-      if (node) node.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (node) node.scrollIntoView({ behavior: "auto", block: "center" });
       else await goToPage(target.pageNo);
     },
     [goToPage, occurrences],

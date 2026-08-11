@@ -7,6 +7,7 @@ import {
   SEED_BOOK_TITLE,
   SEED_NEEDLE,
   SEED_NEEDLE_PAGE,
+  SEED_NEEDLE_LATER_PAGE,
   SEED_PAGE_COUNT,
   SEED_PATH,
   STAFF_EMAIL,
@@ -96,9 +97,22 @@ setup("seed a published test book", async () => {
   const pages = Array.from({ length: SEED_PAGE_COUNT }, (_, index) => {
     const pageNo = index + 1;
     const filler = `${pageNo}-بەتنىڭ مەزمۇنى. ئۇيغۇر تىلىدىكى سىناق جۈملىسى. `.repeat(18);
-    // One page carries the needle so a search result can be asserted exactly.
-    const marker = pageNo === SEED_NEEDLE_PAGE ? ` بۇ بەتتە ${SEED_NEEDLE} دېگەن سۆز بار. ` : "";
-    return { book_id: book.id, page_no: pageNo, content: `${marker}${filler}` };
+
+    // The needle appears three times, deliberately: twice on one page and once
+    // on a later one. Stepping between matches has to move within a page as
+    // well as across pages, and a single occurrence would let a page-by-page
+    // implementation pass.
+    if (pageNo === SEED_NEEDLE_PAGE) {
+      return {
+        book_id: book.id,
+        page_no: pageNo,
+        content: ` بۇ بەتتە ${SEED_NEEDLE} دېگەن سۆز بار. ${filler} يەنە بىر قېتىم ${SEED_NEEDLE} مۇشۇ بەتتە. `,
+      };
+    }
+    if (pageNo === SEED_NEEDLE_LATER_PAGE) {
+      return { book_id: book.id, page_no: pageNo, content: `${filler} كېيىنكى ${SEED_NEEDLE} بۇ يەردە. ` };
+    }
+    return { book_id: book.id, page_no: pageNo, content: filler };
   });
   const { error: pageError } = await admin.from("book_pages").insert(pages);
   if (pageError) throw new Error(`could not seed pages: ${pageError.message}`);

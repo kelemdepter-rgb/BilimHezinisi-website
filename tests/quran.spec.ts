@@ -6,10 +6,10 @@ loadEnvLocal();
 test.skip(!hasStaffTestEnv(), "Supabase env not configured");
 
 /** Both spellings normalize to the same tokens, so both must find 1:1. */
-const BASMALA_PLAIN = '"بسم الله الرحمن الرحيم"';
-const BASMALA_TASHKIL = '"بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ"';
-/** Unique to the Uyghur translation of 1:2. */
-const UYGHUR_PHRASE = '"جىمى ھەمدۇ سانا"';
+const BASMALA_PLAIN = "بسم الله الرحمن الرحيم";
+const BASMALA_TASHKIL = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+/** Three words that only the Uyghur translation of 1:2 carries together. */
+const UYGHUR_PHRASE = "جىمى ھەمدۇ سانا";
 
 async function assertNoHorizontalOverflow(page: Page) {
   const metrics = await page.evaluate(() => ({

@@ -41,6 +41,10 @@ export const SEED_BOOK_HASH = "__e2e_book_hash__";
 /** A word placed on a known page so search results can be asserted exactly. */
 export const SEED_NEEDLE = "ئالتۇنكۆۋرۈك";
 export const SEED_NEEDLE_PAGE = 3;
+/** A second page carrying the needle, so match stepping has to cross pages. */
+export const SEED_NEEDLE_LATER_PAGE = 7;
+/** How many times the needle occurs in the seeded book, in total. */
+export const SEED_NEEDLE_COUNT = 3;
 export const SEED_PAGE_COUNT = 14;
 
 export function readSeed(): { bookId: number } | null {

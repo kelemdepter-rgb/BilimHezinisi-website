@@ -110,9 +110,8 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
       </form>
 
       <p className="mt-2.5 text-[12.5px] leading-6 text-ink3">
-        ئىبارە ئۈزۈن ئىزدەش ئۈچۈن &laquo;<span dir="ltr">&quot;ئۇيغۇر تىلى&quot;</span>&raquo; دەپ
-        قوش تىرناققا ئېلىڭ · ئىككى سۆزنىڭ بىرى ئۈچۈن <span dir="ltr">OR</span> ·
-        بىر سۆزنى چىقىرىۋېتىش ئۈچۈن ئالدىغا <span dir="ltr">-</span> قويۇڭ.
+        سۆزنىڭ بېشىنى يازسىڭىزمۇ تېپىلىدۇ — «ناماز» دېسىڭىز «نامازغا»، «نامازنى»مۇ چىقىدۇ.
+        كۆپ سۆز يازسىڭىز، ھەممىسى بار بەتلەر تېپىلىدۇ.
       </p>
 
       {/* Book search and Quran search stay separate: this page only ever

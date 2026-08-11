@@ -147,6 +147,39 @@ test.describe("reader", () => {
     await expect(page.locator('[data-page-no="9"]')).toBeVisible({ timeout: 20_000 });
   });
 
+  test("arriving from search, the arrows step through every occurrence", async ({ page }) => {
+    // The gap this covers: the term was highlighted but nothing offered a way
+    // to reach the next one, because the controls only existed inside the
+    // collapsed find panel — and even there they skipped every occurrence
+    // after the first on a page.
+    await page.goto(
+      `/books/${seededBookId()}/read?page=${SEED_NEEDLE_PAGE}&q=${encodeURIComponent(SEED_NEEDLE)}`,
+    );
+
+    const nav = page.getByTestId("match-nav");
+    await expect(nav, "the arrows must be there without opening anything").toBeVisible({
+      timeout: 20_000,
+    });
+
+    const counter = page.getByTestId("match-count");
+    await expect(counter).toHaveText(/^1\/\d+$/);
+    const total = Number((await counter.innerText()).split("/")[1]);
+    test.skip(total < 2, "the seeded book holds only one occurrence");
+
+    // Stepping forward moves the position and marks a different occurrence.
+    await page.getByTestId("match-next").click();
+    await expect(counter).toHaveText(`2/${total}`);
+    const active = page.locator("mark.bg-am");
+    await expect(active).toHaveCount(1);
+    await expect(active).toBeInViewport();
+
+    // ...and back again, wrapping at the ends rather than dead-ending.
+    await page.getByTestId("match-prev").click();
+    await expect(counter).toHaveText(`1/${total}`);
+    await page.getByTestId("match-prev").click();
+    await expect(counter).toHaveText(`${total}/${total}`);
+  });
+
   test("in-book search finds the seeded word", async ({ page }) => {
     await page.goto(`/books/${seededBookId()}/read`);
     await page.getByTestId("find-toggle").click();
@@ -200,6 +233,37 @@ test.describe("global search", () => {
   test("shows an empty state for a word that is not there", async ({ page }) => {
     await page.goto("/search?q=قوندۇرۇلمىغانئالاھىدەسۆز");
     await expect(page.getByTestId("search-empty")).toBeVisible();
+  });
+
+  test("finds a word by its beginning, the way the desktop does", async ({ page }) => {
+    // Uyghur glues suffixes onto stems, so a reader types the start of a word
+    // far more often than its exact inflected form. Whole-lexeme matching used
+    // to return nothing at all here.
+    const prefix = SEED_NEEDLE.slice(0, 5);
+    await page.goto(`/search?q=${encodeURIComponent(prefix)}`);
+    await expect(page.getByTestId("search-result").first()).toBeVisible({ timeout: 20_000 });
+  });
+
+  test("groups a book's hits and expands to every place in it", async ({ page }) => {
+    await page.goto(`/search?q=${encodeURIComponent(SEED_NEEDLE)}`);
+
+    const group = page.getByTestId("search-book-group").first();
+    await expect(group).toBeVisible({ timeout: 20_000 });
+    await expect(group.getByTestId("search-book-title")).toBeVisible();
+
+    // The desktop's "+" expander: every occurrence in this one book.
+    await group.getByTestId("expand-book-matches").click();
+    const matches = group.getByTestId("expanded-match");
+    await expect(matches.first()).toBeVisible({ timeout: 20_000 });
+    await expect(group.getByTestId("expanded-count")).toBeVisible();
+    // Each entry shows the word it found, highlighted in its own context.
+    await expect(matches.first().locator("mark").first()).toBeVisible();
+
+    // ...and addresses one exact occurrence, not just its page.
+    await expect(matches.first()).toHaveAttribute("href", /[?&]m=\d+/);
+    await matches.first().click();
+    await expect(page).toHaveURL(/\/books\/\d+\/read\?page=\d+.*m=\d+/);
+    await expect(page.getByTestId("match-nav")).toBeVisible({ timeout: 20_000 });
   });
 });
 

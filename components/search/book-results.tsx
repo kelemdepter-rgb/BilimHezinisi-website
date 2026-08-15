@@ -37,10 +37,14 @@ export function BookResults({ groups, term }: { groups: BookGroup[]; term: strin
   );
 }
 
-function readerHref(bookId: number, pageNo: number, term: string, matchIndex?: number) {
+/**
+ * Every result carries the occurrence it points at (m=) and the fact that it
+ * came from a search (from=search) — the first lands the reader on the exact
+ * word, the second makes the back control return to these results.
+ */
+function readerHref(bookId: number, pageNo: number, term: string, matchIndex = 0) {
   const page = Math.max(1, pageNo);
-  const base = `/books/${bookId}/read?page=${page}&q=${encodeURIComponent(term)}`;
-  return matchIndex === undefined ? base : `${base}&m=${matchIndex}`;
+  return `/books/${bookId}/read?page=${page}&q=${encodeURIComponent(term)}&m=${matchIndex}&from=search`;
 }
 
 function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {

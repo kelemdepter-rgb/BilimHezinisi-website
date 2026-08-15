@@ -51,6 +51,9 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/boo
   // ?m= addresses one occurrence within the requested page, so a result from
   // the search page's expanded list lands on that exact word.
   const requestedMatch = typeof query.m === "string" ? Number(query.m) : NaN;
+  // Set by links on the search results page, so the reader knows the way back
+  // is the results list rather than this book's own page.
+  const cameFromSearch = query.from === "search";
 
   // Anonymous readers restore from localStorage in the client; the server
   // window still has to include an explicitly requested page.
@@ -87,6 +90,7 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/boo
       jumpToPage={Number.isFinite(requestedPage) ? position.pageNo : null}
       highlight={highlight}
       jumpToMatch={Number.isInteger(requestedMatch) && requestedMatch >= 0 ? requestedMatch : null}
+      cameFromSearch={cameFromSearch}
     />
   );
 }

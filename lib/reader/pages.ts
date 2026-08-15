@@ -25,28 +25,36 @@ export async function fetchPages(bookId: number, from: number, to: number): Prom
   return (data as BookPage[] | null) ?? [];
 }
 
+/** One page of the book that carries the phrase, and how often. */
+export type MatchPage = { page_no: number; hits: number };
+
+/** The cap the navigator reports as "more than this". */
+export const MATCH_PAGE_LIMIT = 500;
+
 /**
- * Find pages of THIS book containing the term. Scoped by book_id first, so it
- * stays cheap even without a dedicated index on raw content.
+ * Every page of THIS book carrying the phrase, in order, with the number of
+ * occurrences on each — enough to build a whole-book match list and a "12/47"
+ * counter without downloading the book.
+ *
+ * Uses the FTS index through book_match_pages (migration 0017) rather than an
+ * ilike scan, so it costs the same whatever the library grows to, and matches
+ * diacritic-insensitively the way the rest of search does.
  */
-export async function searchInBook(
+export async function fetchBookMatchPages(
   bookId: number,
   query: string,
-  limit = 100,
-): Promise<BookPage[]> {
+): Promise<{ pages: MatchPage[]; capped: boolean }> {
   const term = query.trim();
-  if (!term) return [];
+  if (!term) return { pages: [], capped: false };
   const supabase = createSupabaseBrowserClient();
-  const escaped = term.replace(/[%_\\]/g, (char) => `\\${char}`);
-  const { data, error } = await supabase
-    .from("book_pages")
-    .select("page_no, content")
-    .eq("book_id", bookId)
-    .ilike("content", `%${escaped}%`)
-    .order("page_no", { ascending: true })
-    .limit(limit);
+  const { data, error } = await supabase.rpc("book_match_pages", {
+    book_id: bookId,
+    q: term,
+    lim: MATCH_PAGE_LIMIT,
+  });
   if (error) throw new Error(error.message);
-  return (data as BookPage[] | null) ?? [];
+  const pages = ((data as MatchPage[] | null) ?? []).filter((page) => page.hits > 0);
+  return { pages, capped: pages.length >= MATCH_PAGE_LIMIT };
 }
 
 /** Debounced by the caller. Anonymous readers never reach this. */

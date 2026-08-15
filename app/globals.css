@@ -419,6 +419,31 @@
   }
 }
 
+/* ── Jumped-to search match ────────────────────────────────────────────────
+   Ported from the desktop's flashMatch: after scrolling an occurrence into
+   the middle of the screen, it pulses once so the eye finds it immediately.
+   Without this the reader lands on a page of uniform text and has to hunt. */
+@layer components {
+  .match-active {
+    background: var(--am);
+    color: var(--at);
+    font-weight: 600;
+    border-radius: 3px;
+  }
+  .match-flash {
+    animation: match-flash 1.1s ease-out 1;
+  }
+  @keyframes match-flash {
+    0% { box-shadow: 0 0 0 0 var(--ab2); }
+    35% { box-shadow: 0 0 0 6px var(--ab2); }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  /* Someone who prefers less motion still gets the colour change. */
+  @media (prefers-reduced-motion: reduce) {
+    .match-flash { animation: none; }
+  }
+}
+
 /* ── Quran (mushaf) — ported from desktop src/quran.css onto the same tokens.
      Type sizes come from the reader's font-size control via inline styles, so
      everything here is structure and colour only. */

@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
 import { MarkdownContent } from "@/components/reader/markdown-content";
-import { findMatches, toSegments } from "@/lib/reader/highlight";
+import { toSegments } from "@/lib/reader/highlight";
 import type { ContentFormat } from "@/lib/books/types";
 import {
   addBookmark,
@@ -15,10 +16,11 @@ import {
   fetchAnnotations,
   fetchPages,
   saveProgress,
-  searchInBook,
+  fetchBookMatchPages,
   touchRecentRead,
   type Annotation,
   type BookPage,
+  type MatchPage,
 } from "@/lib/reader/pages";
 import {
   initialPageWindow,
@@ -51,6 +53,7 @@ export function Reader({
   jumpToPage,
   highlight,
   jumpToMatch,
+  cameFromSearch,
 }: {
   bookId: number;
   title: string;
@@ -63,7 +66,9 @@ export function Reader({
   jumpToPage: number | null;
   highlight: string;
   jumpToMatch: number | null;
+  cameFromSearch: boolean;
 }) {
+  const router = useRouter();
   const [pages, setPages] = useState<BookPage[]>(initialPages);
   const settings = useSyncExternalStore(
     subscribeSettings,
@@ -77,7 +82,9 @@ export function Reader({
   const [notes, setNotes] = useState<Annotation[]>([]);
   const [findOpen, setFindOpen] = useState(false);
   const [findTerm, setFindTerm] = useState(highlight);
-  const [findHits, setFindHits] = useState<BookPage[]>([]);
+  const [matchPages, setMatchPages] = useState<MatchPage[]>([]);
+  const [matchesCapped, setMatchesCapped] = useState(false);
+  const [findRan, setFindRan] = useState(false);
   const [findIndex, setFindIndex] = useState(0);
   const [activeTerm, setActiveTerm] = useState(highlight);
   const [error, setError] = useState<string | null>(null);
@@ -257,21 +264,21 @@ export function Reader({
   useEffect(() => {
     if (matchesLoaded.current || !highlight.trim()) return;
     matchesLoaded.current = true;
-    void searchInBook(bookId, highlight)
-      .then((hits) => {
-        setFindHits(hits);
-        // Arriving on a specific occurrence (?m= from the search page's
-        // expanded list): select it so ↑ ↓ continue from there and the word
-        // itself is marked, not just its page.
+    void fetchBookMatchPages(bookId, highlight)
+      .then(({ pages: found, capped }) => {
+        setMatchPages(found);
+        setMatchesCapped(capped);
+        setFindRan(true);
+        // Arriving on a specific occurrence (?m= from a search result): select
+        // it so the counter reads true and the stepping continues from there.
         if (jumpToMatch === null || jumpToPage === null) return;
         let position = 0;
-        for (const page of hits) {
-          const count = findMatches(page.content, highlight).length;
+        for (const page of found) {
           if (page.page_no === jumpToPage) {
-            setFindIndex(position + Math.min(jumpToMatch, Math.max(0, count - 1)));
+            setFindIndex(position + Math.min(jumpToMatch, Math.max(0, page.hits - 1)));
             return;
           }
-          position += count;
+          position += page.hits;
         }
       })
       .catch(() => undefined);
@@ -307,13 +314,19 @@ export function Reader({
    * all but the first. Positions come from findMatches, so a term still lines
    * up with text carrying Arabic diacritics.
    */
-  const occurrences = useMemo(() => {
-    const term = activeTerm.trim();
-    if (!term) return [] as { pageNo: number; index: number }[];
-    return findHits.flatMap((page) =>
-      findMatches(page.content, term).map((_, index) => ({ pageNo: page.page_no, index })),
-    );
-  }, [findHits, activeTerm]);
+  /**
+   * Every occurrence in the WHOLE book, flattened — not only the loaded pages.
+   * book_match_pages returns how many times the phrase occurs on each page, so
+   * the counter can say "12/47" without the reader having downloaded page 47.
+   */
+  const occurrences = useMemo(
+    () =>
+      matchPages.flatMap((page) =>
+        Array.from({ length: page.hits }, (_, index) => ({ pageNo: page.page_no, index })),
+      ),
+    [matchPages],
+  );
+
 
   /** Bring one occurrence into view, loading its page first when needed. */
   const goToOccurrence = useCallback(
@@ -333,36 +346,55 @@ export function Reader({
       // own find jumps rather than animates — over hundreds of pages a smooth
       // scroll would be a long slide past text nobody asked to read.
       // A Markdown book renders without marks; the page itself is the target.
-      if (node) node.scrollIntoView({ behavior: "auto", block: "center" });
-      else await goToPage(target.pageNo);
+      if (!node) {
+        await goToPage(target.pageNo);
+        return;
+      }
+      // block:"center" puts it in the middle of the screen, which is also what
+      // keeps it clear of the sticky toolbar on a 375px phone.
+      node.scrollIntoView({ behavior: "auto", block: "center" });
+      // Pulse once, like the desktop's flashMatch — landing on a wall of text
+      // with no cue means hunting for the word all over again.
+      node.classList.remove("match-flash");
+      void node.offsetWidth;
+      node.classList.add("match-flash");
     },
     [goToPage, occurrences],
   );
 
-  const collectHits = useCallback(
-    async (term: string) => {
-      if (!term.trim()) {
-        setFindHits([]);
-        return [] as BookPage[];
-      }
-      try {
-        const hits = await searchInBook(bookId, term);
-        setFindHits(hits);
-        return hits;
-      } catch {
-        setError("كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.");
-        return [] as BookPage[];
-      }
-    },
-    [bookId],
-  );
+  /**
+   * Landing from a search result: once the match list is in, put the exact
+   * occurrence in the middle of the screen and flash it. The ?page= restore
+   * above only gets the page; this gets the word.
+   */
+  const arrivalScrolled = useRef(false);
+  useEffect(() => {
+    if (arrivalScrolled.current || jumpToMatch === null || occurrences.length === 0) return;
+    arrivalScrolled.current = true;
+    const frame = requestAnimationFrame(() => void goToOccurrence(findIndex));
+    return () => cancelAnimationFrame(frame);
+    // goToOccurrence is intentionally read once, at the moment the list lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpToMatch, occurrences.length]);
 
   async function runFind(term: string) {
     setFindTerm(term);
     setActiveTerm(term);
     setFindIndex(0);
-    const hits = await collectHits(term);
-    if (hits[0]) await goToPage(hits[0].page_no);
+    setFindRan(true);
+    if (!term.trim()) {
+      setMatchPages([]);
+      setMatchesCapped(false);
+      return;
+    }
+    try {
+      const { pages: found, capped } = await fetchBookMatchPages(bookId, term);
+      setMatchPages(found);
+      setMatchesCapped(capped);
+      if (found[0]) await goToPage(found[0].page_no);
+    } catch {
+      setError("كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.");
+    }
   }
 
   async function stepFind(delta: 1 | -1) {
@@ -414,9 +446,26 @@ export function Reader({
         className="grain safe-top safe-x sticky top-0 z-30 border-b border-bd bg-bg2/95 backdrop-blur print:hidden"
       >
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-1 px-2 py-2 sm:px-4">
-          <Link href={`/books/${bookId}`} className="ibtn" aria-label="كىتاب بېتىگە قايتىش" data-testid="reader-back">
-            <Icon name="undo" className="ic-lg" />
-          </Link>
+          {/* Someone who came from a search wants the results back, not this
+              book's cover page — they are working through the list. Going back
+              through history restores the scroll position and the already
+              fetched results for free, and behaves the same as the phone's own
+              back button, so there is one behaviour rather than two. */}
+          {cameFromSearch ? (
+            <button
+              type="button"
+              className="ibtn"
+              aria-label="ئىزدەش نەتىجىسىگە قايتىش"
+              data-testid="reader-back"
+              onClick={() => router.back()}
+            >
+              <Icon name="undo" className="ic-lg" />
+            </button>
+          ) : (
+            <Link href={`/books/${bookId}`} className="ibtn" aria-label="كىتاب بېتىگە قايتىش" data-testid="reader-back">
+              <Icon name="undo" className="ic-lg" />
+            </Link>
+          )}
           <h1 className="min-w-0 flex-1 truncate text-[14px] font-bold">{title}</h1>
 
           <button
@@ -470,7 +519,16 @@ export function Reader({
                 dir="ltr"
               >
                 {findIndex + 1}/{occurrences.length}
+                {matchesCapped ? "+" : ""}
               </span>
+            </span>
+          )}
+
+          {/* Searched, and this book does not carry it — say so rather than
+              leaving the toolbar looking the same as before the search. */}
+          {findRan && activeTerm.trim() !== "" && occurrences.length === 0 && (
+            <span className="whitespace-nowrap px-1 text-[12.5px] text-ink3" data-testid="match-none">
+              تېپىلمىدى
             </span>
           )}
 
@@ -509,6 +567,9 @@ export function Reader({
 
         {findOpen && (
           <div className="border-t border-bd px-2 pb-2 pt-2 sm:px-4">
+            {/* Just the query. Stepping and counting belong to the one
+                navigator in the toolbar above — a second set of controls here
+                would drift out of step with it. */}
             <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-2">
               <input
                 className="field min-w-40 flex-1"
@@ -523,34 +584,12 @@ export function Reader({
               <button type="button" className="hbtn" data-testid="find-run" onClick={() => void runFind(findTerm)}>
                 ئىزدەش
               </button>
-              <button type="button" className="ibtn" aria-label="ئالدىنقى" onClick={() => void stepFind(-1)} disabled={findHits.length === 0}>
-                <Icon name="undo" />
-              </button>
-              <button type="button" className="ibtn" aria-label="كېيىنكى" onClick={() => void stepFind(1)} disabled={findHits.length === 0}>
-                <Icon name="redo" />
-              </button>
-              <span className="text-[12.5px] text-ink3" data-testid="find-count">
-                {findHits.length > 0 ? `${findIndex + 1} / ${findHits.length} بەت` : "نەتىجە يوق"}
-              </span>
+              {findRan && occurrences.length === 0 && (
+                <span className="text-[12.5px] text-ink3" data-testid="find-count">
+                  تېپىلمىدى
+                </span>
+              )}
             </div>
-            {findHits.length > 0 && (
-              <ul className="mx-auto mt-2 flex w-full max-w-4xl flex-wrap gap-1.5">
-                {findHits.slice(0, 20).map((hit, index) => (
-                  <li key={hit.page_no}>
-                    <button
-                      type="button"
-                      className={index === findIndex ? "hbtn on" : "hbtn"}
-                      onClick={() => {
-                        setFindIndex(index);
-                        void goToPage(hit.page_no);
-                      }}
-                    >
-                      {hit.page_no}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
         )}
       </header>
@@ -616,7 +655,7 @@ export function Reader({
                             data-match={matchNo}
                             className={
                               isActive
-                                ? "rounded bg-am px-0.5 font-semibold text-at"
+                                ? "match-active px-0.5"
                                 : "rounded bg-ab2 px-0.5 text-ink"
                             }
                           >

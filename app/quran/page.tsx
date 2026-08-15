@@ -107,7 +107,10 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
                         </span>
                       </span>
                       {/* The full Uthmani verse, tashkil and all. */}
-                      <span className="quran-face mt-1.5 block text-[21px] leading-[2.1] text-ink">
+                      <span
+                        className="quran-face mt-1.5 block text-[21px] leading-[2.1] text-ink"
+                        data-testid="quran-hit-arabic"
+                      >
                         <AyaText text={hit.text_ar} terms={terms} />
                       </span>
                       {hit.text_ug && (

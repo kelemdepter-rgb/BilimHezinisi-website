@@ -282,17 +282,27 @@ test.describe("quran search", () => {
 
       // Results must show the Uthmani verse as it is written, vowel marks and
       // all — the highlight is applied to the original text, not to the
-      // stripped form the index matched on. Asserted by counting the combining
-      // marks rather than against a re-typed verse, which would only test
-      // whether two encodings of the same-looking word happen to agree.
-      const marked = hit.locator("mark").first();
-      await expect(marked, "the match must be highlighted").toBeVisible();
-      const markedText = await marked.innerText();
-      const withoutTashkil = markedText.replace(/[ً-ٰٟۖ-ۭـ]/g, "");
+      // stripped form the index matched on. Counted rather than compared with
+      // a re-typed verse, which would only test whether two encodings of the
+      // same-looking word happen to agree.
+      const tashkil = (value: string) =>
+        value.length - value.replace(/[ً-ٰٟۖ-ۭـ]/gu, "").length;
+
+      // The verse itself, not the sura name beside it — that carries no marks.
+      const arabic = hit.getByTestId("quran-hit-arabic");
       expect(
-        markedText.length - withoutTashkil.length,
+        tashkil(await arabic.innerText()),
         `«${query}» must keep the verse's tashkil`,
       ).toBeGreaterThan(5);
+
+      // Each word is highlighted on its own — there are no phrase operators —
+      // and the highlight sits on vocalised text, not on a stripped copy.
+      const marked = hit.locator("mark").first();
+      await expect(marked, "the match must be highlighted").toBeVisible();
+      expect(
+        tashkil(await marked.innerText()),
+        "the highlight itself must cover vocalised text",
+      ).toBeGreaterThan(0);
     }
   });
 

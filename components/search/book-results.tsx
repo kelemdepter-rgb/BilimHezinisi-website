@@ -16,6 +16,28 @@ export type BookGroup = {
 
 /** Shown inline before the reader has to ask for the rest. */
 const PREVIEW_HITS = 3;
+/**
+ * How many places the expander lists. A word can sit on hundreds of pages, and
+ * unrolling all of them buries every other book under one — the rest belong to
+ * the reader's own ↑ ↓ navigator, which walks the whole book anyway.
+ */
+const EXPANDED_HITS = 10;
+
+/**
+ * The page number, labelled and in a column of its own width. Bare digits of
+ * different lengths beside multi-line snippets read as stray numbers rather
+ * than as pages.
+ */
+function PageChip({ pageNo }: { pageNo: number }) {
+  return (
+    <span
+      className="mt-0.5 w-14 shrink-0 rounded bg-bg2 px-1.5 py-0.5 text-center text-[11.5px] tabular-nums text-ink2"
+      data-testid="page-chip"
+    >
+      {pageNo}-بەت
+    </span>
+  );
+}
 
 /**
  * Search results grouped by book, with the desktop's "+" expander: one tap
@@ -66,8 +88,14 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
     });
   }
 
-  const pageHits = group.hits.filter((hit) => hit.page_no > 0);
+  // Ordered by page, not by rank: someone scanning one book's hits reads them
+  // as a walk through the book, and 184 · 138 · 575 looks like a fault.
+  const pageHits = group.hits
+    .filter((hit) => hit.page_no > 0)
+    .sort((a, b) => a.page_no - b.page_no);
   const preview = pageHits.slice(0, PREVIEW_HITS);
+  const shown = expanded?.slice(0, EXPANDED_HITS) ?? [];
+  const remaining = (expanded?.length ?? 0) - shown.length;
 
   return (
     <>
@@ -90,9 +118,7 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
               data-testid="search-result"
               className="flex gap-2 rounded-[var(--radius)] px-2 py-1.5 hover:bg-bg2"
             >
-              <span className="shrink-0 pt-0.5 text-[12px] text-am tabular-nums" dir="ltr">
-                {hit.page_no}
-              </span>
+              <PageChip pageNo={hit.page_no} />
               <span className="min-w-0 text-[13.5px] leading-7 text-ink2">
                 <Snippet snippet={hit.snippet} />
               </span>
@@ -134,20 +160,18 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
       {expanded && expanded.length > 0 && (
         <>
           <p className="mt-2 text-[12px] text-ink3" data-testid="expanded-count">
-            {expanded.length}
+            بۇ كىتابتا {expanded.length}
             {truncated ? "+" : ""} ئورۇندا بار
           </p>
           <ol className="mt-1 space-y-1" data-testid="expanded-matches">
-            {expanded.map((item, index) => (
+            {shown.map((item) => (
               <li key={`${item.pageNo}-${item.matchIndex}`}>
                 <Link
                   href={readerHref(group.bookId, item.pageNo, term, item.matchIndex)}
                   data-testid="expanded-match"
                   className="flex gap-2 rounded-[var(--radius)] px-2 py-1.5 hover:bg-bg2"
                 >
-                  <span className="shrink-0 pt-0.5 text-[12px] text-ink3 tabular-nums" dir="ltr">
-                    {index + 1}.
-                  </span>
+                  <PageChip pageNo={item.pageNo} />
                   <span className="min-w-0 text-[13px] leading-7 text-ink2">
                     {item.before}
                     <mark className="rounded bg-ab2 px-0.5 font-semibold text-ink">
@@ -155,13 +179,19 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
                     </mark>
                     {item.after}
                   </span>
-                  <span className="ms-auto shrink-0 pt-0.5 text-[11.5px] text-am tabular-nums" dir="ltr">
-                    {item.pageNo}
-                  </span>
                 </Link>
               </li>
             ))}
           </ol>
+
+          {/* The rest are not listed on purpose. Opening any of these and
+              using the ↑ ↓ arrows walks every occurrence in the book. */}
+          {remaining > 0 && (
+            <p className="mt-1.5 px-2 text-[12px] leading-6 text-ink3" data-testid="expanded-more">
+              يەنە {remaining} ئورۇن بار — بىرىنى ئېچىپ، يۇقىرىدىكى{" "}
+              <span dir="ltr">↑ ↓</span> بىلەن ھەممىسىنى كۆرەلەيسىز.
+            </p>
+          )}
         </>
       )}
     </>

@@ -83,7 +83,16 @@ user_id + book_id + position) ·
   `ug_normalize(text)` (hamza unification, ya/alif maqsura, ta marbuta, diacritic
   stripping) and apply it BOTH at index time (`content_norm`) and query time.
 - RPC `search_books(query, category, limit, offset)` returning ranked results with
-  highlighted snippets; support phrase ("...") and boolean operators like desktop.
+  highlighted snippets, plus `page_no` and `match_pos` so the reader can jump to the
+  exact occurrence.
+- **Search operators are DELIBERATELY REMOVED — do not reintroduce them.** No quoted
+  phrases, no `OR`, no `-exclusion`. Whatever the user types is searched literally as
+  one exact phrase (after `ug_normalize`), the way the desktop app's `indexOf` search
+  behaves. A result is only shown when that exact phrase occurs; the whole phrase is
+  highlighted, never a fragment of it.
+- Reader match navigation: «ئالدىنقى» / «كېيىنكى» with an «n/total» counter walking
+  every occurrence in the whole book (ported from desktop `updateMatchNav` /
+  `jumpToMatch`); returning from the reader goes back to the search results.
 - Quran search: separate RPC over `quran_ayas` (Arabic-normalized + Uyghur columns).
 
 ## Upload Pipeline (admin/uploader only)

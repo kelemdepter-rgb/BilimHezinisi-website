@@ -75,8 +75,12 @@ npx playwright test  # mobile (375x667, 390x844) + desktop (1280x800) projects
   no paid plan, no new vendor. Measure with `node scripts/db-usage.mjs` before
   optimising anything.
 - Uyghur search: normalize with `ug_normalize()` (ported from desktop
-  `normalizeArabicQuery`) at BOTH index and query time; FTS config `simple` +
-  `pg_trgm` for substrings.
+  `normalizeArabicQuery`) at BOTH index and query time; FTS config `simple`.
+  **Search operators were deliberately removed — never reintroduce quoted phrases,
+  `OR` or `-exclusion`.** The typed text is matched as ONE exact phrase (FTS index as
+  pre-filter, then exact verification), the whole phrase is highlighted, and results
+  carry `page_no` + `match_pos` so the reader jumps to the exact word. Do NOT re-add
+  the `pg_trgm` index on `book_pages` — it was dropped to fit the free tier.
 - Fonts are self-hosted in `public/fonts/` (UKIJ Ekran, Traditional Arabic, Bahij
   Nazanin, Uthmanic Hafs for Quran); `font-display: swap`; no runtime third-party CDNs.
 - Secrets: only `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` may reach

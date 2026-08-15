@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import {
   SEED_BOOK_TITLE,
   SEED_NEEDLE,
+  SEED_NEEDLE_PHRASE,
   SEED_NEEDLE_PAGE,
   hasStaffTestEnv,
   loadEnvLocal,
@@ -169,7 +170,7 @@ test.describe("reader", () => {
     // Stepping forward moves the position and marks a different occurrence.
     await page.getByTestId("match-next").click();
     await expect(counter).toHaveText(`2/${total}`);
-    const active = page.locator("mark.bg-am");
+    const active = page.locator(".match-active");
     await expect(active).toHaveCount(1);
     await expect(active).toBeInViewport();
 
@@ -185,7 +186,9 @@ test.describe("reader", () => {
     await page.getByTestId("find-toggle").click();
     await page.getByTestId("find-input").fill(SEED_NEEDLE);
     await page.getByTestId("find-run").click();
-    await expect(page.getByTestId("find-count")).toContainText("1 /", { timeout: 20_000 });
+    // The find box feeds the ONE navigator in the toolbar; it no longer keeps
+    // a second counter of its own beside the input.
+    await expect(page.getByTestId("match-count")).toHaveText(/^1\/\d+$/, { timeout: 20_000 });
     await expect(page.locator(`[data-page-no="${SEED_NEEDLE_PAGE}"] mark`).first()).toBeVisible();
   });
 });
@@ -242,6 +245,63 @@ test.describe("global search", () => {
     const prefix = SEED_NEEDLE.slice(0, 5);
     await page.goto(`/search?q=${encodeURIComponent(prefix)}`);
     await expect(page.getByTestId("search-result").first()).toBeVisible({ timeout: 20_000 });
+  });
+
+  test("several words mean a phrase — all of it highlighted, or no result", async ({ page }) => {
+    // The bug this covers: «قىيامەت كۈنى پىلسىرات» reported a hit on a page that
+    // held the three words scattered, highlighting only two of them. A partial
+    // highlight presented as a match reads as "you mistyped".
+    const words = SEED_NEEDLE_PHRASE.split(" ");
+
+    await page.goto(`/search?q=${encodeURIComponent(SEED_NEEDLE_PHRASE)}`);
+    const hit = page.getByTestId("search-result").first();
+    await expect(hit).toBeVisible({ timeout: 20_000 });
+
+    // Every word of the phrase is marked, not just the first.
+    const marked = (await hit.locator("mark").allInnerTexts()).join(" ");
+    for (const word of words) {
+      expect(marked, `«${word}» must be highlighted too`).toContain(word);
+    }
+
+    // ...and a phrase that is NOT in the library says so instead of matching
+    // on its words alone.
+    const scattered = `${words[0]} قوندۇرۇلمىغانئالاھىدەسۆز`;
+    await page.goto(`/search?q=${encodeURIComponent(scattered)}`);
+    await expect(page.getByTestId("search-empty")).toBeVisible({ timeout: 20_000 });
+  });
+
+  test("clicking a result lands on the word, clear of the toolbar", async ({ page }) => {
+    await page.goto(`/search?q=${encodeURIComponent(SEED_NEEDLE)}`);
+    await page.getByTestId("search-result").first().click();
+
+    const active = page.locator(".match-active");
+    await expect(active).toHaveCount(1, { timeout: 20_000 });
+    await expect(active).toBeInViewport();
+
+    // Not hidden behind the sticky bar — the whole point of centring it.
+    const word = await active.boundingBox();
+    const bar = await page.getByTestId("reader-toolbar").boundingBox();
+    expect(word!.y, "the match must sit below the toolbar").toBeGreaterThan(bar!.y + bar!.height);
+  });
+
+  test("«قايتىش» returns to the results, not the book page", async ({ page }) => {
+    await page.goto(`/search?q=${encodeURIComponent(SEED_NEEDLE)}`);
+    await expect(page.getByTestId("search-result").first()).toBeVisible({ timeout: 20_000 });
+
+    // Scroll the results, so the restored position is observable.
+    await page.evaluate(() => window.scrollTo(0, 200));
+    await page.waitForTimeout(200);
+
+    await page.getByTestId("search-result").first().click();
+    await expect(page).toHaveURL(/\/books\/\d+\/read/);
+
+    await page.getByTestId("reader-back").click();
+    await expect(page, "back belongs to the search, not the book").toHaveURL(
+      new RegExp(`/search\\?q=${encodeURIComponent(SEED_NEEDLE)}`),
+    );
+    await expect(page.getByTestId("search-result").first()).toBeVisible();
+    // Restored from history rather than re-queried.
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   });
 
   test("groups a book's hits and expands to every place in it", async ({ page }) => {

@@ -43,6 +43,8 @@ export const SEED_NEEDLE = "ئالتۇنكۆۋرۈك";
 export const SEED_NEEDLE_PAGE = 3;
 /** A second page carrying the needle, so match stepping has to cross pages. */
 export const SEED_NEEDLE_LATER_PAGE = 7;
+/** A phrase the seeded book carries verbatim, for phrase-search tests. */
+export const SEED_NEEDLE_PHRASE = `بۇ بەتتە ${SEED_NEEDLE} دېگەن`;
 /** How many times the needle occurs in the seeded book, in total. */
 export const SEED_NEEDLE_COUNT = 3;
 export const SEED_PAGE_COUNT = 14;

@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
 import { MarkdownContent } from "@/components/reader/markdown-content";
 import { toSegments } from "@/lib/reader/highlight";
+import { flattenMatches, positionOf, stepPosition } from "@/lib/reader/matches";
 import type { ContentFormat } from "@/lib/books/types";
 import {
   addBookmark,
@@ -272,14 +273,7 @@ export function Reader({
         // Arriving on a specific occurrence (?m= from a search result): select
         // it so the counter reads true and the stepping continues from there.
         if (jumpToMatch === null || jumpToPage === null) return;
-        let position = 0;
-        for (const page of found) {
-          if (page.page_no === jumpToPage) {
-            setFindIndex(position + Math.min(jumpToMatch, Math.max(0, page.hits - 1)));
-            return;
-          }
-          position += page.hits;
-        }
+        setFindIndex(positionOf(found, jumpToPage, jumpToMatch));
       })
       .catch(() => undefined);
   }, [bookId, highlight, jumpToMatch, jumpToPage]);
@@ -319,13 +313,7 @@ export function Reader({
    * book_match_pages returns how many times the phrase occurs on each page, so
    * the counter can say "12/47" without the reader having downloaded page 47.
    */
-  const occurrences = useMemo(
-    () =>
-      matchPages.flatMap((page) =>
-        Array.from({ length: page.hits }, (_, index) => ({ pageNo: page.page_no, index })),
-      ),
-    [matchPages],
-  );
+  const occurrences = useMemo(() => flattenMatches(matchPages), [matchPages]);
 
 
   /** Bring one occurrence into view, loading its page first when needed. */
@@ -371,8 +359,18 @@ export function Reader({
   useEffect(() => {
     if (arrivalScrolled.current || jumpToMatch === null || occurrences.length === 0) return;
     arrivalScrolled.current = true;
-    const frame = requestAnimationFrame(() => void goToOccurrence(findIndex));
-    return () => cancelAnimationFrame(frame);
+
+    // Asserted more than once on purpose. Following a result is a client-side
+    // navigation, and the router restores scroll to the top after the first
+    // paint — a single attempt gets overwritten and the reader lands at the
+    // start of the window instead of on the word.
+    const jump = () => void goToOccurrence(findIndex);
+    const frame = requestAnimationFrame(jump);
+    const settle = setTimeout(jump, 350);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(settle);
+    };
     // goToOccurrence is intentionally read once, at the moment the list lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jumpToMatch, occurrences.length]);
@@ -399,7 +397,7 @@ export function Reader({
 
   async function stepFind(delta: 1 | -1) {
     if (occurrences.length === 0) return;
-    await goToOccurrence((findIndex + delta + occurrences.length) % occurrences.length);
+    await goToOccurrence(stepPosition(findIndex, delta, occurrences.length));
   }
 
   async function createBookmark() {

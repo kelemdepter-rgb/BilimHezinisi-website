@@ -56,5 +56,6 @@ next-env.d.ts
 # library backups (large, and yours alone)
 /backups/
 
-# search parity snapshots (local measurement artefacts)
+# search parity and timing snapshots (local measurement artefacts)
 .search-parity-*.json
+.search-timing-*.json

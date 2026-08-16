@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
 import { requireStaff } from "@/lib/admin/guards";
 import { MSG } from "@/lib/admin/messages";
 import { sanitizeHtml } from "@/lib/sanitize";
+import { reportServerError } from "@/lib/server-log";
 
-/** jsdom and Readability are Node-only. */
+/** Readability needs a DOM. */
 export const runtime = "nodejs";
 
 /** Only small article pages — this route must never become a file pipeline. */
@@ -80,6 +80,15 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Imported HERE, not at the top of the file. A top-level `import { JSDOM }`
+    // is what took this route down in production: jsdom fails to load in
+    // Vercel's function runtime, and a module that cannot be evaluated answers
+    // 500 to everything — this route was returning 500 to unauthenticated
+    // callers that should have been refused with 403, which is how the same
+    // fault in the notebook was finally traced. Readability genuinely needs a
+    // DOM, so jsdom stays; loading it late means the failure is confined to the
+    // one feature that needs it, and is reported rather than fatal.
+    const { JSDOM } = await import("jsdom");
     const dom = new JSDOM(html, { url: parsed.toString() });
     const article = new Readability(dom.window.document).parse();
     const rawContent = article?.content ?? "";
@@ -100,9 +109,10 @@ export async function POST(request: Request) {
       title: (article?.title ?? "").trim() || parsed.host,
       author: (article?.byline ?? "").trim(),
     });
-  } catch {
+  } catch (error) {
+    reportServerError("import/url:readability", error);
     return NextResponse.json(
-      { ok: false, error: "تور بەتنى تەھلىل قىلغىلى بولمىدى." },
+      { ok: false, error: "تور بەتنى تەھلىل قىلغىلى بولمىدى. ھۆججەت قىلىپ يوللاڭ." },
       { status: 422 },
     );
   }

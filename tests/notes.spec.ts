@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { createClient } from "@supabase/supabase-js";
 import { READER_STATE_PATH, hasStaffTestEnv, loadEnvLocal } from "./env";
 
 loadEnvLocal();
@@ -142,6 +143,86 @@ test.describe("notebook", () => {
     });
 
     await deleteNote(page, path);
+  });
+});
+
+/**
+ * The bug this exists for: «يېڭى خاتىرە» answered 500 in production while every
+ * local test passed. The tests were wrong, not lucky — they all ran against an
+ * account the suite had already used, and they all ran against `next dev`.
+ *
+ * So this one signs in as an account created seconds ago that has never held a
+ * note, and walks the whole first-run path: press the button, land in the
+ * editor, type, reload, and find the writing still there.
+ */
+test.describe("a brand-new account's first note", () => {
+  // Its own session, not the shared signed-in state every other spec reuses.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  const admin = () =>
+    createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+      auth: { autoRefreshToken: false, persistSession: false } },
+    );
+
+  test("creates, opens and keeps a note", async ({ page }, testInfo) => {
+    const email = `bh-e2e-fresh-${testInfo.project.name}-${Date.now()}@mailinator.com`;
+    const password = "bh-e2e-fresh-4471";
+    const supabase = admin();
+
+    const { data: created, error } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+    if (error || !created.user) throw new Error(`could not create a fresh user: ${error?.message}`);
+
+    try {
+      await page.goto("/login");
+      await page.locator('input[name="email"]').fill(email);
+      await page.locator('input[name="password"]').fill(password);
+      await page.getByRole("button", { name: "كىرىش" }).click();
+      await expect(page.getByRole("button", { name: /چىقىش/ })).toBeVisible({ timeout: 20_000 });
+
+      // An empty notebook, which is the state the bug happened in.
+      await page.goto("/notes");
+      await expect(page.getByTestId("notes-empty")).toBeVisible({ timeout: 20_000 });
+
+      await page.getByTestId("new-note").click();
+
+      // No server error screen — the exact failure being guarded against.
+      await expect(page.locator("body")).not.toContainText("A server error occurred");
+      await expect(page.getByTestId("notes-error-retry")).toHaveCount(0);
+
+      await expect(page).toHaveURL(/\/notes\/\d+$/, { timeout: 20_000 });
+      const editor = page.getByTestId("note-body");
+      await expect(editor).toBeVisible();
+
+      // And it saves, which needs the sanitizer the same module used to break on.
+      await editor.click();
+      await page.keyboard.type("تۇنجى خاتىرەم.");
+      await expect(page.getByTestId("save-state")).toHaveText("ساقلاندى", { timeout: 20_000 });
+
+      const path = new URL(page.url()).pathname;
+      await page.reload();
+      await expect(page.getByTestId("note-body")).toContainText("تۇنجى خاتىرەم.");
+
+      // It is really in the database, not just in the tab.
+      const { count } = await supabase
+        .from("note_documents")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", created.user.id);
+      expect(count).toBe(1);
+
+      // Nobody else can open it, however new it is.
+      const other = await page.context().browser()!.newContext({ storageState: READER_STATE_PATH });
+      const otherPage = await other.newPage();
+      const response = await otherPage.goto(path);
+      expect(response?.status()).toBe(404);
+      await expect(otherPage.locator("body")).not.toContainText("تۇنجى خاتىرەم.");
+      await other.close();
+    } finally {
+      await supabase.auth.admin.deleteUser(created.user.id);
+    }
   });
 });
 

@@ -37,9 +37,14 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
    * toolbars, and stacking those under the site header would put two sticky
    * bars at top: 0 and cost scarce vertical space on a phone. The mushaf
    * (a single sura) reads exactly like a book, so it is bare too — /quran
-   * itself keeps the shell, being an index page.
+   * itself keeps the shell, being an index page. The note editor is the same
+   * case in reverse: it is a writing surface with its own top toolbar, which
+   * has to stay reachable while the on-screen keyboard is up.
    */
-  const bare = /^\/books\/[^/]+\/read$/.test(pathname) || /^\/quran\/[^/]+$/.test(pathname);
+  const bare =
+    /^\/books\/[^/]+\/read$/.test(pathname) ||
+    /^\/quran\/[^/]+$/.test(pathname) ||
+    /^\/notes\/[^/]+$/.test(pathname);
 
   // Lock body scroll only while the drawer is open (mobile rule: the page
   // must scroll normally again the moment it closes).
@@ -123,6 +128,20 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
             <ThemeToggle initial={theme} />
             {session ? (
               <>
+                {/* Personal writing: offered only to someone who has an
+                    account to keep it in. Below sm the header is already at
+                    its limit for 360 px, so the phone reaches it through the
+                    drawer instead. */}
+                <Link
+                  href="/notes"
+                  className="hbtn hidden sm:flex"
+                  data-testid="notes-link"
+                  title="خاتىرە دەپتىرىم"
+                  aria-label="خاتىرە دەپتىرىم"
+                >
+                  <Icon name="notebook-pen" />
+                  <span className="hidden sm:inline">خاتىرە</span>
+                </Link>
                 {(session.role === "admin" || session.role === "uploader") && (
                   <Link href="/admin" className="hbtn" title="باشقۇرۇش سۇپىسى" aria-label="باشقۇرۇش سۇپىسى">
                     <Icon name="settings" />
@@ -172,7 +191,7 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
           data-testid="sidebar-desktop"
           className="sticky top-16 hidden max-h-[calc(100dvh-4rem)] w-72 shrink-0 overflow-y-auto overscroll-contain border-e border-bd p-4 lg:block"
         >
-          <SidebarContent categories={categories} />
+          <SidebarContent categories={categories} session={session} />
         </aside>
         <main className="w-full min-w-0 flex-1">{children}</main>
       </div>
@@ -220,14 +239,20 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
           </button>
         </div>
         <div className="safe-bottom flex-1 overflow-y-auto overscroll-contain p-4">
-          <SidebarContent categories={categories} />
+          <SidebarContent categories={categories} session={session} />
         </div>
       </aside>
     </div>
   );
 }
 
-function SidebarContent({ categories }: { categories: Category[] }) {
+function SidebarContent({
+  categories,
+  session,
+}: {
+  categories: Category[];
+  session: SessionInfo | null;
+}) {
   const topLevel = categories.filter((category) => category.parent_id === null);
   const childrenOf = (parentId: number) =>
     categories.filter((category) => category.parent_id === parentId);
@@ -243,6 +268,16 @@ function SidebarContent({ categories }: { categories: Category[] }) {
           <Icon name="mosque" className="text-am" />
           قۇرئان كەرىم
         </Link>
+        {session && (
+          <Link
+            href="/notes"
+            data-testid="notes-sidebar-link"
+            className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+          >
+            <Icon name="notebook-pen" className="text-am" />
+            خاتىرە دەپتىرىم
+          </Link>
+        )}
       </nav>
 
       <nav aria-label="كىتاب تۈرلىرى">

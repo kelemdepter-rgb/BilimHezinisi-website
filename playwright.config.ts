@@ -98,6 +98,21 @@ export default defineConfig({
         },
       },
       {
+        // The notebook: signed-in by default, with the isolation test opening a
+        // second, different account itself.
+        name: `notes-${viewport.name}`,
+        testMatch: /notes.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,

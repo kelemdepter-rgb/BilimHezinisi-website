@@ -34,6 +34,15 @@ export const STAFF_STATE_PATH = "tests/.auth/staff.json";
 export const STAFF_EMAIL = "bh-e2e-uploader@mailinator.com";
 export const STAFF_PASSWORD = "bh-e2e-password-8842";
 
+/**
+ * A second, ordinary account. Notes are per-user, and the only honest way to
+ * test that is with two real people: one writes, the other must not be able to
+ * open it.
+ */
+export const READER_STATE_PATH = "tests/.auth/reader.json";
+export const READER_EMAIL = "bh-e2e-reader@mailinator.com";
+export const READER_PASSWORD = "bh-e2e-password-5517";
+
 /** Disposable published book used by the reader and search specs. */
 export const SEED_PATH = "tests/.auth/seed.json";
 export const SEED_BOOK_TITLE = "__e2e_kitab__ سىناق كىتابى";

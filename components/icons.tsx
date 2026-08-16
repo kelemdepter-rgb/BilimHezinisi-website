@@ -41,6 +41,11 @@ export type IconName =
   | "clock"
   | "layers"
   | "keyboard"
+  | "bold"
+  | "italic"
+  | "underline"
+  | "heading"
+  | "check"
   | "chevron-up"
   | "chevron-down"
   | "undo"
@@ -123,6 +128,11 @@ export function IconSprite() {
         <symbol id="i-redo" viewBox="0 0 24 24"><path d="M21 7v6h-6" /><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3L21 13" /></symbol>
         <symbol id="i-chevron-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6" /></symbol>
         <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol>
+        <symbol id="i-bold" viewBox="0 0 24 24"><path d="M6 4h8a4 4 0 0 1 0 8H6z" /><path d="M6 12h9a4 4 0 0 1 0 8H6z" /></symbol>
+        <symbol id="i-italic" viewBox="0 0 24 24"><path d="M19 4h-9" /><path d="M14 20H5" /><path d="m15 4-4 16" /></symbol>
+        <symbol id="i-underline" viewBox="0 0 24 24"><path d="M6 4v6a6 6 0 0 0 12 0V4" /><path d="M4 20h16" /></symbol>
+        <symbol id="i-heading" viewBox="0 0 24 24"><path d="M6 12h12" /><path d="M6 20V4" /><path d="M18 20V4" /></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
         <symbol id="i-scissors" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3" /><path d="M8.12 8.12 12 12" /><path d="M20 4 8.12 15.88" /><circle cx="6" cy="18" r="3" /><path d="M14.8 14.8 20 20" /></symbol>
         <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" /><path d="M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2" /></symbol>
         <symbol id="i-clipboard" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /></symbol>

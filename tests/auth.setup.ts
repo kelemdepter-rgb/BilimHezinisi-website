@@ -3,6 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
+  READER_EMAIL,
+  READER_PASSWORD,
+  READER_STATE_PATH,
   SEED_BOOK_HASH,
   SEED_BOOK_TITLE,
   SEED_NEEDLE,
@@ -119,4 +122,41 @@ setup("seed a published test book", async () => {
 
   mkdirSync(dirname(SEED_PATH), { recursive: true });
   writeFileSync(SEED_PATH, JSON.stringify({ bookId: book.id }), "utf8");
+});
+
+/**
+ * A second, ordinary reader account. The notebook is per-user, so proving that
+ * needs two real sessions — one writes a note, the other must be refused.
+ */
+setup("create and sign in a plain reader account", async ({ page }) => {
+  setup.skip(!hasStaffTestEnv(), "Supabase env not configured");
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  const { data: existing } = await admin.auth.admin.listUsers({ perPage: 200 });
+  for (const user of existing?.users ?? []) {
+    if (user.email === READER_EMAIL) await admin.auth.admin.deleteUser(user.id);
+  }
+
+  const { data: created, error } = await admin.auth.admin.createUser({
+    email: READER_EMAIL,
+    password: READER_PASSWORD,
+    email_confirm: true,
+  });
+  if (error || !created.user) throw new Error(`could not create reader user: ${error?.message}`);
+
+  await page.goto("/login");
+  await page.locator('input[name="email"]').fill(READER_EMAIL);
+  await page.locator('input[name="password"]').fill(READER_PASSWORD);
+  await page.getByRole("button", { name: "كىرىش" }).click();
+
+  // No admin link for this one — the sign-out control is what proves a session.
+  await expect(page.getByRole("button", { name: /چىقىش/ })).toBeVisible({ timeout: 20_000 });
+
+  mkdirSync(dirname(READER_STATE_PATH), { recursive: true });
+  await page.context().storageState({ path: READER_STATE_PATH });
 });

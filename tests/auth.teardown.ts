@@ -1,11 +1,17 @@
 import { test as teardown } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import { SEED_BOOK_HASH, STAFF_EMAIL, hasStaffTestEnv, loadEnvLocal } from "./env";
+import {
+  READER_EMAIL,
+  SEED_BOOK_HASH,
+  STAFF_EMAIL,
+  hasStaffTestEnv,
+  loadEnvLocal,
+} from "./env";
 
 loadEnvLocal();
 
-/** Remove the disposable account and book so test runs leave nothing behind. */
-teardown("remove the staff test account and seeded book", async () => {
+/** Remove the disposable accounts and book so test runs leave nothing behind. */
+teardown("remove the test accounts and seeded book", async () => {
   teardown.skip(!hasStaffTestEnv(), "Supabase env not configured");
 
   const admin = createClient(
@@ -19,6 +25,9 @@ teardown("remove the staff test account and seeded book", async () => {
 
   const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
   for (const user of data?.users ?? []) {
-    if (user.email === STAFF_EMAIL) await admin.auth.admin.deleteUser(user.id);
+    // Notes cascade with the profile, which cascades with the auth user.
+    if (user.email === STAFF_EMAIL || user.email === READER_EMAIL) {
+      await admin.auth.admin.deleteUser(user.id);
+    }
   }
 });

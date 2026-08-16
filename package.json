@@ -15,6 +15,7 @@
     "@mozilla/readability": "^0.6.0",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.0",
+    "docx": "^9.7.1",
     "dompurify": "^3.4.13",
     "jsdom": "^30.0.1",
     "mammoth": "^1.12.0",

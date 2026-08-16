@@ -34,6 +34,21 @@ const nextConfig: NextConfig = {
       ? [{ protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }]
       : [],
   },
+  async headers() {
+    return [
+      {
+        /**
+         * The spellcheck dictionary is a build artifact: it only changes when
+         * scripts/build-spelldict.mjs is re-run, and the worker caches it in
+         * Cache Storage under a versioned name anyway. Vercel's default for
+         * files in public/ is `max-age=0, must-revalidate`, which costs a
+         * round trip on every cold start for a file that never changes.
+         */
+        source: "/spellcheck/:file*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

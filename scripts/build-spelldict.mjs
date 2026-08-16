@@ -19,9 +19,12 @@
  *   ئائورتا          →  0ئائورتا
  *   ئائورتىنىڭ       →  5ىنىڭ
  *
- * That alone takes it to 2.7 MB, and Vercel's CDN serves it brotli-compressed
- * at roughly 420 KB — downloaded once per visitor, and only by visitors who
- * actually open the notebook and switch spellcheck on.
+ * That alone takes it to 2.7 MB. Vercel's CDN then compresses it on the fly —
+ * measured against the deployment, at brotli quality 3, which is NOT what
+ * `brotli -q 11` gives locally: 795,424 bytes served against 434,230 packed
+ * here. The number that matters to a phone is the served one. It is downloaded
+ * once per device (the worker keeps it in Cache Storage) and only by someone
+ * who opens the notebook and switches spellcheck on.
  *
  * The shared-prefix length is written as a single character offset from '0',
  * which caps it at 74; longer shared prefixes simply start over, costing a few
@@ -113,6 +116,11 @@ async function main() {
 
   const plain = Buffer.byteLength(words.join("\n"), "utf-8");
   const coded = Buffer.byteLength(encoded, "utf-8");
+  // Quality 3 is what Vercel actually applies; quality 11 is shown only so the
+  // gap is visible rather than surprising.
+  const served = brotliCompressSync(Buffer.from(encoded, "utf-8"), {
+    params: { [constants.BROTLI_PARAM_QUALITY]: 3 },
+  }).length;
   const brotli = brotliCompressSync(Buffer.from(encoded, "utf-8"), {
     params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
   }).length;
@@ -124,7 +132,8 @@ async function main() {
   console.log(`corrections:      ${Object.keys(corrections).length.toLocaleString("en-US")}`);
   console.log(`plain text:       ${mb(plain)}`);
   console.log(`front-coded:      ${mb(coded)}`);
-  console.log(`  over the wire:  ${kb(brotli)} brotli · ${kb(gzip)} gzip`);
+  console.log(`  over the wire:  ${kb(served)} as Vercel serves it (brotli q3)`);
+  console.log(`  for reference:  ${kb(brotli)} brotli q11 · ${kb(gzip)} gzip -9`);
   console.log(`\nWritten to public/spellcheck/. Round trip verified on all ${words.length} words.`);
 }
 

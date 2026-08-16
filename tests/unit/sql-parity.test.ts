@@ -89,10 +89,13 @@ beforeAll(async () => {
   await db.exec(functionSql("0002_fix_ug_normalize.sql", "ug_normalize"));
   await db.exec(functionSql("0017_phrase_search.sql", "ug_tsquery"));
 
-  // And the migration under test, in full — including its grants, its
-  // `security definer` functions and their empty search_path, so an
-  // unqualified reference would fail here rather than in production.
+  // And the migrations under test, in full and in order — including their
+  // grants, their `security definer` functions and their empty search_path, so
+  // an unqualified reference would fail here rather than in production. 0020
+  // rewrites what 0019 defines, so applying both is also what proves the pair
+  // still agrees with the client after the speed work.
   await db.exec(readFileSync(join(MIGRATIONS, "0019_one_matcher.sql"), "utf8"));
+  await db.exec(readFileSync(join(MIGRATIONS, "0020_faster_one_matcher.sql"), "utf8"));
 
   await db.exec(`
     insert into public.books (id, title, author, status)

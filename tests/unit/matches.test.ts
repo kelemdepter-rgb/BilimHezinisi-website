@@ -5,7 +5,7 @@ import {
   positionOf,
   stepPosition,
 } from "@/lib/reader/matches";
-import { findMatches } from "@/lib/reader/highlight";
+import { findOccurrences } from "@/lib/search/occurrences";
 
 describe("flattenMatches", () => {
   it("expands per-page counts into one ordered list for the whole book", () => {
@@ -84,7 +84,7 @@ describe("occurrence numbering agrees with what the reader renders", () => {
    */
   it("counts repeated identical words the same way the page marks them", () => {
     const page = "ناماز ۋە ناماز، يەنە ناماز.";
-    const rendered = findMatches(page, "ناماز");
+    const rendered = findOccurrences(page, "ناماز");
     expect(rendered).toHaveLength(3);
 
     const pages = [{ page_no: 5, hits: rendered.length }];
@@ -95,7 +95,7 @@ describe("occurrence numbering agrees with what the reader renders", () => {
 
   it("still agrees when the text carries diacritics the query omits", () => {
     const page = "ٱلْحَمْدُ ... ٱلْحَمْدُ";
-    const rendered = findMatches(page, "الحمد");
+    const rendered = findOccurrences(page, "الحمد");
     expect(rendered).toHaveLength(2);
     expect(countMatches([{ page_no: 1, hits: rendered.length }])).toBe(2);
   });

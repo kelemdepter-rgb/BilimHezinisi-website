@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   READER_EMAIL,
   SEED_BOOK_HASH,
+  SEED_MD_BOOK_HASH,
   STAFF_EMAIL,
   hasStaffTestEnv,
   loadEnvLocal,
@@ -22,6 +23,7 @@ teardown("remove the test accounts and seeded book", async () => {
 
   // Pages cascade with the book row.
   await admin.from("books").delete().eq("file_hash", SEED_BOOK_HASH);
+  await admin.from("books").delete().eq("file_hash", SEED_MD_BOOK_HASH);
 
   const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
   for (const user of data?.users ?? []) {

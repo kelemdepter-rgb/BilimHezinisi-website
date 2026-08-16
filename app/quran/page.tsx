@@ -5,7 +5,6 @@ import { AyaText } from "@/components/quran/aya-text";
 import { SuraList } from "@/components/quran/sura-list";
 import { getSuras, runQuranSearch } from "@/lib/quran/data";
 import { toArabicNumerals } from "@/lib/quran/format";
-import { highlightTermList } from "@/lib/reader/highlight";
 
 export const metadata: Metadata = {
   title: "قۇرئان كەرىم",
@@ -36,8 +35,6 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
 
   const pageHref = (next: number) =>
     `/quran?q=${encodeURIComponent(query)}${next > 1 ? `&p=${next}` : ""}`;
-
-  const terms = highlightTermList(query);
 
   return (
     <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
@@ -111,11 +108,11 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
                         className="quran-face mt-1.5 block text-[21px] leading-[2.1] text-ink"
                         data-testid="quran-hit-arabic"
                       >
-                        <AyaText text={hit.text_ar} terms={terms} />
+                        <AyaText text={hit.text_ar} query={query} />
                       </span>
                       {hit.text_ug && (
                         <span className="mt-1 block text-[13.5px] leading-7 text-ink2">
-                          <AyaText text={hit.text_ug} terms={terms} />
+                          <AyaText text={hit.text_ug} query={query} />
                         </span>
                       )}
                     </Link>

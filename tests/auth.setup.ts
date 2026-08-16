@@ -8,6 +8,14 @@ import {
   READER_STATE_PATH,
   SEED_BOOK_HASH,
   SEED_BOOK_TITLE,
+  SEED_FRAGMENT_DECOYS,
+  SEED_FRAGMENT_PAGE,
+  SEED_FRAGMENT_STEM,
+  SEED_MD_BOOK_HASH,
+  SEED_MD_BOOK_TITLE,
+  SEED_MD_NEEDLE_PAGE,
+  SEED_MD_PAGE_COUNT,
+  SEED_MD_PATH,
   SEED_NEEDLE,
   SEED_NEEDLE_PAGE,
   SEED_NEEDLE_LATER_PAGE,
@@ -115,6 +123,22 @@ setup("seed a published test book", async () => {
     if (pageNo === SEED_NEEDLE_LATER_PAGE) {
       return { book_id: book.id, page_no: pageNo, content: `${filler} كېيىنكى ${SEED_NEEDLE} بۇ يەردە. ` };
     }
+
+    // The fragment trap. Searching «<needle> چا» must reach INTO «چاقىرىش» and
+    // «چاقىر» where the needle precedes them, and must leave the standalone
+    // «چالايلى» and «چاقىر» alone. Both shapes are on this one page so a single
+    // query proves both halves of the rule.
+    if (pageNo === SEED_FRAGMENT_PAGE) {
+      return {
+        book_id: book.id,
+        page_no: pageNo,
+        content:
+          ` ساھابىلار ${SEED_FRAGMENT_STEM} چاقىرىش توغرۇلۇق سۆزلەشتى. ` +
+          ` بەزىلەر: داڭ ${SEED_FRAGMENT_DECOYS[0]} دېدى، بۇرغا ${SEED_FRAGMENT_DECOYS[0]} دېگەنمۇ بار. ` +
+          ` ھەي بىلال، ${SEED_FRAGMENT_STEM} ${SEED_FRAGMENT_DECOYS[1]}! دېدى. ` +
+          ` ئاندىن ${SEED_FRAGMENT_DECOYS[1]} دېگەن سۆز يالغۇز كەلدى. ${filler}`,
+      };
+    }
     return { book_id: book.id, page_no: pageNo, content: filler };
   });
   const { error: pageError } = await admin.from("book_pages").insert(pages);
@@ -122,6 +146,70 @@ setup("seed a published test book", async () => {
 
   mkdirSync(dirname(SEED_PATH), { recursive: true });
   writeFileSync(SEED_PATH, JSON.stringify({ bookId: book.id }), "utf8");
+});
+
+/**
+ * A second seeded book, stored as MARKDOWN.
+ *
+ * Two thirds of the real library is Markdown, and that reader path drew no
+ * <mark> at all: following a search result opened the right page and left the
+ * phrase to be found by eye. Nothing caught it because every fixture until now
+ * was plain text.
+ */
+setup("seed a published Markdown book", async () => {
+  setup.skip(!hasStaffTestEnv(), "Supabase env not configured");
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  await admin.from("books").delete().eq("file_hash", SEED_MD_BOOK_HASH);
+
+  const { data: book, error } = await admin
+    .from("books")
+    .insert({
+      title: SEED_MD_BOOK_TITLE,
+      author: "سىناق ئاپتور",
+      status: "published",
+      file_hash: SEED_MD_BOOK_HASH,
+      format: "DOCX",
+      content_format: "markdown",
+      language: "ug",
+      page_count: SEED_MD_PAGE_COUNT,
+      description: "Playwright سىنىقى ئۈچۈن ماركداۋن فورماتىدىكى ۋاقىتلىق كىتاب.",
+    })
+    .select("id")
+    .single();
+  if (error || !book) throw new Error(`could not seed markdown book: ${error?.message}`);
+
+  const pages = Array.from({ length: SEED_MD_PAGE_COUNT }, (_, index) => {
+    const pageNo = index + 1;
+    const filler = `${pageNo}-بەتنىڭ ماركداۋن مەزمۇنى. ئۇيغۇرچە سىناق جۈملىسى.\n\n`.repeat(10);
+
+    if (pageNo === SEED_MD_NEEDLE_PAGE) {
+      return {
+        book_id: book.id,
+        page_no: pageNo,
+        // Headings, bold and a list — real Markdown, and the needle appears
+        // both in plain prose and split across inline markup, which is the case
+        // a naive per-text-node highlighter would miss.
+        content:
+          `## ماركداۋن ماۋزۇسى\n\n` +
+          `بۇ بەتتە **${SEED_NEEDLE}** دېگەن سۆز توم خەتتە بار.\n\n` +
+          `- تىزىملىكتىكى ${SEED_NEEDLE} يەنە بىر قېتىم\n` +
+          `- باشقا بىر قۇر\n\n` +
+          `${filler}`,
+      };
+    }
+    return { book_id: book.id, page_no: pageNo, content: filler };
+  });
+  const { error: pageError } = await admin.from("book_pages").insert(pages);
+  if (pageError) throw new Error(`could not seed markdown pages: ${pageError.message}`);
+
+  mkdirSync(dirname(SEED_MD_PATH), { recursive: true });
+  writeFileSync(SEED_MD_PATH, JSON.stringify({ bookId: book.id }), "utf8");
 });
 
 /**

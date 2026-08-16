@@ -58,6 +58,49 @@ export const SEED_NEEDLE_PHRASE = `بۇ بەتتە ${SEED_NEEDLE} دېگەن`;
 export const SEED_NEEDLE_COUNT = 3;
 export const SEED_PAGE_COUNT = 14;
 
+/**
+ * The production bug, reduced to a fixture.
+ *
+ * «نامازغا چا» highlighted a standalone «چالايلى» and a standalone «چاقىر»,
+ * because ts_headline marked the lexeme «چا» wherever it began a word. So one
+ * page carries the phrase followed by a longer word (the match must reach into
+ * it) AND the same fragment standing on its own (it must not be touched).
+ */
+/**
+ * Its own stem, deliberately not SEED_NEEDLE: extra occurrences of the needle
+ * would change how ts_rank orders the results, and the tests above assert which
+ * page comes first.
+ */
+export const SEED_FRAGMENT_PAGE = 5;
+export const SEED_FRAGMENT_STEM = "تاشكۆۋرۈككە";
+export const SEED_FRAGMENT_PHRASE = `${SEED_FRAGMENT_STEM} چا`;
+/** Words that begin with the phrase's last fragment but are not the phrase. */
+export const SEED_FRAGMENT_DECOYS = ["چالايلى", "چاقىر"] as const;
+/** How many times the phrase itself occurs on that page. */
+export const SEED_FRAGMENT_COUNT = 2;
+
+/**
+ * A second seeded book, stored as Markdown. Two thirds of the real library is,
+ * and that path rendered no highlights at all — following a search result
+ * opened the right page with nothing marked on it.
+ */
+export const SEED_MD_BOOK_TITLE = "__e2e_md__ ماركداۋن سىناق كىتابى";
+export const SEED_MD_BOOK_HASH = "__e2e_md_hash__";
+export const SEED_MD_PATH = "tests/.auth/seed-md.json";
+export const SEED_MD_PAGE_COUNT = 6;
+/** The needle sits on this page, once inside bold markup and once in plain prose. */
+export const SEED_MD_NEEDLE_PAGE = 2;
+
+export function readMarkdownSeed(): { bookId: number } | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    return JSON.parse(readFileSync(SEED_MD_PATH, "utf8")) as { bookId: number };
+  } catch {
+    return null;
+  }
+}
+
 export function readSeed(): { bookId: number } | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

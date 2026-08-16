@@ -3,8 +3,7 @@ import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { BookResults, type BookGroup } from "@/components/search/book-results";
 import { getCategories } from "@/lib/data";
-import { highlightTermsFromQuery } from "@/lib/reader/highlight";
-import { runBookSearch, type SearchHit } from "@/lib/search";
+import { runBookSearch, type SearchHit } from "@/lib/search/books";
 
 /**
  * Results arrive one page-hit per row. A book that mentions the word forty
@@ -66,7 +65,6 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
     offset,
   });
 
-  const term = highlightTermsFromQuery(query);
   const linkParams = (next: Record<string, string | null>) => {
     const search = new URLSearchParams();
     if (query) search.set("q", query);
@@ -111,7 +109,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
 
       <p className="mt-2.5 text-[12.5px] leading-6 text-ink3">
         سۆزنىڭ بېشىنى يازسىڭىزمۇ تېپىلىدۇ — «ناماز» دېسىڭىز «نامازغا»، «نامازنى»مۇ چىقىدۇ.
-        كۆپ سۆز يازسىڭىز، ھەممىسى بار بەتلەر تېپىلىدۇ.
+        كۆپ سۆز يازسىڭىز، دەل شۇ ئىبارە قاتار كەلگەن يەرلەر تېپىلىدۇ.
       </p>
 
       {/* Book search and Quran search stay separate: this page only ever
@@ -157,7 +155,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
               <Icon name="info" className="mt-1 shrink-0 text-am" />
               <span>
                 «{query}» بەك كۆپ بەتتە بار. تۆۋەندىكىسى دەسلەپكى نەتىجىلەر — تېخىمۇ ئېنىق
-                تېپىش ئۈچۈن يەنە بىر سۆز قوشۇڭ، ياكى ئىبارىنى قوش تىرناققا ئېلىڭ.
+                تېپىش ئۈچۈن يەنە بىر سۆز قوشۇڭ.
               </span>
             </p>
           )}
@@ -166,7 +164,9 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
             بۇ بەتتە {hits.length} نەتىجە · {(elapsedMs / 1000).toFixed(2)} سېكۇنت
           </p>
 
-          <BookResults groups={groupByBook(hits)} term={term} />
+          {/* The query goes through untouched: it is one literal phrase, and
+              the matcher that highlights it is the same one the reader uses. */}
+          <BookResults groups={groupByBook(hits)} term={query} />
 
           {(pageNo > 1 || moreAvailable) && (
             <nav className="mt-5 flex items-center justify-center gap-2" aria-label="بەت تەرتىپى">

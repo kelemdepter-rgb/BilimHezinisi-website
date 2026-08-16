@@ -1,7 +1,7 @@
 "use server";
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { findMatches } from "@/lib/reader/highlight";
+import { findOccurrences } from "@/lib/search/occurrences";
 
 /**
  * One occurrence of the query inside a book, with enough context to read and
@@ -81,9 +81,9 @@ export async function listBookMatchesAction(input: {
   let truncated = false;
 
   for (const page of (data as { page_no: number; content: string }[] | null) ?? []) {
-    // findMatches normalizes per character, so the offsets it returns point at
-    // the real text even where it carries Arabic diacritics.
-    const found = findMatches(page.content, term);
+    // findOccurrences normalizes per character, so the offsets it returns point
+    // at the real text even where it carries Arabic diacritics.
+    const found = findOccurrences(page.content, term);
     for (const [matchIndex, hit] of found.entries()) {
       if (matches.length >= MAX_MATCHES) {
         truncated = true;

@@ -1,4 +1,4 @@
-import { toSegmentsForTerms } from "@/lib/reader/highlight";
+import { toSegments, MATCH_CLASS } from "@/lib/search/occurrences";
 
 /**
  * A verse in a search result, with the query highlighted.
@@ -6,19 +6,23 @@ import { toSegmentsForTerms } from "@/lib/reader/highlight";
  * Highlighting happens here rather than in Postgres on purpose. ts_headline
  * tokenizes the text it is given, so it can only mark up the normalized form —
  * and the normalized form of an aya has had its tashkil stripped and its alif
- * variants folded, which is not how the Quran is written. Matching the terms
- * against the ORIGINAL text client-side keeps the Uthmani spelling intact:
- * ug_normalize_client works per character, so a match found on the normalized
- * form maps straight back to real offsets in the verse.
+ * variants folded, which is not how the Quran is written. Matching against the
+ * ORIGINAL text client-side keeps the Uthmani spelling intact: findOccurrences
+ * works per character, so a match found on the normalized form maps straight
+ * back to real offsets in the verse.
+ *
+ * It is also the same function the books use, so a phrase is one phrase
+ * everywhere — the query is never split into words that could light up on their
+ * own.
  *
  * The verse is rendered as text segments, never as HTML.
  */
-export function AyaText({ text, terms }: { text: string; terms: string[] }) {
+export function AyaText({ text, query }: { text: string; query: string }) {
   return (
     <>
-      {toSegmentsForTerms(text, terms).map((segment, index) =>
+      {toSegments(text, query).map((segment, index) =>
         segment.match ? (
-          <mark key={index} className="rounded bg-ab2 px-0.5 font-semibold text-ink">
+          <mark key={index} className={`${MATCH_CLASS} font-semibold`}>
             {segment.text}
           </mark>
         ) : (

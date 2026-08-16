@@ -1,11 +1,17 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   SEED_BOOK_TITLE,
+  SEED_FRAGMENT_COUNT,
+  SEED_FRAGMENT_DECOYS,
+  SEED_FRAGMENT_PAGE,
+  SEED_FRAGMENT_PHRASE,
+  SEED_MD_NEEDLE_PAGE,
   SEED_NEEDLE,
   SEED_NEEDLE_PHRASE,
   SEED_NEEDLE_PAGE,
   hasStaffTestEnv,
   loadEnvLocal,
+  readMarkdownSeed,
   readSeed,
 } from "./env";
 
@@ -16,6 +22,12 @@ test.skip(!hasStaffTestEnv(), "Supabase env not configured");
 function seededBookId(): number {
   const seed = readSeed();
   if (!seed) throw new Error("seed book missing — the setup project must run first");
+  return seed.bookId;
+}
+
+function seededMarkdownBookId(): number {
+  const seed = readMarkdownSeed();
+  if (!seed) throw new Error("markdown seed book missing — the setup project must run first");
   return seed.bookId;
 }
 
@@ -324,6 +336,121 @@ test.describe("global search", () => {
     await matches.first().click();
     await expect(page).toHaveURL(/\/books\/\d+\/read\?page=\d+.*m=\d+/);
     await expect(page.getByTestId("match-nav")).toBeVisible({ timeout: 20_000 });
+  });
+});
+
+/**
+ * The production bug: searching «نامازغا چا» lit up a standalone «چالايلى» and a
+ * standalone «چاقىر» — words that merely began with the phrase's last fragment.
+ * ts_headline marked lexemes; the reader marked the literal phrase; the two
+ * disagreed on every screen. There is one matcher now, and these hold it to it.
+ */
+test.describe("one phrase, one algorithm", () => {
+  const phraseParam = encodeURIComponent(SEED_FRAGMENT_PHRASE);
+
+  test("the results list marks the whole phrase and never a bare fragment", async ({ page }) => {
+    await page.goto(`/search?q=${phraseParam}`);
+    const hit = page.getByTestId("search-result").first();
+    await expect(hit).toBeVisible({ timeout: 20_000 });
+
+    const marked = await hit.locator("mark").allInnerTexts();
+    expect(marked.length).toBeGreaterThan(0);
+
+    for (const text of marked) {
+      // Every mark is the phrase itself — not one of its words, not a word that
+      // merely starts the same way.
+      expect(text, "a mark must be the whole phrase").toBe(SEED_FRAGMENT_PHRASE);
+      for (const decoy of SEED_FRAGMENT_DECOYS) {
+        expect(text, `«${decoy}» must never be marked on its own`).not.toBe(decoy);
+      }
+    }
+  });
+
+  test("the reader marks exactly the same thing the results list did", async ({ page }) => {
+    await page.goto(
+      `/books/${seededBookId()}/read?page=${SEED_FRAGMENT_PAGE}&q=${phraseParam}&m=0&from=search`,
+    );
+
+    const marks = page.locator(`[data-page-no="${SEED_FRAGMENT_PAGE}"] mark`);
+    await expect(marks.first()).toBeVisible({ timeout: 20_000 });
+
+    // The phrase occurs twice on that page: once reaching into «چاقىرىش» and
+    // once into «چاقىر». The decoys standing alone are left untouched.
+    await expect(marks).toHaveCount(SEED_FRAGMENT_COUNT);
+    for (const text of await marks.allInnerTexts()) {
+      expect(text).toBe(SEED_FRAGMENT_PHRASE);
+    }
+
+    // And the counter agrees with what is on screen.
+    await expect(page.getByTestId("match-count")).toHaveText(
+      new RegExp(`^1/${SEED_FRAGMENT_COUNT}$`),
+    );
+  });
+
+  test("a phrase that is nowhere says «تېپىلمىدى» and marks nothing", async ({ page }) => {
+    const absent = `${SEED_NEEDLE} قوندۇرۇلمىغانئالاھىدەسۆز`;
+    await page.goto(
+      `/books/${seededBookId()}/read?page=1&q=${encodeURIComponent(absent)}`,
+    );
+    await expect(page.getByTestId("match-none")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("match-none")).toHaveText("تېپىلمىدى");
+    await expect(page.locator("[data-page-no] mark")).toHaveCount(0);
+  });
+});
+
+/**
+ * Markdown books had no highlighting at all — the reader rendered the page and
+ * drew no marks, so arriving from a search result meant hunting for the phrase
+ * by eye. Two thirds of the real library is stored this way.
+ */
+test.describe("a Markdown book highlights too", () => {
+  test("clicking a result lands on the phrase, centred and flashed", async ({ page }) => {
+    await page.goto(
+      `/books/${seededMarkdownBookId()}/read?page=${SEED_MD_NEEDLE_PAGE}` +
+        `&q=${encodeURIComponent(SEED_NEEDLE)}&m=0&from=search`,
+    );
+
+    // Rendered Markdown, and marks inside it.
+    const body = page.locator(`[data-page-no="${SEED_MD_NEEDLE_PAGE}"] .md-body`);
+    await expect(body).toBeVisible({ timeout: 20_000 });
+    await expect(body.locator("h2")).toBeVisible();
+
+    const active = page.locator(".match-active");
+    await expect(active).toHaveCount(1, { timeout: 20_000 });
+    await expect(active).toHaveText(SEED_NEEDLE);
+    await expect(active).toBeInViewport();
+
+    // Centred, so the sticky toolbar cannot be sitting on top of it — the rule
+    // that matters most at 375px.
+    const word = await active.boundingBox();
+    const bar = await page.getByTestId("reader-toolbar").boundingBox();
+    expect(word!.y, "the match must sit below the toolbar").toBeGreaterThan(bar!.y + bar!.height);
+
+    // And it flashed, the way the desktop's flashMatch does.
+    await expect(active).toHaveClass(/match-flash/);
+
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("the arrows step through a Markdown book's occurrences", async ({ page }) => {
+    await page.goto(
+      `/books/${seededMarkdownBookId()}/read?page=${SEED_MD_NEEDLE_PAGE}&q=${encodeURIComponent(SEED_NEEDLE)}`,
+    );
+
+    const counter = page.getByTestId("match-count");
+    await expect(counter).toHaveText(/^1\/\d+$/, { timeout: 20_000 });
+    const total = Number((await counter.innerText()).split("/")[1]);
+    // Bold prose plus a list entry: the seed puts the needle on the page twice.
+    expect(total).toBeGreaterThanOrEqual(2);
+
+    await page.getByTestId("match-next").click();
+    await expect(counter).toHaveText(`2/${total}`);
+    const active = page.locator(".match-active");
+    await expect(active).toHaveCount(1);
+    await expect(active).toBeInViewport();
+
+    // The mark inside <strong> is still one mark, addressed by its own number.
+    await expect(active).toHaveAttribute("data-match", /^\d+$/);
   });
 });
 

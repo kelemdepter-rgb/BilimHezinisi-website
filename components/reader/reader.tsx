@@ -7,7 +7,7 @@ import { Icon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
 import { MarkdownContent } from "@/components/reader/markdown-content";
-import { toSegments } from "@/lib/reader/highlight";
+import { toSegments, ACTIVE_MATCH_CLASS, MATCH_CLASS } from "@/lib/search/occurrences";
 import { flattenMatches, positionOf, stepPosition } from "@/lib/reader/matches";
 import type { ContentFormat } from "@/lib/books/types";
 import {
@@ -315,6 +315,19 @@ export function Reader({
    */
   const occurrences = useMemo(() => flattenMatches(matchPages), [matchPages]);
 
+  /**
+   * Which occurrence ON THIS PAGE the navigator is sitting on, or -1 when the
+   * current one lives elsewhere. Both renderers ask the same question, so the
+   * active mark is styled identically whether the book is plain text or
+   * Markdown.
+   */
+  const activeOnPage = useCallback(
+    (pageNo: number) => {
+      const active = occurrences[findIndex];
+      return active && active.pageNo === pageNo ? active.index : -1;
+    },
+    [findIndex, occurrences],
+  );
 
   /** Bring one occurrence into view, loading its page first when needed. */
   const goToOccurrence = useCallback(
@@ -322,6 +335,12 @@ export function Reader({
       const target = occurrences[position];
       if (!target) return;
       setFindIndex(position);
+
+      // Let React paint first. Marking the active occurrence re-renders the
+      // page — a Markdown page is rewritten wholesale — so a node looked up
+      // before that paint is about to be thrown away, taking the scroll and the
+      // flash with it.
+      await new Promise((resolve) => requestAnimationFrame(resolve));
 
       const selector = `[data-page-no="${target.pageNo}"] [data-match="${target.index}"]`;
       let node = containerRef.current?.querySelector<HTMLElement>(selector);
@@ -333,7 +352,9 @@ export function Reader({
       // Instant, not smooth: stepping matches is a find-next, and the browser's
       // own find jumps rather than animates — over hundreds of pages a smooth
       // scroll would be a long slide past text nobody asked to read.
-      // A Markdown book renders without marks; the page itself is the target.
+      // Falling back to the page happens only when the phrase is genuinely not
+      // in the rendered text (a count the database and the renderer disagree
+      // on); every ordinary match has a <mark> to land on, Markdown included.
       if (!node) {
         await goToPage(target.pageNo);
         return;
@@ -633,35 +654,30 @@ export function Reader({
           >
             <p className="mb-2 text-center text-[12px] text-ink3 print:text-[10px]">{page.page_no}</p>
             {contentFormat === "markdown" ? (
-              <MarkdownContent source={page.content} />
+              <MarkdownContent
+                source={page.content}
+                query={activeTerm}
+                activeOccurrence={activeOnPage(page.page_no)}
+              />
             ) : (
               <div className="whitespace-pre-wrap break-words">
                 {activeTerm.trim()
-                  ? (() => {
-                      // Number the marks within the page so ↑ ↓ can address one
-                      // occurrence, and flag the one currently stepped to.
-                      let matchNo = -1;
-                      const active = occurrences[findIndex];
-                      return toSegments(page.content, activeTerm).map((segment, index) => {
-                        if (!segment.match) return <span key={index}>{segment.text}</span>;
-                        matchNo += 1;
-                        const isActive =
-                          active?.pageNo === page.page_no && active.index === matchNo;
-                        return (
-                          <mark
-                            key={index}
-                            data-match={matchNo}
-                            className={
-                              isActive
-                                ? "match-active px-0.5"
-                                : "rounded bg-ab2 px-0.5 text-ink"
-                            }
-                          >
-                            {segment.text}
-                          </mark>
-                        );
-                      });
-                    })()
+                  ? toSegments(page.content, activeTerm).map((segment, index) => {
+                      if (!segment.match) return <span key={index}>{segment.text}</span>;
+                      // The ordinal comes from the matcher, so it is numbered
+                      // the same way the Markdown path numbers its marks and
+                      // the same way ↑ ↓ address them.
+                      const isActive = activeOnPage(page.page_no) === segment.occurrence;
+                      return (
+                        <mark
+                          key={index}
+                          data-match={segment.occurrence}
+                          className={isActive ? ACTIVE_MATCH_CLASS : MATCH_CLASS}
+                        >
+                          {segment.text}
+                        </mark>
+                      );
+                    })
                   : page.content}
               </div>
             )}

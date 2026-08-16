@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { Snippet } from "@/components/search/snippet";
 import { listBookMatchesAction, type BookMatch } from "@/app/search-actions";
-import type { SearchHit } from "@/lib/search";
+import { MATCH_CLASS } from "@/lib/search/occurrences";
+import type { SearchHit } from "@/lib/search/books";
 
 export type BookGroup = {
   bookId: number;
@@ -120,7 +121,7 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
             >
               <PageChip pageNo={hit.page_no} />
               <span className="min-w-0 text-[13.5px] leading-7 text-ink2">
-                <Snippet snippet={hit.snippet} />
+                <Snippet snippet={hit.snippet} query={term} />
               </span>
             </Link>
           </li>
@@ -174,9 +175,7 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
                   <PageChip pageNo={item.pageNo} />
                   <span className="min-w-0 text-[13px] leading-7 text-ink2">
                     {item.before}
-                    <mark className="rounded bg-ab2 px-0.5 font-semibold text-ink">
-                      {item.match}
-                    </mark>
+                    <mark className={`${MATCH_CLASS} font-semibold`}>{item.match}</mark>
                     {item.after}
                   </span>
                 </Link>

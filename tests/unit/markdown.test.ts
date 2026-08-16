@@ -214,9 +214,13 @@ describe("stripMarkdown for search snippets", () => {
     expect(stripMarkdown("| ئىسىم | سان |\n| --- | --- |\n| بىر | 1 |")).not.toContain("---");
   });
 
-  it("preserves mark tags exactly", () => {
-    expect(stripMarkdown("بۇ **<mark>سۆز</mark>** مۇھىم")).toBe("بۇ <mark>سۆز</mark> مۇھىم");
-    expect(stripMarkdown("## <mark>ماۋزۇ</mark>")).toBe("<mark>ماۋزۇ</mark>");
+  it("keeps bare numbers, which the old mark-parking scheme swallowed", () => {
+    // Snippets no longer arrive pre-marked (migration 0019), so the placeholder
+    // scheme that protected <mark> is gone — and with it the bug where any
+    // number surrounded by spaces was mistaken for a placeholder and deleted.
+    expect(stripMarkdown("بۇخارى: 567؛ مۇسلىم: 377 371- ھەدىس")).toContain("567");
+    expect(stripMarkdown("بۇخارى: 567؛ مۇسلىم: 377 371- ھەدىس")).toContain("377");
+    expect(stripMarkdown("**بۇخارى** 604 دېگەن")).toBe("بۇخارى 604 دېگەن");
   });
 
   it("leaves plain prose untouched", () => {

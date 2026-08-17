@@ -59,3 +59,7 @@ next-env.d.ts
 # search parity and timing snapshots (local measurement artefacts)
 .search-parity-*.json
 .search-timing-*.json
+
+# Third-party reference binaries (UyghurEdit distribution) — notes only
+/_reference/*
+!/_reference/uyedit-test-words.md

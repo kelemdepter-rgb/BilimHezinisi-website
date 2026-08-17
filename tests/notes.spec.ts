@@ -125,22 +125,93 @@ test.describe("notebook", () => {
     await deleteNote(page, path);
   });
 
-  test("the spellchecker loads and flags a misspelled word", async ({ page }) => {
+  /**
+   * Where the misspelled word is on screen.
+   *
+   * The marks are painted through the CSS Custom Highlight API, so there is no
+   * element to locate — the ranges have to be asked for directly. This is also
+   * what proves the underline exists at all: if nothing was painted, there is
+   * no box to click.
+   */
+  async function markBox(page: Page, word: string) {
+    return page.evaluate((needle) => {
+      const highlight = CSS.highlights?.get("bh-spell-error");
+      if (!highlight) return null;
+      // A Highlight yields AbstractRange; the ones we put in are real Ranges.
+      for (const abstract of highlight) {
+        const range = abstract as Range;
+        if (range.toString() === needle) {
+          const box = range.getBoundingClientRect();
+          return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        }
+      }
+      return null;
+    }, word);
+  }
+
+  test("underlines a misspelled word in place and corrects it from the popup", async ({
+    page,
+  }) => {
     const path = await newNote(page);
     await page.getByTestId("note-body").click();
     await page.keyboard.type(`بۇ ${MISSPELLING} دېگەن سۆز خاتا.`);
 
     await page.getByTestId("spell-toggle").click();
-    await expect(page.getByTestId("spell-panel")).toBeVisible();
+    // The dictionary is 777 KB over the wire and unpacks in the worker.
+    await expect(page.getByTestId("spell-summary")).toBeVisible({ timeout: 90_000 });
 
-    // The dictionary is 424 KB over the wire and unpacks in the worker.
-    const flagged = page.getByTestId("spell-word").filter({ hasText: MISSPELLING });
-    await expect(flagged).toBeVisible({ timeout: 60_000 });
+    // The word is marked in the text itself, not listed in a panel.
+    await expect
+      .poll(() => markBox(page, MISSPELLING), { timeout: 30_000 })
+      .not.toBeNull();
+    const box = (await markBox(page, MISSPELLING))!;
 
-    await flagged.click();
-    await expect(page.getByTestId("spell-suggestions")).toContainText("ئۇيغۇر", {
+    await page.mouse.click(box.x, box.y);
+    const popup = page.getByTestId("spell-popup");
+    await expect(popup).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("spell-popup-word")).toHaveText(MISSPELLING);
+    await expect(page.getByTestId("spell-suggestion").first()).toContainText("ئۇيغۇر", {
       timeout: 30_000,
     });
+
+    // Anchored at the word and clear of the toolbar — the rule that matters on
+    // a phone, where the popup used to have nowhere to go.
+    const popupBox = (await popup.boundingBox())!;
+    const toolbar = (await page.getByTestId("note-toolbar").boundingBox())!;
+    expect(popupBox.y, "popup must sit below the toolbar").toBeGreaterThanOrEqual(
+      toolbar.y + toolbar.height,
+    );
+    const viewport = page.viewportSize()!;
+    expect(popupBox.y + popupBox.height, "popup must be fully on screen").toBeLessThanOrEqual(
+      viewport.height + 1,
+    );
+
+    // Choosing a correction replaces that word and nothing else.
+    await page.getByTestId("spell-suggestion").first().click();
+    await expect(page.getByTestId("note-body")).toContainText("ئۇيغۇر");
+    await expect(page.getByTestId("note-body")).not.toContainText(MISSPELLING);
+    await expect(popup).toHaveCount(0);
+
+    await deleteNote(page, path);
+  });
+
+  test("adding a word to the personal dictionary clears its underline", async ({ page }) => {
+    const path = await newNote(page);
+    await page.getByTestId("note-body").click();
+    await page.keyboard.type(`بۇ ${MISSPELLING} دېگەن سۆز.`);
+
+    await page.getByTestId("spell-toggle").click();
+    await expect(page.getByTestId("spell-summary")).toBeVisible({ timeout: 90_000 });
+    await expect.poll(() => markBox(page, MISSPELLING), { timeout: 30_000 }).not.toBeNull();
+
+    const box = (await markBox(page, MISSPELLING))!;
+    await page.mouse.click(box.x, box.y);
+    await expect(page.getByTestId("spell-popup")).toBeVisible({ timeout: 30_000 });
+
+    await page.getByTestId("spell-popup-add").click();
+    // The mark goes immediately, and the word itself stays in the text.
+    await expect.poll(() => markBox(page, MISSPELLING), { timeout: 15_000 }).toBeNull();
+    await expect(page.getByTestId("note-body")).toContainText(MISSPELLING);
 
     await deleteNote(page, path);
   });

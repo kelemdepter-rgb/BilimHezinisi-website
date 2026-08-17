@@ -444,6 +444,21 @@
   }
 }
 
+/* ── Misspelled words, underlined where they were written ─────────────────
+   Painted through the CSS Custom Highlight API, so no element is inserted into
+   the note: nothing to save, nothing to move the caret, and no text node split
+   through the middle of a word (which would break Arabic shaping).
+
+   ::highlight() accepts only a small set of properties, and text-decoration is
+   the one that matters here. Browsers that support the API but not decoration
+   inside it still get the background tint, so the word is never unmarked. */
+::highlight(bh-spell-error) {
+  text-decoration: underline wavy var(--danger, #b3261e);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 0.22em;
+  background-color: color-mix(in srgb, #b3261e 9%, transparent);
+}
+
 /* ── Quran (mushaf) — ported from desktop src/quran.css onto the same tokens.
      Type sizes come from the reader's font-size control via inline styles, so
      everything here is structure and colour only. */

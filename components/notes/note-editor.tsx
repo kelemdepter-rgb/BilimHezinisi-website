@@ -8,7 +8,8 @@ import { MAX_NOTE_CHARS } from "@/lib/notes/limits";
 import { downloadDocx } from "@/lib/notes/export-docx";
 import { sanitizeNoteHtml } from "@/lib/notes/sanitize";
 import type { NoteDocument } from "@/lib/notes/data";
-import { SpellPanel } from "@/components/notes/spell-panel";
+import { SpellPopup } from "@/components/notes/spell-popup";
+import { useSpellcheck } from "@/components/notes/use-spellcheck";
 
 const SAVE_DEBOUNCE_MS = 1200;
 /** Warn while there is still room to finish a thought. */
@@ -46,6 +47,13 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [notice, setNotice] = useState<string | null>(null);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * The spellchecker underlines words in place rather than listing them in a
+   * panel. It owns the marks, the popup and the worker; the editor only has to
+   * tell it when the text changed and where a tap landed.
+   */
+  const spell = useSpellcheck(editorRef, spellOpen);
 
   const recount = useCallback(() => {
     const text = editorRef.current?.innerText ?? "";
@@ -349,19 +357,52 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           onInput={() => {
             scheduleSave();
             recount();
+            spell.scheduleCheck();
           }}
           onPaste={onPaste}
+          // There is no element around a misspelled word to click — the marks
+          // are painted, not inserted — so the tap is mapped back to the text
+          // by position. See lib/spellcheck/marks.ts.
+          onClick={spell.onEditorPointerUp}
         />
 
         <p className="mt-3 text-[12px] text-ink3" data-testid="note-counts">
           {counts.words} سۆز · {counts.chars.toLocaleString("en-US")} ھەرپ
+          {spellOpen && spell.status === "ready" && (
+            <span data-testid="spell-summary">
+              {" · "}
+              {spell.marks.length === 0
+                ? "ئىملا: خاتالىق يوق"
+                : `ئىملا: ${spell.marks.length} خاتالىق — سۆزنى بېسىڭ`}
+            </span>
+          )}
         </p>
+
+        {spellOpen && spell.status === "loading" && (
+          <p className="mt-1 text-[12px] text-ink3" data-testid="spell-status">
+            لۇغەت يۈكلىنىۋاتىدۇ…
+          </p>
+        )}
+        {spellOpen && spell.status === "failed" && (
+          <p className="mt-1 text-[12px] text-ink3" data-testid="spell-status">
+            لۇغەتنى يۈكلىگىلى بولمىدى — خاتىرە يېزىش داۋاملىشىدۇ.
+          </p>
+        )}
+        {/* A browser without the Custom Highlight API cannot paint the
+            underlines. Saying so is better than silently checking nothing. */}
+        {spellOpen && spell.status === "ready" && !spell.canUnderline && (
+          <p className="mt-1 text-[12px] text-ink3" data-testid="spell-unsupported">
+            بۇ توركۆرگۈدە ئاستى سىزىق كۆرسىتىلمەيدۇ — كۆرگۈڭىزنى يېڭىلاڭ.
+          </p>
+        )}
       </main>
 
-      {spellOpen && (
-        <SpellPanel
-          getText={() => editorRef.current?.innerText ?? ""}
-          onClose={() => setSpellOpen(false)}
+      {spell.popup && (
+        <SpellPopup
+          state={spell.popup}
+          onPick={(replacement) => spell.applySuggestion(spell.popup!.mark, replacement)}
+          onAdd={() => spell.addToPersonal(spell.popup!.mark.word)}
+          onClose={spell.closePopup}
         />
       )}
     </div>

@@ -2,45 +2,69 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  decodeWord,
   editDistance,
   editsOnce,
+  encodeWord,
+  frequencyOf,
+  hasWord,
   isCheckable,
-  isCorrect,
   normalizeForLookup,
-  suggest,
   tokenize,
   unpackDictionary,
-  UYGHUR_LETTERS,
   wordAt,
   type PackedDictionary,
 } from "@/lib/spellcheck/dictionary";
-import { fetchCached } from "@/lib/spellcheck/fetch-cached";
+import { isCorrect, suggest } from "@/lib/spellcheck/check";
+import { accepts, harmonyOf, nearestSuffixes, splits } from "@/lib/spellcheck/morphology";
+import { weightedDistance } from "@/lib/spellcheck/rank";
+import { substitutionCost } from "@/lib/spellcheck/confusion";
+import { fetchCached, fetchCachedBytes } from "@/lib/spellcheck/fetch-cached";
 
 const asset = (name: string) =>
   fileURLToPath(new URL(`../../public/spellcheck/${name}`, import.meta.url));
 
 /** The real shipped artifacts — a synthetic dictionary would prove nothing. */
-const encoded = readFileSync(asset("uyghur-dict.txt"), "utf8");
+const raw = readFileSync(asset("uyghur-dict.bin"));
 const corrections = new Map<string, string>(
   Object.entries(JSON.parse(readFileSync(asset("corrections.json"), "utf8")) as Record<string, string>),
 );
 
 let dictionary: PackedDictionary;
 beforeAll(() => {
-  dictionary = unpackDictionary(encoded);
+  dictionary = unpackDictionary(
+    raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer,
+  );
 });
 
 describe("packed dictionary", () => {
-  it("unpacks the whole front-coded artifact", () => {
-    expect(dictionary.size).toBe(441_322);
+  it("unpacks the whole artifact", () => {
+    expect(dictionary.size).toBe(443_450);
+    expect(dictionary.flags).not.toBeNull();
   });
 
   it("stays sorted, which is what makes the binary search legal", () => {
-    // Full comparison is 441k string compares; a wide sample is enough and
-    // keeps the suite fast.
+    // Byte codes are assigned in code-point order, so the packed order and
+    // JavaScript's string order are the same — that equivalence is the whole
+    // reason the search survived the encoding change, so it is asserted.
     for (let index = 1; index < dictionary.size; index += 997) {
       expect(wordAt(dictionary, index - 1) < wordAt(dictionary, index)).toBe(true);
     }
+  });
+
+  it("round-trips every character of the alphabet", () => {
+    for (const word of ["كىتاب", "ئوقۇغۇچى", "خەزىنە", "قالدۇر", "ژۇرنال", "ئاق-قاش"]) {
+      const codes = encodeWord(word);
+      expect(codes, word).not.toBeNull();
+      expect(decodeWord(codes!, 0, codes!.length)).toBe(word);
+    }
+  });
+
+  it("refuses to encode a character the dictionary cannot hold", () => {
+    // An apostrophe passes isCheckable but is in no dictionary word; it must
+    // come back as "absent", never as a silently mangled lookup.
+    expect(encodeWord("ئا'لا")).toBeNull();
+    expect(hasWord(dictionary, "ئا'لا")).toBe(false);
   });
 
   it("finds ordinary words and rejects ones that were never in it", () => {
@@ -50,6 +74,12 @@ describe("packed dictionary", () => {
     for (const word of ["كانداق", "يۇراك", "كىتپ", "ياخشش"]) {
       expect(isCorrect(dictionary, word), word).toBe(false);
     }
+  });
+
+  it("carries how often the library uses a word", () => {
+    // Common words outrank rare ones; the bucket is log2 of the count.
+    expect(frequencyOf(dictionary, "كىتاب")).toBeGreaterThan(0);
+    expect(frequencyOf(dictionary, "ژۇرنال")).toBe(0);
   });
 
   it("accepts a personal word without touching the artifact", () => {
@@ -81,12 +111,68 @@ describe("what gets checked at all", () => {
   });
 });
 
+describe("morphology", () => {
+  it("reads harmony off the last committed vowel, treating ى as neutral", () => {
+    expect(harmonyOf("قالدۇر")).toBe("back");
+    expect(harmonyOf("تەۋە")).toBe("front");
+    // ى is skipped rather than counted, so the ۇ before it still decides.
+    expect(harmonyOf("ئوقۇغۇچى")).toBe("back");
+  });
+
+  it("accepts an unlisted word that is a real inflection of a known stem", () => {
+    // The case that started this: correct Uyghur, absent from the word list,
+    // and red-underlined by UyghurEdit++ to this day.
+    expect(hasWord(dictionary, "تەۋەلەنگەن")).toBe(false);
+    expect(isCorrect(dictionary, "تەۋەلەنگەن")).toBe(true);
+  });
+
+  it("still refuses a suffix the stem cannot take", () => {
+    // «ئالغاندا» is right and «ئالغانتا» is not: Uyghur picks the suffix shape
+    // from the sound the stem ends in, and the boundary table knows it.
+    expect(isCorrect(dictionary, "ئالغاندا")).toBe(true);
+    expect(isCorrect(dictionary, "ئالغانتا")).toBe(false);
+  });
+
+  it("takes a word apart at a suffix so the stem can be corrected", () => {
+    const parts = splits(dictionary, "قالدورمىغۇدەك");
+    expect(parts.some((part) => part.stem === "قالدور" && part.suffix === "مىغۇدەك")).toBe(true);
+  });
+
+  it("finds the nearest real suffix to a misspelled one", () => {
+    expect(nearestSuffixes("لىنگەن")).toContain("لەنگەن");
+  });
+
+  it("does not accept a word whose stem is not one we know", () => {
+    expect(accepts(dictionary, "ققققققنىڭ")).toBe(false);
+  });
+});
+
+describe("ranking", () => {
+  it("prices a known confusion below an arbitrary substitution", () => {
+    // ا↔ە is the second most common vowel error in the corrections data;
+    // ت↔ژ has never been observed once.
+    expect(substitutionCost("ا", "ە")).toBeLessThan(substitutionCost("ت", "ژ"));
+    expect(substitutionCost("ا", "ا")).toBe(0);
+  });
+
+  it("never lets a cheap pair make two edits look nearer than one", () => {
+    // The floor on substitution cost exists exactly for this.
+    const twoCheap = weightedDistance("اا", "ەە");
+    const oneArbitrary = weightedDistance("ات", "اژ");
+    expect(twoCheap).toBeGreaterThan(oneArbitrary);
+  });
+
+  it("orders by what people write, not alphabetically", () => {
+    // Both are one edit away; the corpus decides, and the alphabet does not.
+    const list = suggest(dictionary, "ياخشا", { corrections });
+    expect(list[0]).toBe("ياخشى");
+  });
+});
+
 describe("suggestions", () => {
-  const ask = (word: string) =>
-    suggest(dictionary, word, { alphabet: UYGHUR_LETTERS, corrections });
+  const ask = (word: string) => suggest(dictionary, word, { corrections });
 
   it("puts the hand-built correction first for mistakes people actually make", () => {
-    // Pairs taken from the desktop's own corrections table.
     expect(ask("كانداق")[0]).toBe("قانداق");
     expect(ask("يۇراك")[0]).toBe("يۈرەك");
     expect(ask("كەراك")[0]).toBe("كېرەك");
@@ -94,13 +180,10 @@ describe("suggestions", () => {
   });
 
   it("recovers a word that is one edit away, with no table entry", () => {
-    // Vowel slips: the commonest kind of Uyghur typo, and none of these are
-    // in the corrections table — the edit search alone has to find them.
     expect(corrections.has("ئۇيغور")).toBe(false);
     expect(ask("ئۇيغور")).toContain("ئۇيغۇر");
     expect(ask("خەزىنا")).toContain("خەزىنە");
     expect(ask("ئوقۇغوچى")).toContain("ئوقۇغۇچى");
-    // A dropped letter, and a wrong final consonant.
     expect(ask("كتاب")).toContain("كىتاب");
     expect(ask("كىتاۋ")).toContain("كىتاب");
   });
@@ -109,19 +192,26 @@ describe("suggestions", () => {
     expect(ask("كىابت")).toContain("كىتاب");
   });
 
+  it("corrects a misspelled stem and puts the suffix back", () => {
+    expect(ask("قالدورمىغۇدەك")[0]).toBe("قالدۇرمىغۇدەك");
+  });
+
+  it("corrects a misspelled suffix and leaves the stem alone", () => {
+    expect(ask("تەۋەلىنگەن")[0]).toBe("تەۋەلەنگەن");
+  });
+
   it("returns nothing rather than noise for a word with no near neighbour", () => {
     expect(ask("ققققققققققق")).toEqual([]);
   });
 
-  it("caps the list so the panel cannot be flooded", () => {
+  it("caps the list so the popup cannot be flooded", () => {
     expect(ask("ياخشا").length).toBeLessThanOrEqual(10);
   });
 
   it("answers a typo fast enough to feel instant", () => {
     const started = performance.now();
     ask("ئۇيغور");
-    const elapsed = performance.now() - started;
-    expect(elapsed).toBeLessThan(500);
+    expect(performance.now() - started).toBeLessThan(50);
   });
 });
 
@@ -152,8 +242,7 @@ describe("dictionary loader", () => {
   function installCaches() {
     const store = new Map<string, string>();
     const cache = {
-      match: async (url: string) =>
-        store.has(url) ? new Response(store.get(url)) : undefined,
+      match: async (url: string) => (store.has(url) ? new Response(store.get(url)) : undefined),
       put: async (url: string, response: Response) => {
         store.set(url, await response.text());
       },
@@ -180,6 +269,15 @@ describe("dictionary loader", () => {
     expect(calls).toBe(1);
   });
 
+  it("reads the dictionary as bytes, not as text", async () => {
+    installCaches();
+    // Byte 0xFF is not valid UTF-8; reading this as text would replace it and
+    // destroy the word it belongs to, which is exactly the bug to prevent.
+    globalThis.fetch = (async () => new Response(new Uint8Array([1, 2, 0xff]))) as typeof fetch;
+    const { bytes } = await fetchCachedBytes("/d.bin", CACHE);
+    expect(new Uint8Array(bytes)).toEqual(new Uint8Array([1, 2, 0xff]));
+  });
+
   it("still loads when the browser refuses Cache Storage", async () => {
     (globalThis as { caches?: unknown }).caches = {
       open: async () => {
@@ -196,9 +294,7 @@ describe("dictionary loader", () => {
 
   it("reports a missing artifact instead of pretending it loaded", async () => {
     installCaches();
-    globalThis.fetch = (async () =>
-      new Response("not found", { status: 404 })) as typeof fetch;
-
+    globalThis.fetch = (async () => new Response("not found", { status: 404 })) as typeof fetch;
     await expect(fetchCached("/d.txt", CACHE)).rejects.toThrow("404");
   });
 });

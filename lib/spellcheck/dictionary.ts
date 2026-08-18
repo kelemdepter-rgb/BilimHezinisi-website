@@ -1,13 +1,24 @@
 /**
- * Uyghur spellcheck core, ported from the desktop's spellcheck.js / symspell.js.
+ * Uyghur spellcheck storage and lookup, ported from the desktop's
+ * spellcheck.js / symspell.js.
  *
  * The desktop precomputes every delete-variant of all 441,322 words up front —
  * SymSpell's symmetric-delete index. Measured on that dictionary it costs
  * 409 MB of heap and 10.4 s to build, which no phone survives, so the index is
- * not precomputed here. The words live in one packed string with an offset
- * table (10 MB, built in 24 ms); membership is a binary search, and the edit
- * variants are generated outward from the typed word only when someone asks
- * for suggestions. Same idea, same ranking, without the index.
+ * not precomputed here. The words live in one packed buffer with an offset
+ * table; membership is a binary search, and the edit variants are generated
+ * outward from the typed word only when someone asks for suggestions. Same
+ * idea, same answers, without the index.
+ *
+ * WHY BYTES AND NOT A STRING. The dictionary contains exactly 34 distinct
+ * characters — 33 Uyghur letters and the hyphen that joins compounds — counted
+ * from the artifact, not assumed. So one byte per character is not a lossy
+ * compromise, it is exact, and it removes a doubling that was being paid twice:
+ * once on the wire, where UTF-8 spends two bytes on every Uyghur letter, and
+ * again in memory, where a JavaScript string spends two more. The codes are
+ * assigned in Unicode code-point order, which is what keeps a byte-wise
+ * comparison identical to a string comparison and lets the binary search below
+ * stay exactly as it was.
  *
  * Everything in this file is pure so it can be tested without a Worker.
  */
@@ -25,6 +36,40 @@ export const WORD_PATTERN = new RegExp(
 );
 
 const ONLY_UYGHUR = new RegExp(`^[${UYGHUR_LETTERS}'’-]+$`, "u");
+
+/**
+ * The 34 characters the dictionary holds, in code-point order.
+ *
+ * Kept in step with scripts/lib/uyghur.mjs by tests/unit/script-parity.test.ts —
+ * the build script and the browser must agree on this table exactly, or a word
+ * encoded by one would decode to something else in the other.
+ */
+export const DICT_ALPHABET = "-ئابتجخدرزسشغفقكلمنوىيپچژڭگھۆۇۈۋېە";
+
+/** Codes run 1..34, leaving 0 free to terminate an entry in the artifact. */
+const CODE_OF = new Uint8Array(0x700);
+for (let index = 0; index < DICT_ALPHABET.length; index++) {
+  CODE_OF[DICT_ALPHABET.charCodeAt(index)] = index + 1;
+}
+
+/** The word as dictionary codes, or null when it holds a character the dictionary cannot. */
+export function encodeWord(word: string): Uint8Array | null {
+  const out = new Uint8Array(word.length);
+  for (let index = 0; index < word.length; index++) {
+    const code = CODE_OF[word.charCodeAt(index)];
+    // Not an error: `isCheckable` lets an apostrophe through, and no dictionary
+    // word contains one, so such a word is simply absent rather than malformed.
+    if (code === 0) return null;
+    out[index] = code;
+  }
+  return out;
+}
+
+export function decodeWord(bytes: Uint8Array, start: number, end: number): string {
+  let out = "";
+  for (let index = start; index < end; index++) out += DICT_ALPHABET[bytes[index] - 1];
+  return out;
+}
 
 /** The desktop's normalizeForLookup. */
 export function normalizeForLookup(word: string): string {
@@ -60,131 +105,139 @@ export function tokenize(text: string): { word: string; start: number; end: numb
   return out;
 }
 
-/** '0' + shared-prefix length, matching scripts/build-spelldict.mjs. */
-const PREFIX_BASE = 48;
-
 /**
- * The dictionary in memory: one packed string plus where each word starts.
- * A Set of 441k strings costs several times this and gives nothing back.
+ * The dictionary in memory: the words as bytes, where each one starts, and one
+ * byte of what we know about each.
+ *
+ * `flags` packs two things the ranking needs into the byte the artifact already
+ * spends per word: the low four bits are the corpus frequency bucket, and the
+ * top bit marks a stem the dictionary itself inflects widely. Both are needed
+ * per word and neither justifies a second table.
  */
 export type PackedDictionary = {
-  packed: string;
+  bytes: Uint8Array;
   offsets: Uint32Array;
+  flags: Uint8Array | null;
   size: number;
 };
 
+const MAGIC = 0x32444842; // "BHD2" little-endian
+const HEADER_BYTES = 16;
+const FLAG_FREQUENCIES = 1;
+
+/** Low four bits of the per-word byte: log2 of how often the corpus saw it. */
+export const FREQUENCY_MASK = 0x0f;
+/** Top bit: the dictionary gives this stem 150+ inflected forms. */
+export const PRODUCTIVE_STEM = 0x80;
+
 /**
- * Expand the front-coded artifact into the packed form the lookups use.
+ * Expand the artifact into the form lookups use.
  *
- * Three things here are deliberate, all measured on the real 441,322-word
- * artifact on this machine:
- *
- * - Joining beats `+=`. Both produce the same string, but `+=` leaves a rope
- *   of 441,322 ConsString nodes on the heap until something forces it flat:
- *   36.4 MB retained against 9.7 MB, and lookups on the rope run 2.4x slower.
- * - The input is scanned in place rather than `encoded.split("\n")`, which
- *   allocates 441,322 substring objects: 141 ms down to 91 ms.
- * - The words are joined in blocks, not all at once. Holding every word as a
- *   separate string until the end is what actually drives peak memory, and a
- *   phone has to survive the peak, not the average: 48.2 MB down to 32.0 MB,
- *   and 91 ms down to 69 ms.
+ * The front coding is undone into a flat byte buffer sized in one allocation —
+ * the coded length bounds the expanded length only loosely, so the buffer grows
+ * geometrically rather than being guessed exactly. No JavaScript strings are
+ * built along the way, which is the whole point: the previous text format
+ * created 441,322 of them and peaked at 48 MB doing it.
  */
-const JOIN_BLOCK = 4096;
-
-export function unpackDictionary(encoded: string): PackedDictionary {
-  // Sized generously and trimmed at the end: growing a Uint32Array means
-  // copying it, and one over-allocation is cheaper than several copies.
-  let offsets = new Uint32Array(1 << 19);
-  const blocks: string[] = [];
-  let pending: string[] = [];
-
-  let previous = "";
-  let position = 0;
-  let count = 0;
-  let cursor = 0;
-
-  const flush = () => {
-    if (pending.length === 0) return;
-    blocks.push(pending.join(""));
-    pending = [];
-  };
-
-  while (cursor < encoded.length) {
-    let end = encoded.indexOf("\n", cursor);
-    if (end < 0) end = encoded.length;
-    if (end === cursor) {
-      cursor = end + 1;
-      continue;
-    }
-
-    const shared = encoded.charCodeAt(cursor) - PREFIX_BASE;
-    const word = previous.slice(0, shared) + encoded.slice(cursor + 1, end);
-
-    if (count + 1 >= offsets.length) {
-      const grown = new Uint32Array(offsets.length * 2);
-      grown.set(offsets);
-      offsets = grown;
-    }
-    offsets[count] = position;
-    // Every word contributes itself plus the one separator that follows it.
-    position += word.length + 1;
-    count++;
-
-    // The separator is carried inside the block, so the blocks concatenate
-    // directly and the last word ends with one too — which is what keeps
-    // wordAt's `end - 1` valid all the way to the end of the dictionary.
-    pending.push(word, "\n");
-    if (pending.length >= JOIN_BLOCK) flush();
-
-    previous = word;
-    cursor = end + 1;
+export function unpackDictionary(buffer: ArrayBuffer): PackedDictionary {
+  const source = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  if (view.getUint32(0, true) !== MAGIC) {
+    throw new Error("Not a BHD2 dictionary — rebuild with scripts/build-spelldict.mjs");
   }
-  flush();
+  const size = view.getUint32(4, true);
+  const codedLength = view.getUint32(8, true);
+  const hasFrequencies = (view.getUint32(12, true) & FLAG_FREQUENCIES) !== 0;
 
-  offsets[count] = position;
-  return { packed: blocks.join(""), offsets: offsets.slice(0, count + 1), size: count };
+  const offsets = new Uint32Array(size + 1);
+  let bytes = new Uint8Array(codedLength * 2);
+  let written = 0;
+  let count = 0;
+  let cursor = HEADER_BYTES;
+  const codedEnd = HEADER_BYTES + codedLength;
+  let previousStart = 0;
+
+  while (cursor < codedEnd) {
+    const shared = source[cursor++];
+    // Worst case this entry adds `shared` carried bytes plus the rest of the
+    // coded block; doubling until it fits costs at most one extra copy.
+    while (written + shared + (codedEnd - cursor) > bytes.length) {
+      const grown = new Uint8Array(bytes.length * 2);
+      grown.set(bytes.subarray(0, written));
+      bytes = grown;
+    }
+    offsets[count] = written;
+    for (let index = 0; index < shared; index++) bytes[written++] = bytes[previousStart + index];
+    while (source[cursor] !== 0) bytes[written++] = source[cursor++];
+    cursor++;
+    previousStart = offsets[count];
+    count++;
+  }
+  offsets[count] = written;
+
+  const flags = hasFrequencies ? source.subarray(codedEnd, codedEnd + size) : null;
+  return { bytes: bytes.subarray(0, written), offsets, flags, size: count };
 }
 
-/** The word at `index`, without its separator. */
+/** The word at `index`, as a string. Only for display and tests — lookups stay in bytes. */
 export function wordAt(dictionary: PackedDictionary, index: number): string {
-  return dictionary.packed.slice(dictionary.offsets[index], dictionary.offsets[index + 1] - 1);
+  return decodeWord(dictionary.bytes, dictionary.offsets[index], dictionary.offsets[index + 1]);
 }
 
-/** Binary search over the sorted packed dictionary. */
-export function hasWord(dictionary: PackedDictionary, word: string): boolean {
+/**
+ * Where this word sits in the dictionary, or -1.
+ *
+ * Byte-wise comparison over a code-point-ordered alphabet is the same ordering
+ * the artifact is sorted in, so this is the same binary search it always was.
+ */
+export function indexOf(dictionary: PackedDictionary, word: string): number {
+  const needle = encodeWord(word);
+  if (!needle) return -1;
+
   let low = 0;
   let high = dictionary.size - 1;
   while (low <= high) {
     const mid = (low + high) >> 1;
-    const candidate = wordAt(dictionary, mid);
-    if (candidate === word) return true;
-    if (candidate < word) low = mid + 1;
+    const start = dictionary.offsets[mid];
+    const end = dictionary.offsets[mid + 1];
+    const length = end - start;
+    const shortest = length < needle.length ? length : needle.length;
+
+    let comparison = 0;
+    for (let index = 0; index < shortest; index++) {
+      const difference = dictionary.bytes[start + index] - needle[index];
+      if (difference !== 0) {
+        comparison = difference;
+        break;
+      }
+    }
+    if (comparison === 0) comparison = length - needle.length;
+
+    if (comparison === 0) return mid;
+    if (comparison < 0) low = mid + 1;
     else high = mid - 1;
   }
-  return false;
+  return -1;
 }
 
-/**
- * Is this word spelled correctly? Follows the desktop's isCorrect, including
- * its compound rule: «foo-bar» is fine when both halves are words in their own
- * right.
- */
-export function isCorrect(
-  dictionary: PackedDictionary,
-  word: string,
-  personal: ReadonlySet<string> = new Set(),
-): boolean {
-  const normalized = normalizeForLookup(word);
-  if (!isCheckable(normalized)) return true;
-  if (hasWord(dictionary, normalized) || personal.has(normalized)) return true;
+export function hasWord(dictionary: PackedDictionary, word: string): boolean {
+  return indexOf(dictionary, word) >= 0;
+}
 
-  if (normalized.includes("-")) {
-    const parts = normalized.split("-").map((part) => part.trim()).filter(Boolean);
-    if (parts.length >= 2 && parts.every((part) => hasWord(dictionary, part) || personal.has(part))) {
-      return true;
-    }
-  }
-  return false;
+/** How often the published library uses this word, as log2 buckets. 0 means never. */
+export function frequencyOf(dictionary: PackedDictionary, word: string): number {
+  const index = indexOf(dictionary, word);
+  if (index < 0 || !dictionary.flags) return 0;
+  return dictionary.flags[index] & FREQUENCY_MASK;
+}
+
+/** Is this a word the library uses, or a stem the dictionary inflects widely? */
+export function isKnownStem(dictionary: PackedDictionary, word: string): boolean {
+  const index = indexOf(dictionary, word);
+  if (index < 0) return false;
+  if (!dictionary.flags) return true;
+  const flag = dictionary.flags[index];
+  return (flag & FREQUENCY_MASK) > 0 || (flag & PRODUCTIVE_STEM) !== 0;
 }
 
 /** Every string one edit away — deletions, transpositions, substitutions, insertions. */
@@ -264,62 +317,3 @@ export function editDistance(a: string, b: string, max: number): number {
 }
 
 export const MAX_SUGGESTIONS = 10;
-
-/**
- * Ranked corrections for one word, in the desktop's order: the hand-built
- * corrections table first (it encodes mistakes people actually make), then
- * dictionary candidates by edit distance.
- *
- * One edit is tried first and answers almost every real typo in about a
- * millisecond; two edits are only explored when that found nothing, because
- * the candidate set grows about two hundredfold.
- */
-export function suggest(
-  dictionary: PackedDictionary,
-  word: string,
-  options: { alphabet: string; corrections?: ReadonlyMap<string, string>; limit?: number } = {
-    alphabet: UYGHUR_LETTERS,
-  },
-): string[] {
-  const limit = options.limit ?? MAX_SUGGESTIONS;
-  const normalized = normalizeForLookup(word);
-  if (!normalized || normalized.length < 2) return [];
-
-  const seen = new Set<string>();
-  const out: string[] = [];
-
-  const known = options.corrections?.get(normalized);
-  if (known) {
-    seen.add(known);
-    out.push(known);
-  }
-
-  const ranked: { term: string; distance: number }[] = [];
-  const collect = (candidates: Iterable<string>, distance: number) => {
-    for (const candidate of candidates) {
-      if (candidate === normalized || seen.has(candidate)) continue;
-      if (!hasWord(dictionary, candidate)) continue;
-      seen.add(candidate);
-      ranked.push({ term: candidate, distance });
-    }
-  };
-
-  const once = editsOnce(normalized, options.alphabet);
-  collect(once, 1);
-
-  if (ranked.length === 0) {
-    const twice = new Set<string>();
-    for (const candidate of once) {
-      for (const further of editsOnce(candidate, options.alphabet)) twice.add(further);
-    }
-    collect(twice, 2);
-  }
-
-  // Shorter edit distance first, then alphabetically so the order is stable.
-  ranked.sort((a, b) => a.distance - b.distance || (a.term < b.term ? -1 : 1));
-  for (const item of ranked) {
-    if (out.length >= limit) break;
-    out.push(item.term);
-  }
-  return out;
-}

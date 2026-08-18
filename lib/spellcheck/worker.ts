@@ -7,14 +7,9 @@
  * anything real. On the main thread that would show up as dropped keystrokes,
  * which is the one thing a writing surface may never do.
  */
-import {
-  isCorrect,
-  suggest,
-  unpackDictionary,
-  UYGHUR_LETTERS,
-  type PackedDictionary,
-} from "@/lib/spellcheck/dictionary";
-import { fetchCached } from "@/lib/spellcheck/fetch-cached";
+import { unpackDictionary, UYGHUR_LETTERS, type PackedDictionary } from "@/lib/spellcheck/dictionary";
+import { isCorrect, suggest } from "@/lib/spellcheck/check";
+import { fetchCached, fetchCachedBytes } from "@/lib/spellcheck/fetch-cached";
 import { CACHE_NAME, type FromWorker, type ToWorker } from "@/lib/spellcheck/protocol";
 
 declare const self: DedicatedWorkerGlobalScope;
@@ -31,12 +26,12 @@ async function init(dictUrl: string, correctionsUrl: string) {
   const started = Date.now();
   try {
     const [dict, corr] = await Promise.all([
-      fetchCached(dictUrl, CACHE_NAME),
+      fetchCachedBytes(dictUrl, CACHE_NAME),
       // Corrections are an optimisation, not a requirement: without them the
       // edit search still answers, just without the hand-built pairs first.
       fetchCached(correctionsUrl, CACHE_NAME).catch(() => ({ text: "{}", fromCache: false })),
     ]);
-    dictionary = unpackDictionary(dict.text);
+    dictionary = unpackDictionary(dict.bytes);
     corrections = new Map(Object.entries(JSON.parse(corr.text) as Record<string, string>));
     post({
       type: "ready",

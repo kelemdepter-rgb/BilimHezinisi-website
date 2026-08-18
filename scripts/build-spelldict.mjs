@@ -3,49 +3,61 @@
  *
  * Run:  node scripts/build-spelldict.mjs
  *
- * Source (READ-ONLY, from the desktop app):
- *   ../bilim hezinisi/bilim hezinisi pc/assets/spellcheck/uyghur_words.txt
- *   ../bilim hezinisi/bilim hezinisi pc/assets/spellcheck/uyghur_corrections.json
+ * Sources:
+ *   ../bilim hezinisi/bilim hezinisi pc/assets/spellcheck/  (READ-ONLY)
+ *   data/spellcheck/vocabulary.txt        corpus admissions, reviewable
+ *   spellcheck-data/frequencies.tsv       from build-word-frequencies.mjs
+ *   spellcheck-data/productive-stems.txt  from build-suffixes.mjs
  *
  * Output:
- *   public/spellcheck/uyghur-dict.txt   front-coded word list
+ *   public/spellcheck/uyghur-dict.bin   words, front-coded, one byte per letter
  *   public/spellcheck/corrections.json  wrong → correct pairs
  *
- * 441,322 words are 9.4 MB as plain text, which no phone should download. The
- * list is sorted and Uyghur words share long prefixes (ئائورتا / ئائورتىنىڭ),
- * so each line stores how many characters it shares with the line before it
- * and then only the rest:
+ * THE ENCODING. The words use exactly 34 distinct characters — 33 Uyghur
+ * letters and the hyphen that joins compounds — counted from the list itself,
+ * so one byte each is exact rather than a compromise. The previous format
+ * stored them as UTF-8 text, where every Uyghur letter costs two bytes, and the
+ * browser then held them in a JavaScript string, where each costs two more;
+ * both doublings go away together. Front coding survives the change and gets a
+ * little better at it, because the shared-prefix length is now a whole byte
+ * instead of a character offset from '0' that capped it at 74.
  *
- *   ئائورتا          →  0ئائورتا
- *   ئائورتىنىڭ       →  5ىنىڭ
+ * PROVING IT IS LOSSLESS. Any character outside the table is a build error, not
+ * a dropped word. Then the finished buffer is decoded back and compared to the
+ * input word for word — not a sample, all 443,426 of them — and the build
+ * refuses to write if a single one differs or if the count moved. An encoding
+ * change that silently corrupted one word in a hundred thousand would be
+ * invisible in every other measurement in this project, so it is checked here.
  *
- * That alone takes it to 2.7 MB. Vercel's CDN then compresses it on the fly —
- * measured against the deployment, at brotli quality 3, which is NOT what
- * `brotli -q 11` gives locally: 795,424 bytes served against 434,230 packed
- * here. The number that matters to a phone is the served one. It is downloaded
- * once per device (the worker keeps it in Cache Storage) and only by someone
- * who opens the notebook and switches spellcheck on.
- *
- * The shared-prefix length is written as a single character offset from '0',
- * which caps it at 74; longer shared prefixes simply start over, costing a few
- * bytes rather than needing a wider field.
+ * ONE BYTE PER WORD MORE. The artifact carries a flags byte alongside each
+ * word: the low four bits are how often the published library uses it (log2
+ * bucket), and the top bit marks a stem the dictionary inflects widely. The
+ * ranking needs the first to stop breaking ties alphabetically and the
+ * morphology needs the second to refuse obscure stems. Together they cost
+ * 21 KB over the wire, which is a twentieth of what the words themselves cost.
  */
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { gzipSync, brotliCompressSync, constants } from "node:zlib";
+import { packDictionary, unpackDictionary } from "./lib/codec.mjs";
+import { allWords, baseWords, desktopAssets, repoRoot } from "./lib/wordlist.mjs";
+import { dataDir } from "./lib/corpus.mjs";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const desktop = resolve(repoRoot, "..", "bilim hezinisi", "bilim hezinisi pc", "assets", "spellcheck");
 const outDir = join(repoRoot, "public", "spellcheck");
 
-/** '0' + n, so the prefix length is one character. */
-export const PREFIX_BASE = 48;
-export const MAX_SHARED_PREFIX = 74;
+/** Top bit of the flags byte; mirrors PRODUCTIVE_STEM in lib/spellcheck/dictionary.ts. */
+const PRODUCTIVE_STEM = 0x80;
 
-/** Front-code a sorted word list. Exported so the decoder can be tested against it. */
-export function frontCode(sortedWords) {
+function readTable(name, parse) {
+  const path = join(dataDir, name);
+  if (!existsSync(path)) return null;
+  return parse(readFileSync(path, "utf-8"));
+}
+
+/** The old text format, kept only to measure what the change actually saved. */
+function frontCodeAsText(sortedWords) {
   const lines = [];
   let previous = "";
   for (const word of sortedWords) {
@@ -54,90 +66,105 @@ export function frontCode(sortedWords) {
       shared < previous.length &&
       shared < word.length &&
       previous[shared] === word[shared] &&
-      shared < MAX_SHARED_PREFIX
+      shared < 74
     ) {
       shared++;
     }
-    lines.push(String.fromCharCode(PREFIX_BASE + shared) + word.slice(shared));
+    lines.push(String.fromCharCode(48 + shared) + word.slice(shared));
     previous = word;
   }
   return lines.join("\n");
 }
 
-/** The inverse, kept here so a unit test can prove the round trip. */
-export function frontDecode(encoded) {
-  const words = [];
-  let previous = "";
-  for (const line of encoded.split("\n")) {
-    if (!line) continue;
-    const shared = line.charCodeAt(0) - PREFIX_BASE;
-    const word = previous.slice(0, shared) + line.slice(1);
-    words.push(word);
-    previous = word;
-  }
-  return words;
-}
+const served = (buffer) =>
+  brotliCompressSync(Buffer.from(buffer), { params: { [constants.BROTLI_PARAM_QUALITY]: 3 } }).length;
 
 async function main() {
-  const wordsPath = join(desktop, "uyghur_words.txt");
-  const correctionsPath = join(desktop, "uyghur_corrections.json");
+  const words = allWords();
+  const base = baseWords();
 
-  if (!existsSync(wordsPath)) {
-    console.error(
-      `\nThe desktop dictionary was not found at\n  ${wordsPath}\n` +
-        "This script reads the desktop app's assets and never writes to them.\n",
-    );
-    process.exit(1);
+  const frequencies = readTable("frequencies.tsv", (text) => {
+    const table = new Map();
+    for (const line of text.split("\n")) {
+      if (!line || line.startsWith("#")) continue;
+      const [word, bucket] = line.split("\t");
+      table.set(word, Number(bucket));
+    }
+    return table;
+  });
+  const productive = readTable("productive-stems.txt", (text) => new Set(text.split("\n").filter(Boolean)));
+
+  if (!frequencies) {
+    console.warn("No frequencies.tsv — run scripts/build-word-frequencies.mjs first.");
+  }
+  if (!productive) {
+    console.warn("No productive-stems.txt — run scripts/build-suffixes.mjs first.");
   }
 
-  const raw = await readFile(wordsPath, "utf-8");
-  // Sorted and deduplicated: front-coding depends on the order, and duplicates
-  // would both waste space and skew the suggestion ranking.
-  const words = [...new Set(raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))].sort();
+  const flags = new Uint8Array(words.length);
+  let withFrequency = 0;
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index];
+    const bucket = frequencies?.get(word) ?? 0;
+    if (bucket > 0) withFrequency++;
+    flags[index] = Math.min(bucket, 15) | (productive?.has(word) ? PRODUCTIVE_STEM : 0);
+  }
 
-  const encoded = frontCode(words);
-  const roundTrip = frontDecode(encoded);
-  if (roundTrip.length !== words.length) {
-    console.error(`Round trip lost words: ${words.length} → ${roundTrip.length}`);
+  const packed = packDictionary(words, flags);
+
+  // ── the lossless check, on every word ────────────────────────────────────
+  const roundTrip = unpackDictionary(packed);
+  if (roundTrip.words.length !== words.length) {
+    console.error(`Round trip changed the count: ${words.length} → ${roundTrip.words.length}`);
     process.exit(1);
   }
-  for (let i = 0; i < words.length; i++) {
-    if (roundTrip[i] !== words[i]) {
-      console.error(`Round trip changed a word at ${i}: ${words[i]} → ${roundTrip[i]}`);
+  for (let index = 0; index < words.length; index++) {
+    if (roundTrip.words[index] !== words[index]) {
+      console.error(`Round trip changed word ${index}: ${words[index]} → ${roundTrip.words[index]}`);
+      process.exit(1);
+    }
+  }
+  for (let index = 0; index < words.length; index++) {
+    if (roundTrip.frequencies[index] !== flags[index]) {
+      console.error(`Round trip changed the flags of ${words[index]}`);
       process.exit(1);
     }
   }
 
-  const corrections = JSON.parse(await readFile(correctionsPath, "utf-8"));
+  const corrections = JSON.parse(await readFile(join(desktopAssets, "uyghur_corrections.json"), "utf-8"));
 
   await mkdir(outDir, { recursive: true });
-  await writeFile(join(outDir, "uyghur-dict.txt"), encoded, "utf-8");
+  await writeFile(join(outDir, "uyghur-dict.bin"), packed);
   await writeFile(join(outDir, "corrections.json"), JSON.stringify(corrections), "utf-8");
 
-  const plain = Buffer.byteLength(words.join("\n"), "utf-8");
-  const coded = Buffer.byteLength(encoded, "utf-8");
-  // Quality 3 is what Vercel actually applies; quality 11 is shown only so the
-  // gap is visible rather than surprising.
-  const served = brotliCompressSync(Buffer.from(encoded, "utf-8"), {
-    params: { [constants.BROTLI_PARAM_QUALITY]: 3 },
-  }).length;
-  const brotli = brotliCompressSync(Buffer.from(encoded, "utf-8"), {
-    params: { [constants.BROTLI_PARAM_QUALITY]: 11 },
-  }).length;
-  const gzip = gzipSync(Buffer.from(encoded, "utf-8"), { level: 9 }).length;
-  const mb = (bytes) => `${(bytes / 1048576).toFixed(2)} MB`;
-  const kb = (bytes) => `${Math.round(bytes / 1024)} KB`;
+  // ── what it cost, like for like ──────────────────────────────────────────
+  const oldText = frontCodeAsText(base);
+  const oldBytes = Buffer.byteLength(oldText, "utf-8");
+  const oldServed = served(Buffer.from(oldText, "utf-8"));
+  const sameListPacked = packDictionary(base, null);
+  const newServed = served(packed);
 
-  console.log(`words:            ${words.length.toLocaleString("en-US")}`);
-  console.log(`corrections:      ${Object.keys(corrections).length.toLocaleString("en-US")}`);
-  console.log(`plain text:       ${mb(plain)}`);
-  console.log(`front-coded:      ${mb(coded)}`);
-  console.log(`  over the wire:  ${kb(served)} as Vercel serves it (brotli q3)`);
-  console.log(`  for reference:  ${kb(brotli)} brotli q11 · ${kb(gzip)} gzip -9`);
-  console.log(`\nWritten to public/spellcheck/. Round trip verified on all ${words.length} words.`);
+  const kb = (bytes) => `${Math.round(bytes / 1024)} KB`;
+  const mb = (bytes) => `${(bytes / 1048576).toFixed(2)} MB`;
+
+  console.log(`words:              ${words.length.toLocaleString("en-US")}`);
+  console.log(`  from the desktop: ${base.length.toLocaleString("en-US")}`);
+  console.log(`  from the library: ${(words.length - base.length).toLocaleString("en-US")}`);
+  console.log(`  with a frequency: ${withFrequency.toLocaleString("en-US")}`);
+  console.log(`corrections:        ${Object.keys(corrections).length.toLocaleString("en-US")}`);
+  console.log();
+  console.log(`SAME ${base.length.toLocaleString("en-US")} WORDS, both encodings:`);
+  console.log(`  text, raw         ${mb(oldBytes)}      served ${kb(oldServed)}`);
+  console.log(`  bytes, raw        ${mb(sameListPacked.length)}      served ${kb(served(sameListPacked))}`);
+  console.log();
+  console.log(`SHIPPED artifact (${words.length.toLocaleString("en-US")} words + flags):`);
+  console.log(`  raw               ${mb(packed.length)}`);
+  console.log(`  served (brotli q3)${kb(newServed).padStart(8)}   <- what a phone downloads`);
+  console.log(`  for reference     ${kb(brotliCompressSync(Buffer.from(packed), { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }).length)} brotli q11 · ${kb(gzipSync(Buffer.from(packed), { level: 9 }).length)} gzip -9`);
+  console.log();
+  console.log(`Round trip verified on all ${words.length.toLocaleString("en-US")} words and their flags.`);
 }
 
-// Only build when run directly; the encoder is imported by tests.
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   await main();
 }

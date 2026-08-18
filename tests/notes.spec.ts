@@ -157,7 +157,7 @@ test.describe("notebook", () => {
     await page.keyboard.type(`بۇ ${MISSPELLING} دېگەن سۆز خاتا.`);
 
     await page.getByTestId("spell-toggle").click();
-    // The dictionary is 777 KB over the wire and unpacks in the worker.
+    // The dictionary is 667 KB over the wire and unpacks in the worker.
     await expect(page.getByTestId("spell-summary")).toBeVisible({ timeout: 90_000 });
 
     // The word is marked in the text itself, not listed in a panel.
@@ -194,6 +194,45 @@ test.describe("notebook", () => {
 
     await deleteNote(page, path);
   });
+
+  /**
+   * The two errors that started this work.
+   *
+   * Neither intended word was in the shipped dictionary, so no edit-distance
+   * search could ever have reached them. They arrive by different routes and
+   * that is the point: «قالدۇرمىغۇدەك» is found by correcting the STEM and
+   * putting the suffix back, «تەۋەلەنگەن» by correcting the SUFFIX and leaving
+   * the stem alone. Asserted through the real UI because the unit tests
+   * exercise the ranking, not the worker, the popup, or the trip between them.
+   */
+  for (const [typed, intended] of [
+    ["تەۋەلىنگەن", "تەۋەلەنگەن"],
+    ["قالدورمىغۇدەك", "قالدۇرمىغۇدەك"],
+  ]) {
+    test(`offers ${intended} first for ${typed}`, async ({ page }) => {
+      const path = await newNote(page);
+      await page.getByTestId("note-body").click();
+      await page.keyboard.type(`بۇ ${typed} دېگەن سۆز.`);
+
+      await page.getByTestId("spell-toggle").click();
+      await expect(page.getByTestId("spell-summary")).toBeVisible({ timeout: 90_000 });
+      await expect.poll(() => markBox(page, typed), { timeout: 30_000 }).not.toBeNull();
+
+      const box = (await markBox(page, typed))!;
+      await page.mouse.click(box.x, box.y);
+      await expect(page.getByTestId("spell-popup")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("spell-suggestion").first()).toHaveText(intended, {
+        timeout: 30_000,
+      });
+
+      // Taking it replaces that word and nothing else.
+      await page.getByTestId("spell-suggestion").first().click();
+      await expect(page.getByTestId("note-body")).toContainText(intended);
+      await expect(page.getByTestId("note-body")).not.toContainText(typed);
+
+      await deleteNote(page, path);
+    });
+  }
 
   test("adding a word to the personal dictionary clears its underline", async ({ page }) => {
     const path = await newNote(page);

@@ -249,6 +249,11 @@ async function main() {
       // inserting ر cheap EVERYWHERE rather than in the places writers do it.
       // «ەن -> ەرن» earns its place precisely because it carries the context.
       const [left, right] = key.split("\t");
+      // An empty TYPED side is a contextless insertion however long the other
+      // side is, so it belongs in the same bin — and it could not be applied
+      // correctly anyway: the ranking indexes rewrites by the character they
+      // start at in the TYPED word, and a rewrite with no typed side has none.
+      if (left.length === 0) return false;
       return [...left].length > 1 || [...right].length > 1;
     })
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));

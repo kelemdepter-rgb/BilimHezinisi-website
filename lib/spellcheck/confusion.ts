@@ -100,13 +100,18 @@ export type Rewrite = { from: string; to: string; cost: number };
 export const REWRITES_BY_HEAD: ReadonlyMap<string, readonly Rewrite[]> = (() => {
   const table = new Map<string, Rewrite[]>();
   for (const [from, to, count] of REWRITES) {
+    // Rewrites are indexed by the character they START AT IN THE TYPED WORD,
+    // so one with no typed side has nowhere to hang and would fire wherever
+    // its intended side happened to begin. The miner drops those; this is the
+    // guard that keeps a regenerated table from reintroducing one quietly.
+    if (from.length === 0) continue;
     // The span this replaces would otherwise cost roughly one per edit; price
     // the whole rewrite as a fraction of that, floored so it stays a discount
     // and never becomes free.
     const span = Math.max(from.length, to.length);
     const discount = count >= 40 ? REWRITE_FLOOR : count >= 15 ? 0.45 : count >= 6 ? 0.55 : 0.65;
     const cost = Math.max(REWRITE_FLOOR, discount) * span;
-    const head = from.length > 0 ? from[0] : to[0];
+    const head = from[0];
     const bucket = table.get(head);
     if (bucket) bucket.push({ from, to, cost });
     else table.set(head, [{ from, to, cost }]);

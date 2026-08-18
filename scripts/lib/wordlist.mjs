@@ -14,6 +14,7 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 import { readVocabulary } from "./vocabulary.mjs";
+import { encodable } from "./uyghur.mjs";
 import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 
@@ -53,10 +54,31 @@ const vocabularyPath = () => join(repoRoot, "data", "spellcheck", "vocabulary.tx
 export function vocabularyWords() {
   const words = [];
   for (const entry of readVocabulary(vocabularyPath())) {
-    if (entry.decision === "admitted") words.push(entry.word);
-    else if (entry.decision === "corrected") words.push(entry.correction);
+    // A dictionary entry is ONE word, and the encoding has no space in it.
+    // A reviewer can legitimately write two — «ۋەياكى» is properly «ۋە ياكى»,
+    // and the corpus joins pairs that Uyghur keeps apart — so those are held
+    // back from the word list here. They are not lost: a two-word correction is
+    // still a perfectly good CORRECTION, offered in the popup and substituted
+    // whole, which is what vocabularyCorrections below keeps.
+    const candidate =
+      entry.decision === "admitted"
+        ? entry.word
+        : entry.decision === "corrected"
+          ? entry.correction
+          : null;
+    if (candidate && encodable(candidate)) words.push(candidate);
   }
   return words;
+}
+
+/** Entries that cannot be dictionary words, so the build can say so out loud. */
+export function multiWordEntries() {
+  const out = [];
+  for (const entry of readVocabulary(vocabularyPath())) {
+    if (entry.decision === "admitted" && !encodable(entry.word)) out.push(entry.word);
+    if (entry.decision === "corrected" && !encodable(entry.correction)) out.push(entry.correction);
+  }
+  return out;
 }
 
 /**

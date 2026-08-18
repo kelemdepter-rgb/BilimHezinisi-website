@@ -39,7 +39,7 @@ beforeAll(() => {
 
 describe("packed dictionary", () => {
   it("unpacks the whole artifact", () => {
-    expect(dictionary.size).toBe(443_450);
+    expect(dictionary.size).toBe(443_039);
     expect(dictionary.flags).not.toBeNull();
   });
 

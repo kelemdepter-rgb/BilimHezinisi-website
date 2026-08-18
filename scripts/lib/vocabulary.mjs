@@ -25,12 +25,24 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 
-/** `word = correction`, with any amount of space, and the counts optional. */
-const CORRECTED = /^(\S+)(?:\s+(\d+)\s+(\d+))?\s*=\s*(\S+)\s*$/;
-/** `word - ` — offered, read, and turned down. */
-const REJECTED = /^(\S+)(?:\s+(\d+)\s+(\d+))?\s*-\s*$/;
-/** `word  times  books` — admitted, the default. */
-const ADMITTED = /^(\S+)(?:\s+(\d+)\s+(\d+))?\s*$/;
+/**
+ * `word  times  books` with an optional decision, where BOTH the word and the
+ * correction may contain spaces.
+ *
+ * That last part is not theoretical. A reviewer reading real text finds forms
+ * the corpus joined that Uyghur writes apart — «ۋەياكى» is properly «ۋە ياكى» —
+ * and writing the correction as two words is the right answer. An earlier
+ * version required a single token on each side and silently skipped those
+ * lines, which is the worst possible failure here: the reviewer's judgement
+ * disappears and nothing says so.
+ *
+ * The counts anchor the parse. `(.+?)` is lazy, so it stops at the first place
+ * two numbers follow, which is exactly where the word ends however many spaces
+ * it contains.
+ */
+const WITH_COUNTS = /^(.+?)\s+(\d+)\s+(\d+)\s*(?:=\s*(.+?)|(-))?\s*$/;
+/** The same without them, so a hand-typed line does not have to carry numbers. */
+const WITHOUT_COUNTS = /^(.+?)\s*(?:=\s*(.+?)|\s(-))\s*$/;
 
 /**
  * One entry, however the owner wrote it.
@@ -45,38 +57,34 @@ export function parseVocabulary(text) {
     const line = raw.replace(/\r$/, "").trim();
     if (!line || line.startsWith("#")) continue;
 
-    let match = CORRECTED.exec(line);
-    if (match) {
+    const counted = WITH_COUNTS.exec(line);
+    if (counted) {
+      const [, word, total, books, correction, rejected] = counted;
       entries.push({
-        word: match[1],
-        total: Number(match[2] ?? 0),
-        books: Number(match[3] ?? 0),
-        decision: "corrected",
-        correction: match[4],
+        word: word.trim(),
+        total: Number(total),
+        books: Number(books),
+        decision: correction ? "corrected" : rejected ? "rejected" : "admitted",
+        correction: correction ? correction.trim() : null,
       });
       continue;
     }
-    match = REJECTED.exec(line);
-    if (match) {
+
+    const bare = WITHOUT_COUNTS.exec(line);
+    if (bare) {
+      const [, word, correction, rejected] = bare;
       entries.push({
-        word: match[1],
-        total: Number(match[2] ?? 0),
-        books: Number(match[3] ?? 0),
-        decision: "rejected",
-        correction: null,
+        word: word.trim(),
+        total: 0,
+        books: 0,
+        decision: correction ? "corrected" : rejected ? "rejected" : "admitted",
+        correction: correction ? correction.trim() : null,
       });
       continue;
     }
-    match = ADMITTED.exec(line);
-    if (match) {
-      entries.push({
-        word: match[1],
-        total: Number(match[2] ?? 0),
-        books: Number(match[3] ?? 0),
-        decision: "admitted",
-        correction: null,
-      });
-    }
+
+    // A plain word on its own, with nothing else on the line.
+    entries.push({ word: line, total: 0, books: 0, decision: "admitted", correction: null });
   }
   return entries;
 }

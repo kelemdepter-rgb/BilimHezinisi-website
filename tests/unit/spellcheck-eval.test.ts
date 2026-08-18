@@ -38,6 +38,7 @@ import { isCorrect, suggest } from "@/lib/spellcheck/check";
 import { accepts, ACCEPT_SUFFIX_COUNT, SUGGEST_SUFFIX_COUNT } from "@/lib/spellcheck/morphology";
 import { CONFUSION_PAIR_COUNT, REWRITE_COUNT } from "@/lib/spellcheck/confusion";
 import { HELD_OUT_PAIRS, TRAINING_PAIRS } from "@/lib/spellcheck/edit-weights.generated";
+import { parseVocabulary } from "../../scripts/lib/vocabulary.mjs";
 
 const read = (relative: string) => readFileSync(fileURLToPath(new URL(relative, import.meta.url)));
 const readText = (relative: string) =>
@@ -56,6 +57,8 @@ let paradigms: { stem: string; harmony: string; forms: { form: string; inDiction
 
 /** Words the vocabulary added, so coverage can be split by mechanism. */
 let vocabulary: Set<string>;
+/** Words the owner read and marked as misspellings, whatever the corpus says. */
+let reviewedWrong: Set<string>;
 
 beforeAll(() => {
   const buffer = read("../../public/spellcheck/uyghur-dict.bin");
@@ -71,11 +74,15 @@ beforeAll(() => {
   positives = lines("../fixtures/spellcheck/positive-words.txt");
   negatives = lines("../fixtures/spellcheck/negative-words.txt").map((line) => line.split("\t")[0]);
   paradigms = JSON.parse(readText("../fixtures/spellcheck/paradigms.json"));
+  // Only the words the review ADMITTED count as "covered by the vocabulary".
+  // A word the owner marked wrong was deliberately kept out, and counting it
+  // here would credit the vocabulary for a word the checker still flags.
+  const reviewEntries = parseVocabulary(readText("../../data/spellcheck/vocabulary.txt"));
   vocabulary = new Set(
-    readText("../../data/spellcheck/vocabulary.txt")
-      .split("\n")
-      .filter((line) => line && !line.startsWith("#"))
-      .map((line) => line.split("\t")[0]),
+    reviewEntries.filter((entry) => entry.decision === "admitted").map((entry) => entry.word),
+  );
+  reviewedWrong = new Set(
+    reviewEntries.filter((entry) => entry.decision !== "admitted").map((entry) => entry.word),
   );
 });
 
@@ -194,6 +201,16 @@ describe("coverage — how often a perfectly good word is underlined", () => {
     let byMorphology = 0;
     let byVocabulary = 0;
     let baselineFlagged = 0;
+    let flaggedAndReallyWrong = 0;
+
+    for (const word of positives) {
+      // The positive set was generated from attestation alone, and the owner
+      // has since read the candidate list and marked some of those words as
+      // misspellings the books simply repeat. Flagging one of those is CORRECT,
+      // so it is counted separately rather than held against the checker. A
+      // person who knows Uyghur outranks a frequency threshold.
+      if (reviewedWrong.has(word) && !isCorrect(dictionary, word)) flaggedAndReallyWrong++;
+    }
 
     for (const word of positives) {
       const listed = hasWord(dictionary, word);
@@ -207,14 +224,21 @@ describe("coverage — how often a perfectly good word is underlined", () => {
     }
 
     const percent = (value: number) => ((value / positives.length) * 100).toFixed(1);
+    // What is left once the words the owner identified as misspellings are not
+    // counted against the checker for catching them.
+    const genuine = flagged - flaggedAndReallyWrong;
+    const genuinePercent = ((genuine / (positives.length - flaggedAndReallyWrong)) * 100).toFixed(1);
+
     console.log(
       `\n  ${positives.length} words attested >=5x across >=2 published books\n` +
         `  wrongly flagged BEFORE  ${baselineFlagged}  (${percent(baselineFlagged)}%)\n` +
         `  wrongly flagged AFTER   ${flagged}  (${percent(flagged)}%)\n` +
+        `    of those, correctly flagged — the owner marked them wrong: ${flaggedAndReallyWrong}\n` +
+        `    genuinely wrongly flagged: ${genuine}  (${genuinePercent}%)  <- the honest number\n` +
         `  recovered by morphology ${byMorphology}  (${percent(byMorphology)}%)  <- generalises\n` +
         `  recovered by vocabulary ${byVocabulary}  (${percent(byVocabulary)}%)  <- covered by construction`,
     );
-    expect(flagged).toBeLessThan(baselineFlagged);
+    expect(genuine).toBeLessThan(baselineFlagged);
   });
 });
 

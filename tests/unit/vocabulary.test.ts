@@ -46,9 +46,34 @@ describe("reading a reviewed list", () => {
     ]);
   });
 
+  it("holds a word or a correction that is two words", () => {
+    // Not theoretical: the corpus joins forms Uyghur writes apart, and a
+    // reviewer correcting «ۋەياكى» to «ۋە ياكى» is right about the language.
+    // An earlier parser required one token a side and silently skipped these,
+    // which is the worst failure available here — the judgement disappears and
+    // nothing says so.
+    const entries = parseVocabulary(
+      [
+        "ۋەياكى\t133\t15\t= ۋە ياكى",
+        "دەپ بەرگەنىدى\t8\t5",
+        "يىلبويى\t10\t2\t= يىل بويى",
+      ].join("\n"),
+    );
+    expect(entries).toEqual([
+      { word: "ۋەياكى", total: 133, books: 15, decision: "corrected", correction: "ۋە ياكى" },
+      { word: "دەپ بەرگەنىدى", total: 8, books: 5, decision: "admitted", correction: null },
+      { word: "يىلبويى", total: 10, books: 2, decision: "corrected", correction: "يىل بويى" },
+    ]);
+  });
+
   it("survives a round trip through the file format", () => {
     const entries = parseVocabulary(
-      ["ئەلەيھى\t20988\t15", "رسول\t1162\t15\t= رەسۇل", "نىڭ\t3962\t15\t-"].join("\n"),
+      [
+        "ئەلەيھى\t20988\t15",
+        "رسول\t1162\t15\t= رەسۇل",
+        "نىڭ\t3962\t15\t-",
+        "ۋەياكى\t133\t15\t= ۋە ياكى",
+      ].join("\n"),
     );
     expect(parseVocabulary(formatVocabulary(entries, "test"))).toEqual(entries);
   });

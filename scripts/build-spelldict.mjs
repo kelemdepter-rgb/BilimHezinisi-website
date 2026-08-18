@@ -42,7 +42,14 @@ import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 import { gzipSync, brotliCompressSync, constants } from "node:zlib";
 import { packDictionary, unpackDictionary } from "./lib/codec.mjs";
-import { allWords, baseWords, desktopAssets, repoRoot, vocabularyCorrections } from "./lib/wordlist.mjs";
+import {
+  allWords,
+  baseWords,
+  desktopAssets,
+  multiWordEntries,
+  repoRoot,
+  vocabularyCorrections,
+} from "./lib/wordlist.mjs";
 import { dataDir } from "./lib/corpus.mjs";
 
 const outDir = join(repoRoot, "public", "spellcheck");
@@ -157,6 +164,18 @@ async function main() {
     console.warn(
       `\nSkipped ${collisions.length} reviewed correction(s) already in the held-out\n` +
         `evaluation set, so the measurement stays honest: ${collisions.join(", ")}\n`,
+    );
+  }
+
+  // A dictionary entry is one word. A reviewer can rightly write two — the
+  // corpus joins forms Uyghur keeps apart — so say what happened to them rather
+  // than dropping them quietly.
+  const phrases = multiWordEntries();
+  if (phrases.length > 0) {
+    console.log(
+      `\n${phrases.length} reviewed entries are more than one word. They are offered as` +
+        `\ncorrections but not added to the dictionary, which holds single words only:` +
+        `\n  ${phrases.join(", ")}`,
     );
   }
 

@@ -221,9 +221,14 @@ test.describe("notebook", () => {
       const box = (await markBox(page, typed))!;
       await page.mouse.click(box.x, box.y);
       await expect(page.getByTestId("spell-popup")).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId("spell-suggestion").first()).toHaveText(intended, {
-        timeout: 30_000,
-      });
+
+      // The word lives in its own span; the row also carries the «ئەڭ يېقىن»
+      // badge, which the popup only renders on the top-ranked suggestion. Both
+      // are asserted: the first one for the word, the second because it is what
+      // proves the ranking put it first rather than merely somewhere in view.
+      const top = page.getByTestId("spell-suggestion").first();
+      await expect(top.locator("span").first()).toHaveText(intended, { timeout: 30_000 });
+      await expect(top).toContainText("ئەڭ يېقىن");
 
       // Taking it replaces that word and nothing else.
       await page.getByTestId("spell-suggestion").first().click();

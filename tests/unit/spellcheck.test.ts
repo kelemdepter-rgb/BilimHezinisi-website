@@ -16,7 +16,13 @@ import {
   type PackedDictionary,
 } from "@/lib/spellcheck/dictionary";
 import { isCorrect, suggest } from "@/lib/spellcheck/check";
-import { accepts, harmonyOf, nearestSuffixes, splits } from "@/lib/spellcheck/morphology";
+import {
+  accepts,
+  harmonyOf,
+  isConfusionRepair,
+  nearestSuffixes,
+  splits,
+} from "@/lib/spellcheck/morphology";
 import { weightedDistance } from "@/lib/spellcheck/rank";
 import { substitutionCost } from "@/lib/spellcheck/confusion";
 import { fetchCached, fetchCachedBytes } from "@/lib/spellcheck/fetch-cached";
@@ -212,6 +218,73 @@ describe("suggestions", () => {
     const started = performance.now();
     ask("ئۇيغور");
     expect(performance.now() - started).toBeLessThan(50);
+  });
+});
+
+/**
+ * The checker must never invent a word.
+ *
+ * The morphology path BUILDS a string — stem plus suffix — rather than finding
+ * one, and for a while it offered whatever it built. Reported from real use:
+ * «چوقۇرلاشقان» came back with «چوقۇپلاشقان», «چوقۇملاشقان» and «چوقۇرغاشقان»,
+ * «تەۋەلىنگەن» with «تەۋەسىنگەن» and «تەۋەكىنگەن», and «جەملىگۈچى» with
+ * «جەمئىگۈچى» — none of which are words in Uyghur or in any other language.
+ * Worse, they crowded out the right answer, which was sitting in the same list.
+ *
+ * Two rules stop it, and both are asserted here because either one alone leaks:
+ * a constructed form is only shown when nothing evidenced was found at all, and
+ * a stem is only ever repaired through a substitution the corrections data
+ * actually attests.
+ */
+describe("never invents a word", () => {
+  const ask = (word: string) => suggest(dictionary, word, { corrections });
+  const real = (word: string) => hasWord(dictionary, word) || accepts(dictionary, word);
+
+  it("offers nothing it cannot vouch for when a real word is available", () => {
+    for (const typed of ["چوقۇرلاشقان", "جەملىگۈچى", "تەۋەلىنگەن"]) {
+      const list = ask(typed);
+      expect(list.length, `${typed} should still offer something`).toBeGreaterThan(0);
+      for (const suggestion of list) {
+        expect(real(suggestion), `${typed} → ${suggestion} is not a word`).toBe(true);
+      }
+    }
+  });
+
+  it("does not produce the specific non-words that were reported", () => {
+    const forbidden = [
+      ["چوقۇرلاشقان", ["چوقۇپلاشقان", "چوقۇملاشقان", "چوقۇرغاشقان", "چوقۇرلارقان", "چوقۇلاشقان"]],
+      ["تەۋەلىنگەن", ["تەۋەنىنگەن", "تەۋەسىنگەن", "تەۋەكىنگەن", "تەۋەلىكنگەن", "تەۋەلىكگەن"]],
+      ["جەملىگۈچى", ["جەمئىگۈچى", "جەمىلگۈچى", "جەملەگۈچى"]],
+    ] as const;
+    for (const [typed, bad] of forbidden) {
+      const list = ask(typed);
+      for (const word of bad) {
+        expect(list, `${typed} must not offer ${word}`).not.toContain(word);
+      }
+    }
+  });
+
+  it("still finds the right answer for the word that started it", () => {
+    expect(ask("چوقۇرلاشقان")[0]).toBe("چوڭقۇرلاشقان");
+  });
+
+  it("only repairs a stem through a substitution writers actually make", () => {
+    // و↔ۇ is the fifth most common error in the corrections data; ر↔پ has
+    // never been seen once, and swapping it makes a different word, not a
+    // corrected spelling.
+    expect(isConfusionRepair("قالدور", "قالدۇر")).toBe(true);
+    expect(isConfusionRepair("چوقۇر", "چوقۇپ")).toBe(false);
+    expect(isConfusionRepair("چوقۇر", "چوقۇم")).toBe(false);
+    // Different lengths are not a substitution at all.
+    expect(isConfusionRepair("چوقۇر", "چوقۇ")).toBe(false);
+  });
+
+  it("still reaches a correct word the list lacks, when nothing else answers", () => {
+    // The fallback has to survive the tightening, or the whole morphology is
+    // pointless: this word is right, absent from the dictionary, and the only
+    // thing the checker can offer.
+    expect(hasWord(dictionary, "قالدۇرمىغۇدەك")).toBe(false);
+    expect(ask("قالدورمىغۇدەك")[0]).toBe("قالدۇرمىغۇدەك");
   });
 });
 

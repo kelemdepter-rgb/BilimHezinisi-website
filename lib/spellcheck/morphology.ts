@@ -32,6 +32,7 @@
  */
 import { ACCEPT_SUFFIXES, MAX_SUFFIX, MIN_STEM, SUGGEST_SUFFIXES } from "./suffixes.generated";
 import { hasWord, isKnownStem, type PackedDictionary } from "./dictionary";
+import { CONFUSABLE_WITH } from "./confusion";
 
 const BACK = new Set(["ا", "و", "ۇ"]);
 const FRONT = new Set(["ە", "ې", "ۆ", "ۈ"]);
@@ -126,25 +127,43 @@ export function splits(dictionary: PackedDictionary, word: string): Split[] {
 }
 
 /**
- * Known suffixes within one substitution of this tail, longest-first.
+ * Is `b` the same string as `a` with exactly one letter swapped for one the
+ * corrections data says people really confuse it with?
  *
- * Deliberately narrow: same length, one character different. A general
- * "normalise the harmony" rewrite would accept far more than it should, and the
- * job here is only to recognise that «لىنگەن» is a misspelling of a suffix that
- * genuinely exists rather than to invent one.
+ * This is the difference between repairing a misspelling and inventing a word.
+ * «قالدور» → «قالدۇر» swaps و for ۇ, the fifth most common error there is.
+ * «چوقۇر» → «چوقۇپ» swaps ر for پ, a pair never once observed in 3,400 real
+ * corrections — those are two different words, not two spellings of one, and
+ * gluing a suffix onto the second produced «چوقۇپلاشقان», which is not Uyghur.
+ */
+export function isConfusionRepair(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let at = -1;
+  for (let index = 0; index < a.length; index++) {
+    if (a[index] === b[index]) continue;
+    if (at >= 0) return false;
+    at = index;
+  }
+  if (at < 0) return false;
+  return (CONFUSABLE_WITH.get(a[at]) ?? []).includes(b[at]);
+}
+
+/**
+ * Known suffixes within one CONFUSION of this tail, most productive first.
+ *
+ * Deliberately narrow, and narrower than it was: same length, one character
+ * different, and that one character has to be a pair writers actually mix up.
+ * Without the last condition «لىنگەن» also matched «سىنگەن» and «كىنگەن» —
+ * ل↔س and ل↔ك appear nowhere in the corrections data — and the checker offered
+ * «تەۋەسىنگەن» and «تەۋەكىنگەن», which are not words in any language.
  */
 export function nearestSuffixes(suffix: string, limit = 4): string[] {
   const out: string[] = [];
   for (const known of SUGGEST_SUFFIXES) {
     if (known.length !== suffix.length || known === suffix) continue;
-    let differences = 0;
-    for (let index = 0; index < known.length && differences <= 1; index++) {
-      if (known[index] !== suffix[index]) differences++;
-    }
-    if (differences === 1) {
-      out.push(known);
-      if (out.length >= limit) break;
-    }
+    if (!isConfusionRepair(suffix, known)) continue;
+    out.push(known);
+    if (out.length >= limit) break;
   }
   return out;
 }

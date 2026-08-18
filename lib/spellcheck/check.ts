@@ -16,7 +16,7 @@ import {
   type PackedDictionary,
 } from "./dictionary";
 import { CONFUSABLE_WITH } from "./confusion";
-import { accepts, nearestSuffixes, splits } from "./morphology";
+import { accepts, isConfusionRepair, nearestSuffixes, splits } from "./morphology";
 import { rankCandidates } from "./rank";
 
 /**
@@ -131,9 +131,31 @@ export function suggest(
   const normalized = normalizeForLookup(word);
   if (!normalized || normalized.length < 2) return [];
 
+  /** Words we can point at: listed, hand-collected, or a valid inflection. */
   const candidates: Candidate[] = [];
+  /** Forms this function assembled and cannot otherwise vouch for. */
+  const constructed: Candidate[] = [];
+
   const add = (term: string, frequency?: number) => {
     if (term && term !== normalized) candidates.push({ term, frequency });
+  };
+
+  /**
+   * A morphology result, filed by how much evidence stands behind it.
+   *
+   * `plausible` says the repair itself was a slip people actually make. A
+   * constructed form that fails even that is dropped outright rather than kept
+   * as a fallback — «چوقۇپلاشقان» came from swapping ر for پ, a pair never
+   * observed once, and no amount of having nothing better to offer makes it a
+   * word.
+   */
+  const offer = (term: string, frequency: number, plausible: boolean) => {
+    if (!term || term === normalized) return;
+    if (hasWord(dictionary, term) || accepts(dictionary, term)) {
+      candidates.push({ term, frequency });
+    } else if (plausible) {
+      constructed.push({ term, frequency });
+    }
   };
 
   // 1. The curated table. The floor is one step above the busiest corpus
@@ -160,24 +182,48 @@ export function suggest(
   }
 
   // 4. Morphology, both directions.
+  //
+  // This is the one path that BUILDS a string rather than finding one, so every
+  // result is a claim that a word exists, and the claim has to be backed. Two
+  // buckets: candidates we can vouch for, and constructed forms we cannot.
   for (const { stem, suffix } of splits(dictionary, normalized)) {
     if (!hasWord(dictionary, stem)) {
-      // The stem is wrong: fix it the ordinary way and put the suffix back.
+      // The stem is wrong: fix it and put the writer's own suffix back.
       // «قالدور|مىغۇدەك» → «قالدۇر» + «مىغۇدەك».
+      //
+      // The repair must be a KNOWN CONFUSION, and that is a hard condition
+      // rather than a preference. Any other single edit turns the stem into a
+      // DIFFERENT WORD, and bolting the writer's suffix onto a different word
+      // is not a spelling correction — it is how «چوقۇرلاشقان» came back as
+      // «چوقۇپلاشقان» and «چوقۇملاشقان», neither of which exists. Nothing is
+      // lost by the strictness either: if repairing the stem by one edit
+      // produces a word that IS listed, then editing the whole word by one edit
+      // produces it too, and step 2 above has already found it.
       for (const repaired of editsOnce(stem, alphabet)) {
+        if (!isConfusionRepair(stem, repaired)) continue;
         if (!hasWord(dictionary, repaired)) continue;
-        add(repaired + suffix, frequencyOf(dictionary, repaired));
+        offer(repaired + suffix, frequencyOf(dictionary, repaired), true);
       }
     } else {
       // The stem is fine, so the suffix is the suspect.
       // «تەۋە|لىنگەن» → «تەۋە» + «لەنگەن».
       for (const replacement of nearestSuffixes(suffix)) {
-        add(stem + replacement, frequencyOf(dictionary, stem));
+        offer(stem + replacement, frequencyOf(dictionary, stem), true);
       }
     }
   }
 
-  const ranked = rankCandidates(dictionary, normalized, candidates, limit);
+  // WORDS WE CAN VOUCH FOR COME FIRST, AND ALONE.
+  //
+  // A constructed form is only shown when nothing evidenced was found at all.
+  // That single rule is what stopped the checker offering «چوقۇپلاشقان»,
+  // «تەۋەسىنگەن» and «جەمئىگۈچى» — none of which are words in any language, and
+  // all of which appeared next to a perfectly good answer the writer could not
+  // see for the noise. Where there IS no evidenced answer, a repair built from
+  // a real stem and the writer's own suffix is better than an empty popup: that
+  // is how «قالدۇرمىغۇدەك» is reached, a correct word the list simply lacks.
+  const usable = candidates.length > 0 ? candidates : constructed;
+  const ranked = rankCandidates(dictionary, normalized, usable, limit);
   if (ranked.length > 0) return ranked;
 
   // Last resort, from the desktop (spellcheck.js line 174): the longest prefix

@@ -1,0 +1,2680 @@
+[
+ {
+  "stem": "ئايال",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "ئايالمۇ",
+    "suffix": "مۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللار",
+    "suffix": "لار",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالغا",
+    "suffix": "غا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالدا",
+    "suffix": "دا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللارغا",
+    "suffix": "لارغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللا",
+    "suffix": "لا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالنىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالىغا",
+    "suffix": "ىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالدۇر",
+    "suffix": "دۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالقا",
+    "suffix": "قا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاياللىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالدىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالنىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللاردا",
+    "suffix": "لاردا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالىدا",
+    "suffix": "ىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالتا",
+    "suffix": "تا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئايالدىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": false
+   },
+   {
+    "form": "ئايالدۇ",
+    "suffix": "دۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالدىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ئايالماق",
+    "suffix": "ماق",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاياللۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "ئايالدىلا",
+    "suffix": "دىلا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاياللىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالتۇر",
+    "suffix": "تۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "ئايالدىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاياللەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ئايالمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئايالىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": false
+   },
+   {
+    "form": "ئايالىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاياللىققا",
+    "suffix": "لىققا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئايالڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "چىراي",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "چىرايمۇ",
+    "suffix": "مۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلار",
+    "suffix": "لار",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايغا",
+    "suffix": "غا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايدا",
+    "suffix": "دا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلارغا",
+    "suffix": "لارغا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلا",
+    "suffix": "لا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىراينىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايىغا",
+    "suffix": "ىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايدۇر",
+    "suffix": "دۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايقا",
+    "suffix": "قا",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايلىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايدىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىراينىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلاردا",
+    "suffix": "لاردا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايىدا",
+    "suffix": "ىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايتا",
+    "suffix": "تا",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايدىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايدۇ",
+    "suffix": "دۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايدىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايماق",
+    "suffix": "ماق",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايلۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايدىلا",
+    "suffix": "دىلا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايلىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايتۇر",
+    "suffix": "تۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايدىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايلەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايلاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": false
+   },
+   {
+    "form": "چىرايىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايلىققا",
+    "suffix": "لىققا",
+    "inDictionary": true
+   },
+   {
+    "form": "چىرايڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "ئۇچۇر",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "ئۇچۇرمۇ",
+    "suffix": "مۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلار",
+    "suffix": "لار",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرغا",
+    "suffix": "غا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇردا",
+    "suffix": "دا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلارغا",
+    "suffix": "لارغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلا",
+    "suffix": "لا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇرلىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرنىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرىغا",
+    "suffix": "ىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇردۇر",
+    "suffix": "دۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرقا",
+    "suffix": "قا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇرلىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇردىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرنىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلاردا",
+    "suffix": "لاردا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرىدا",
+    "suffix": "ىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرتا",
+    "suffix": "تا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇردىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇردۇ",
+    "suffix": "دۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇردىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇرماق",
+    "suffix": "ماق",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇردىلا",
+    "suffix": "دىلا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرتۇر",
+    "suffix": "تۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇردىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇرلەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇرمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇرىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئۇچۇرلىققا",
+    "suffix": "لىققا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئۇچۇرڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "ھەمراھ",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "ھەمراھمۇ",
+    "suffix": "مۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلار",
+    "suffix": "لار",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھغا",
+    "suffix": "غا",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھدا",
+    "suffix": "دا",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھلارغا",
+    "suffix": "لارغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلا",
+    "suffix": "لا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھنىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھىغا",
+    "suffix": "ىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھدۇر",
+    "suffix": "دۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھقا",
+    "suffix": "قا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھدىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھلارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھنىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلاردا",
+    "suffix": "لاردا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھىدا",
+    "suffix": "ىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھتا",
+    "suffix": "تا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھدىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھلاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھدۇ",
+    "suffix": "دۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھدىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھماق",
+    "suffix": "ماق",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھلۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھدىلا",
+    "suffix": "دىلا",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھلىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھتۇر",
+    "suffix": "تۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھدىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھلەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": false
+   },
+   {
+    "form": "ھەمراھىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھلىققا",
+    "suffix": "لىققا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھەمراھڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "ئاۋاز",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "ئاۋازمۇ",
+    "suffix": "مۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلار",
+    "suffix": "لار",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازغا",
+    "suffix": "غا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازدا",
+    "suffix": "دا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلارغا",
+    "suffix": "لارغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلا",
+    "suffix": "لا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازلىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازنىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازىغا",
+    "suffix": "ىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازدۇر",
+    "suffix": "دۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازقا",
+    "suffix": "قا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازلىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازدىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازنىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلاردا",
+    "suffix": "لاردا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازىدا",
+    "suffix": "ىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازتا",
+    "suffix": "تا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازدىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازدۇ",
+    "suffix": "دۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازدىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازماق",
+    "suffix": "ماق",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازلۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازدىلا",
+    "suffix": "دىلا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازلىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازتۇر",
+    "suffix": "تۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازدىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازلەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ئاۋازلىققا",
+    "suffix": "لىققا",
+    "inDictionary": false
+   },
+   {
+    "form": "ئاۋازڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "باشلىق",
+  "harmony": "front",
+  "forms": [
+   {
+    "form": "باشلىقنىڭ",
+    "suffix": "نىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقنى",
+    "suffix": "نى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلىقىنى",
+    "suffix": "لىقىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقدىن",
+    "suffix": "دىن",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلارنىڭ",
+    "suffix": "لارنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلىرىنى",
+    "suffix": "لىرىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلىقى",
+    "suffix": "لىقى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلىرىنىڭ",
+    "suffix": "لىرىنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلىرى",
+    "suffix": "لىرى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقدىكى",
+    "suffix": "دىكى",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلىرىدىن",
+    "suffix": "لىرىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلەرنىڭ",
+    "suffix": "لەرنىڭ",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقدەك",
+    "suffix": "دەك",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلارنى",
+    "suffix": "لارنى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقىنىڭ",
+    "suffix": "ىنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقگە",
+    "suffix": "گە",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلاردىن",
+    "suffix": "لاردىن",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقىنى",
+    "suffix": "ىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقىدىن",
+    "suffix": "ىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقتىن",
+    "suffix": "تىن",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلىق",
+    "suffix": "لىق",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقدە",
+    "suffix": "دە",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلىقىدىن",
+    "suffix": "لىقىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلەر",
+    "suffix": "لەر",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقمىزنى",
+    "suffix": "مىزنى",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلەرنى",
+    "suffix": "لەرنى",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلىكىنى",
+    "suffix": "لىكىنى",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقسىز",
+    "suffix": "سىز",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلەرگە",
+    "suffix": "لەرگە",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلەردىن",
+    "suffix": "لەردىن",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقلىقتىن",
+    "suffix": "لىقتىن",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلىك",
+    "suffix": "لىك",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقىمىز",
+    "suffix": "ىمىز",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقمىز",
+    "suffix": "مىز",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقلىرىمىز",
+    "suffix": "لىرىمىز",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقمىزنىڭ",
+    "suffix": "مىزنىڭ",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقتىكى",
+    "suffix": "تىكى",
+    "inDictionary": false
+   },
+   {
+    "form": "باشلىقىدىكى",
+    "suffix": "ىدىكى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقىڭىزنى",
+    "suffix": "ىڭىزنى",
+    "inDictionary": true
+   },
+   {
+    "form": "باشلىقڭىزنى",
+    "suffix": "ڭىزنى",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "يېقىن",
+  "harmony": "front",
+  "forms": [
+   {
+    "form": "يېقىننىڭ",
+    "suffix": "نىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىننى",
+    "suffix": "نى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلىقىنى",
+    "suffix": "لىقىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىندىن",
+    "suffix": "دىن",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلارنىڭ",
+    "suffix": "لارنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلىرىنى",
+    "suffix": "لىرىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلىقى",
+    "suffix": "لىقى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلىرىنىڭ",
+    "suffix": "لىرىنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلىرى",
+    "suffix": "لىرى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىندىكى",
+    "suffix": "دىكى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلىرىدىن",
+    "suffix": "لىرىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلەرنىڭ",
+    "suffix": "لەرنىڭ",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىندەك",
+    "suffix": "دەك",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلارنى",
+    "suffix": "لارنى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنىنىڭ",
+    "suffix": "ىنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنگە",
+    "suffix": "گە",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنلاردىن",
+    "suffix": "لاردىن",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنىنى",
+    "suffix": "ىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنىدىن",
+    "suffix": "ىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنتىن",
+    "suffix": "تىن",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنلىق",
+    "suffix": "لىق",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىندە",
+    "suffix": "دە",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنلىقىدىن",
+    "suffix": "لىقىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلەر",
+    "suffix": "لەر",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنمىزنى",
+    "suffix": "مىزنى",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنلەرنى",
+    "suffix": "لەرنى",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنلىكىنى",
+    "suffix": "لىكىنى",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنسىز",
+    "suffix": "سىز",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنلەرگە",
+    "suffix": "لەرگە",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنلەردىن",
+    "suffix": "لەردىن",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنلىقتىن",
+    "suffix": "لىقتىن",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلىك",
+    "suffix": "لىك",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنىمىز",
+    "suffix": "ىمىز",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنمىز",
+    "suffix": "مىز",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنلىرىمىز",
+    "suffix": "لىرىمىز",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنمىزنىڭ",
+    "suffix": "مىزنىڭ",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنتىكى",
+    "suffix": "تىكى",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنىدىكى",
+    "suffix": "ىدىكى",
+    "inDictionary": true
+   },
+   {
+    "form": "يېقىنىڭىزنى",
+    "suffix": "ىڭىزنى",
+    "inDictionary": false
+   },
+   {
+    "form": "يېقىنڭىزنى",
+    "suffix": "ڭىزنى",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "ھايات",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "ھاياتمۇ",
+    "suffix": "مۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلار",
+    "suffix": "لار",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتغا",
+    "suffix": "غا",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتدا",
+    "suffix": "دا",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتلارغا",
+    "suffix": "لارغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلا",
+    "suffix": "لا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتنىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتىغا",
+    "suffix": "ىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتدۇر",
+    "suffix": "دۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتقا",
+    "suffix": "قا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتدىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتلارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتنىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلاردا",
+    "suffix": "لاردا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتىدا",
+    "suffix": "ىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتتا",
+    "suffix": "تا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتدىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتلاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتدۇ",
+    "suffix": "دۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتدىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتماق",
+    "suffix": "ماق",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتلۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتدىلا",
+    "suffix": "دىلا",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتلىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتتۇر",
+    "suffix": "تۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتدىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتلەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": false
+   },
+   {
+    "form": "ھاياتىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتلىققا",
+    "suffix": "لىققا",
+    "inDictionary": true
+   },
+   {
+    "form": "ھاياتڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "ئېغىز",
+  "harmony": "front",
+  "forms": [
+   {
+    "form": "ئېغىزنىڭ",
+    "suffix": "نىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزنى",
+    "suffix": "نى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلىقىنى",
+    "suffix": "لىقىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزدىن",
+    "suffix": "دىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلارنىڭ",
+    "suffix": "لارنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلىرىنى",
+    "suffix": "لىرىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلىقى",
+    "suffix": "لىقى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلىرىنىڭ",
+    "suffix": "لىرىنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلىرى",
+    "suffix": "لىرى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزدىكى",
+    "suffix": "دىكى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلىرىدىن",
+    "suffix": "لىرىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلەرنىڭ",
+    "suffix": "لەرنىڭ",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزدەك",
+    "suffix": "دەك",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلارنى",
+    "suffix": "لارنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزىنىڭ",
+    "suffix": "ىنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزگە",
+    "suffix": "گە",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلاردىن",
+    "suffix": "لاردىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزىنى",
+    "suffix": "ىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزىدىن",
+    "suffix": "ىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزتىن",
+    "suffix": "تىن",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلىق",
+    "suffix": "لىق",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزدە",
+    "suffix": "دە",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلىقىدىن",
+    "suffix": "لىقىدىن",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلەر",
+    "suffix": "لەر",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزمىزنى",
+    "suffix": "مىزنى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلەرنى",
+    "suffix": "لەرنى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلىكىنى",
+    "suffix": "لىكىنى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزسىز",
+    "suffix": "سىز",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلەرگە",
+    "suffix": "لەرگە",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلەردىن",
+    "suffix": "لەردىن",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلىقتىن",
+    "suffix": "لىقتىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزلىك",
+    "suffix": "لىك",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزىمىز",
+    "suffix": "ىمىز",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزمىز",
+    "suffix": "مىز",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزلىرىمىز",
+    "suffix": "لىرىمىز",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزمىزنىڭ",
+    "suffix": "مىزنىڭ",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزتىكى",
+    "suffix": "تىكى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئېغىزىدىكى",
+    "suffix": "ىدىكى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزىڭىزنى",
+    "suffix": "ىڭىزنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئېغىزڭىزنى",
+    "suffix": "ڭىزنى",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "قارار",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "قارارمۇ",
+    "suffix": "مۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلار",
+    "suffix": "لار",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارغا",
+    "suffix": "غا",
+    "inDictionary": true
+   },
+   {
+    "form": "قاراردا",
+    "suffix": "دا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلارغا",
+    "suffix": "لارغا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلا",
+    "suffix": "لا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارلىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارنىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارىغا",
+    "suffix": "ىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "قاراردۇر",
+    "suffix": "دۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارقا",
+    "suffix": "قا",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارلىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قاراردىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارنىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلاردا",
+    "suffix": "لاردا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارىدا",
+    "suffix": "ىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارتا",
+    "suffix": "تا",
+    "inDictionary": false
+   },
+   {
+    "form": "قاراردىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارلاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": true
+   },
+   {
+    "form": "قاراردۇ",
+    "suffix": "دۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قاراردىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارماق",
+    "suffix": "ماق",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارلۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "قاراردىلا",
+    "suffix": "دىلا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارلىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارتۇر",
+    "suffix": "تۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "قاراردىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارلەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قارارىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارلىققا",
+    "suffix": "لىققا",
+    "inDictionary": true
+   },
+   {
+    "form": "قارارڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "ئالىم",
+  "harmony": "front",
+  "forms": [
+   {
+    "form": "ئالىمنىڭ",
+    "suffix": "نىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمنى",
+    "suffix": "نى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملىقىنى",
+    "suffix": "لىقىنى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىمدىن",
+    "suffix": "دىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملارنىڭ",
+    "suffix": "لارنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملىرىنى",
+    "suffix": "لىرىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملىقى",
+    "suffix": "لىقى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملىرىنىڭ",
+    "suffix": "لىرىنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملىرى",
+    "suffix": "لىرى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمدىكى",
+    "suffix": "دىكى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملىرىدىن",
+    "suffix": "لىرىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملەرنىڭ",
+    "suffix": "لەرنىڭ",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىمدەك",
+    "suffix": "دەك",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملارنى",
+    "suffix": "لارنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمىنىڭ",
+    "suffix": "ىنىڭ",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمگە",
+    "suffix": "گە",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملاردىن",
+    "suffix": "لاردىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمىنى",
+    "suffix": "ىنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمىدىن",
+    "suffix": "ىدىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمتىن",
+    "suffix": "تىن",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملىق",
+    "suffix": "لىق",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمدە",
+    "suffix": "دە",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملىقىدىن",
+    "suffix": "لىقىدىن",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملەر",
+    "suffix": "لەر",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىممىزنى",
+    "suffix": "مىزنى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملەرنى",
+    "suffix": "لەرنى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملىكىنى",
+    "suffix": "لىكىنى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىمسىز",
+    "suffix": "سىز",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملەرگە",
+    "suffix": "لەرگە",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملەردىن",
+    "suffix": "لەردىن",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىملىقتىن",
+    "suffix": "لىقتىن",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملىك",
+    "suffix": "لىك",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىمىمىز",
+    "suffix": "ىمىز",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىممىز",
+    "suffix": "مىز",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىملىرىمىز",
+    "suffix": "لىرىمىز",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىممىزنىڭ",
+    "suffix": "مىزنىڭ",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىمتىكى",
+    "suffix": "تىكى",
+    "inDictionary": false
+   },
+   {
+    "form": "ئالىمىدىكى",
+    "suffix": "ىدىكى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمىڭىزنى",
+    "suffix": "ىڭىزنى",
+    "inDictionary": true
+   },
+   {
+    "form": "ئالىمڭىزنى",
+    "suffix": "ڭىزنى",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "قورال",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "قورالمۇ",
+    "suffix": "مۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللار",
+    "suffix": "لار",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالغا",
+    "suffix": "غا",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالدا",
+    "suffix": "دا",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللارغا",
+    "suffix": "لارغا",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللا",
+    "suffix": "لا",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قوراللىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالنىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالىغا",
+    "suffix": "ىغا",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالدۇر",
+    "suffix": "دۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالقا",
+    "suffix": "قا",
+    "inDictionary": false
+   },
+   {
+    "form": "قوراللىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالدىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قوراللارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالنىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللاردا",
+    "suffix": "لاردا",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالىدا",
+    "suffix": "ىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالتا",
+    "suffix": "تا",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالدىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالدۇ",
+    "suffix": "دۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالدىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالماق",
+    "suffix": "ماق",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "قوراللۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالدىلا",
+    "suffix": "دىلا",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "قوراللىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قورالتۇر",
+    "suffix": "تۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالدىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "قوراللەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": true
+   },
+   {
+    "form": "قوراللىققا",
+    "suffix": "لىققا",
+    "inDictionary": false
+   },
+   {
+    "form": "قورالڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ },
+ {
+  "stem": "قالدۇر",
+  "harmony": "back",
+  "forms": [
+   {
+    "form": "قالدۇرمۇ",
+    "suffix": "مۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلار",
+    "suffix": "لار",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرغا",
+    "suffix": "غا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇردا",
+    "suffix": "دا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلارغا",
+    "suffix": "لارغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلا",
+    "suffix": "لا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلىقىغا",
+    "suffix": "لىقىغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلىرىغا",
+    "suffix": "لىرىغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرنىمۇ",
+    "suffix": "نىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرىغا",
+    "suffix": "ىغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇردۇر",
+    "suffix": "دۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرقا",
+    "suffix": "قا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلىرىمۇ",
+    "suffix": "لىرىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇردىمۇ",
+    "suffix": "دىمۇ",
+    "inDictionary": true
+   },
+   {
+    "form": "قالدۇرلارمۇ",
+    "suffix": "لارمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرنىڭمۇ",
+    "suffix": "نىڭمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرىمۇ",
+    "suffix": "ىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلاردا",
+    "suffix": "لاردا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرىدا",
+    "suffix": "ىدا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلىرىدا",
+    "suffix": "لىرىدا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرتا",
+    "suffix": "تا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇردىنمۇ",
+    "suffix": "دىنمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلاشماق",
+    "suffix": "لاشماق",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇردۇ",
+    "suffix": "دۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇردىغان",
+    "suffix": "دىغان",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرماق",
+    "suffix": "ماق",
+    "inDictionary": true
+   },
+   {
+    "form": "قالدۇرىدىغان",
+    "suffix": "ىدىغان",
+    "inDictionary": true
+   },
+   {
+    "form": "قالدۇرلۇق",
+    "suffix": "لۇق",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇردىلا",
+    "suffix": "دىلا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرمايدىغان",
+    "suffix": "مايدىغان",
+    "inDictionary": true
+   },
+   {
+    "form": "قالدۇرلىرىنىمۇ",
+    "suffix": "لىرىنىمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرتۇر",
+    "suffix": "تۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇردىغانلار",
+    "suffix": "دىغانلار",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلەرمۇ",
+    "suffix": "لەرمۇ",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرمىزغا",
+    "suffix": "مىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرىدۇر",
+    "suffix": "ىدۇر",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلاشتۇرۇش",
+    "suffix": "لاشتۇرۇش",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرىڭىزغا",
+    "suffix": "ىڭىزغا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرلىققا",
+    "suffix": "لىققا",
+    "inDictionary": false
+   },
+   {
+    "form": "قالدۇرڭلار",
+    "suffix": "ڭلار",
+    "inDictionary": false
+   }
+  ]
+ }
+]

@@ -42,7 +42,7 @@ import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 import { gzipSync, brotliCompressSync, constants } from "node:zlib";
 import { packDictionary, unpackDictionary } from "./lib/codec.mjs";
-import { allWords, baseWords, desktopAssets, repoRoot } from "./lib/wordlist.mjs";
+import { allWords, baseWords, desktopAssets, repoRoot, vocabularyCorrections } from "./lib/wordlist.mjs";
 import { dataDir } from "./lib/corpus.mjs";
 
 const outDir = join(repoRoot, "public", "spellcheck");
@@ -131,7 +131,34 @@ async function main() {
     }
   }
 
+  // ── corrections: the desktop's, plus the ones the owner wrote by hand ────
   const corrections = JSON.parse(await readFile(join(desktopAssets, "uyghur_corrections.json"), "utf-8"));
+  const reviewed = vocabularyCorrections();
+
+  // A hand-written pair must never end up in the held-out evaluation set: the
+  // checker would be handed the answer to a question it is being marked on, and
+  // the accuracy it reported would be a measurement of nothing.
+  const heldOutPath = join(repoRoot, "tests", "fixtures", "spellcheck", "heldout-corrections.json");
+  const heldOut = existsSync(heldOutPath)
+    ? new Set(Object.keys(JSON.parse(readFileSync(heldOutPath, "utf-8"))))
+    : new Set();
+
+  let added = 0;
+  const collisions = [];
+  for (const [wrong, right] of reviewed) {
+    if (heldOut.has(wrong)) {
+      collisions.push(wrong);
+      continue;
+    }
+    corrections[wrong] = right;
+    added++;
+  }
+  if (collisions.length > 0) {
+    console.warn(
+      `\nSkipped ${collisions.length} reviewed correction(s) already in the held-out\n` +
+        `evaluation set, so the measurement stays honest: ${collisions.join(", ")}\n`,
+    );
+  }
 
   await mkdir(outDir, { recursive: true });
   await writeFile(join(outDir, "uyghur-dict.bin"), packed);
@@ -151,7 +178,7 @@ async function main() {
   console.log(`  from the desktop: ${base.length.toLocaleString("en-US")}`);
   console.log(`  from the library: ${(words.length - base.length).toLocaleString("en-US")}`);
   console.log(`  with a frequency: ${withFrequency.toLocaleString("en-US")}`);
-  console.log(`corrections:        ${Object.keys(corrections).length.toLocaleString("en-US")}`);
+  console.log(`corrections:        ${Object.keys(corrections).length.toLocaleString("en-US")}  (${added} written while reviewing)`);
   console.log();
   console.log(`SAME ${base.length.toLocaleString("en-US")} WORDS, both encodings:`);
   console.log(`  text, raw         ${mb(oldBytes)}      served ${kb(oldServed)}`);

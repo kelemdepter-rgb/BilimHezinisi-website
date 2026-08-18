@@ -13,6 +13,7 @@
  * would drift a little further from the truth on every rebuild.
  */
 import { readFileSync, existsSync } from "node:fs";
+import { readVocabulary } from "./vocabulary.mjs";
 import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 
@@ -40,15 +41,37 @@ export function baseWords() {
   return [...new Set(raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))].sort();
 }
 
-/** Words admitted from the corpus, as reviewed. Empty before the first build. */
+const vocabularyPath = () => join(repoRoot, "data", "spellcheck", "vocabulary.txt");
+
+/**
+ * Words admitted from the corpus, as reviewed.
+ *
+ * A word the owner marked wrong is NOT here — the whole point of marking it is
+ * to keep it out. Its correction is, though, because a word someone had to
+ * write out by hand is a word this library uses.
+ */
 export function vocabularyWords() {
-  const path = join(repoRoot, "data", "spellcheck", "vocabulary.txt");
-  if (!existsSync(path)) return [];
-  return readFileSync(path, "utf-8")
-    .split("\n")
-    .filter((line) => line && !line.startsWith("#"))
-    .map((line) => line.split("\t")[0])
-    .filter(Boolean);
+  const words = [];
+  for (const entry of readVocabulary(vocabularyPath())) {
+    if (entry.decision === "admitted") words.push(entry.word);
+    else if (entry.decision === "corrected") words.push(entry.correction);
+  }
+  return words;
+}
+
+/**
+ * The wrong → right pairs the owner wrote while reviewing.
+ *
+ * These are worth more than the deletions they replace. A deletion only keeps a
+ * misspelling out of the dictionary; a correction also tells the checker what
+ * was meant, so the next person who types it is offered the right word first.
+ */
+export function vocabularyCorrections() {
+  const pairs = new Map();
+  for (const entry of readVocabulary(vocabularyPath())) {
+    if (entry.decision === "corrected") pairs.set(entry.word, entry.correction);
+  }
+  return pairs;
 }
 
 /** Everything the shipped dictionary should contain, sorted and deduplicated. */

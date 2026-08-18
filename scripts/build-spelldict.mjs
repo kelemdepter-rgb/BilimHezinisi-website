@@ -101,11 +101,32 @@ async function main() {
   });
   const productive = readTable("productive-stems.txt", (text) => new Set(text.split("\n").filter(Boolean)));
 
-  if (!frequencies) {
-    console.warn("No frequencies.tsv — run scripts/build-word-frequencies.mjs first.");
-  }
-  if (!productive) {
-    console.warn("No productive-stems.txt — run scripts/build-suffixes.mjs first.");
+  // STOP rather than build a quietly worse dictionary.
+  //
+  // These two tables live in spellcheck-data/, which is a build cache and not
+  // committed, so a fresh clone has neither. Warning and carrying on produced
+  // an artifact that loads, passes its round trip, and looks entirely healthy —
+  // while the ranking falls back to having no idea which words people actually
+  // write, which is the exact failure this project just spent its time fixing.
+  // A build that cannot do its job should say so and stop.
+  const missing = [
+    !frequencies && ["frequencies.tsv", "node --env-file=.env.local scripts/build-word-frequencies.mjs"],
+    !productive && ["productive-stems.txt", "node --env-file=.env.local scripts/build-suffixes.mjs"],
+  ].filter(Boolean);
+
+  if (missing.length > 0) {
+    console.error(`\nMissing data the dictionary needs:\n`);
+    for (const [file, command] of missing) {
+      console.error(`  spellcheck-data/${file}`);
+      console.error(`    produce it with:  ${command}\n`);
+    }
+    console.error(
+      "Both read the published library, so they need .env.local and a database\n" +
+        "that is awake. The shipped artifact is committed, so nothing is broken\n" +
+        "until you rebuild — but a rebuild without these would ship a dictionary\n" +
+        "that ranks corrections worse while looking perfectly fine.\n",
+    );
+    process.exit(1);
   }
 
   const flags = new Uint8Array(words.length);

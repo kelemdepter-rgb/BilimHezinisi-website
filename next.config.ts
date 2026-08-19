@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { STATIC_SECURITY_HEADERS } from "./lib/security/csp";
 
 /**
  * Covers are served through next/image so Vercel's CDN optimises and caches
@@ -36,6 +37,16 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      {
+        /**
+         * Applies to everything, static files included — which is why these
+         * live here and not in proxy.ts, whose matcher deliberately skips
+         * public/. The Content-Security-Policy is the one header that cannot
+         * be here: it carries a per-request nonce.
+         */
+        source: "/:path*",
+        headers: [...STATIC_SECURITY_HEADERS],
+      },
       {
         /**
          * The spellcheck dictionary is a build artifact: it only changes when

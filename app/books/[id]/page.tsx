@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/icons";
@@ -63,12 +64,15 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
   const book = await getBookDetail(bookId);
   if (!book) notFound();
 
-  const [categories, session, progress, coverUrl] = await Promise.all([
+  const [categories, session, progress, coverUrl, requestHeaders] = await Promise.all([
     getCategories(),
     getSessionInfo(),
     getReadingProgress(bookId),
     coverUrlFor(book.cover_path),
+    headers(),
   ]);
+  // Inline <script>, so the CSP nonce the proxy minted has to travel with it.
+  const nonce = requestHeaders.get("x-nonce") ?? undefined;
 
   const trail = categoryTrail(categories, book.category_id);
   const isDraft = book.status !== "published";
@@ -79,6 +83,7 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
           rather than as an anonymous page. Drafts describe nothing. */}
       {!isDraft && (
         <script
+          nonce={nonce}
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: jsonLd({

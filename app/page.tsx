@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Icon } from "@/components/icons";
 import { LibraryBrowser } from "@/components/library/library-browser";
 import { RecentStrip } from "@/components/library/recent-strip";
@@ -41,6 +41,8 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
   const cookieStore = await cookies();
   const view = cookieStore.get(VIEW_COOKIE)?.value === "list" ? "list" : "grid";
+  // Inline <script>, so the CSP nonce the proxy minted has to travel with it.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   const [{ books, total }, categories, session, recent] = await Promise.all([
     listBooks({
@@ -66,6 +68,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
           result can offer the library's own search box. */}
       {!categoryId && (
         <script
+          nonce={nonce}
           type="application/ld+json"
           dangerouslySetInnerHTML={{
             __html: jsonLd({

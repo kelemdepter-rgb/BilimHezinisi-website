@@ -2,9 +2,17 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { hasSupabaseEnv } from "@/lib/env";
 
-/** Refresh the auth session on every request (called from proxy.ts). */
-export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+/**
+ * Refresh the auth session on every request (called from proxy.ts).
+ *
+ * `requestHeaders` carries what the proxy added before the page renders — the
+ * CSP header Next reads the nonce out of, and the `x-nonce` copy our own
+ * inline JSON-LD reads. Every NextResponse.next() below has to pass them on,
+ * or a session refresh would silently drop the nonce and the page would
+ * render scripts the browser then refuses to run.
+ */
+export async function updateSession(request: NextRequest, requestHeaders: Headers) {
+  let response = NextResponse.next({ request: { headers: requestHeaders } });
   if (!hasSupabaseEnv()) return response;
 
   const supabase = createServerClient(
@@ -17,7 +25,7 @@ export async function updateSession(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
+          response = NextResponse.next({ request: { headers: requestHeaders } });
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options),
           );

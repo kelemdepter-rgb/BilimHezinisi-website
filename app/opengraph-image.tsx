@@ -20,6 +20,17 @@ export const contentType = "image/png";
  * Generated on request and cached by the CDN rather than stored in Storage,
  * whose 1 GB belongs to books.
  */
+/**
+ * 192x192 — the largest either consumer needs: this card draws the mark at
+ * 168 px and the site header at 30 px. It arrived from the desktop app as a
+ * 512 px, 425 KB icon, every byte of which was base64'd into each generated
+ * card and shipped in the bundle for a 30 px logo.
+ *
+ * Keep it a TRUECOLOUR png. Shrinking it to an indexed-palette png is much
+ * smaller still, and satori cannot decode one — the card 500s with "Input
+ * buffer contains unsupported image format". Do not copy the desktop icon
+ * back over this file; resize it.
+ */
 const brandMark = readFile(join(process.cwd(), "public/brand.png"));
 
 // Design tokens from the Day theme in app/globals.css.

@@ -197,9 +197,25 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
       </div>
 
       <footer className="grain safe-bottom safe-x border-t border-bd bg-bg2">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-5 text-[13px] text-ink3">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-5 text-[13px] text-ink3">
           <span>«بىلىم خەزىنىسى» — ئۇيغۇرچە ئېلكىتاب خەزىنىسى</span>
-          <span dir="ltr">© {new Date().getFullYear()}</span>
+          {/* Licence and privacy pages have to be reachable from every page,
+              which on a phone means the footer — the header is already at its
+              width limit at 360 px. */}
+          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="سايت ئۇچۇرلىرى">
+            <Link href="/about" data-testid="about-link" className="hover:text-am hover:underline">
+              ھەققىدە
+            </Link>
+            <Link href="/privacy" data-testid="privacy-link" className="hover:text-am hover:underline">
+              مەخپىيەتلىك
+            </Link>
+            {session && (
+              <Link href="/my/account" data-testid="account-link" className="hover:text-am hover:underline">
+                ھېساباتىم
+              </Link>
+            )}
+            <span dir="ltr">© {new Date().getFullYear()}</span>
+          </nav>
         </div>
       </footer>
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { QuranSourceNote } from "@/components/quran/source-note";
 import { SuraList } from "@/components/quran/sura-list";
 import { addQuranBookmark, removeQuranBookmark } from "@/lib/quran/bookmarks";
 import { copyAyas } from "@/lib/quran/copy";
@@ -429,6 +430,8 @@ export function Mushaf({
                 );
               })}
             </div>
+
+            <QuranSourceNote className="mt-8" />
           </div>
 
           <nav className="mt-4 flex items-center justify-between gap-2" aria-label="سۈرە ئارىلىقىدا يۆتكىلىش">

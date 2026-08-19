@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { AyaText } from "@/components/quran/aya-text";
+import { QuranSourceNote } from "@/components/quran/source-note";
 import { SuraList } from "@/components/quran/sura-list";
 import { getSuras, runQuranSearch } from "@/lib/quran/data";
 import { toArabicNumerals } from "@/lib/quran/format";
@@ -152,6 +153,8 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
           <SuraList suras={suras} />
         )}
       </section>
+
+      <QuranSourceNote className="mt-8" />
     </div>
   );
 }

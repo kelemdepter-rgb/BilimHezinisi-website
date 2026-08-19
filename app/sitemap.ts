@@ -20,6 +20,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: absoluteUrl("/"), lastModified: now, changeFrequency: "daily", priority: 1 },
     { url: absoluteUrl("/quran"), lastModified: now, changeFrequency: "monthly", priority: 0.9 },
     { url: absoluteUrl("/search"), lastModified: now, changeFrequency: "monthly", priority: 0.3 },
+    { url: absoluteUrl("/about"), lastModified: now, changeFrequency: "yearly", priority: 0.4 },
+    { url: absoluteUrl("/privacy"), lastModified: now, changeFrequency: "yearly", priority: 0.3 },
   ];
 
   const suraPages: MetadataRoute.Sitemap = Array.from({ length: SURA_COUNT }, (_, index) => ({

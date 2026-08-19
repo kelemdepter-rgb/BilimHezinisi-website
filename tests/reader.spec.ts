@@ -108,13 +108,27 @@ test.describe("library home", () => {
   });
 });
 
-test.describe("reader", () => {
+/**
+ * Lazy loading has to start from the top of the book, and the staff account
+ * is shared by all three viewport projects: whichever runs first leaves a
+ * reading position saved on the server, and the next one opens an 8-page
+ * window around it. Land on the last page and there is nothing left to fetch,
+ * so the test failed on whichever project happened to go second — a fact
+ * about the fixture, not about the reader. Anonymous is the honest fix: the
+ * seeded book is published, this test needs no account, and an anonymous
+ * context starts every run with no stored position at all.
+ */
+test.describe("reader (from the top of the book)", () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test("opens, loads more pages on scroll and keeps every control usable", async ({ page }) => {
     await page.goto(`/books/${seededBookId()}/read`);
 
     await expect(page.getByTestId("reader-toolbar")).toBeVisible();
     const initialPages = await page.getByTestId("reader-page").count();
     expect(initialPages).toBeGreaterThan(0);
+    // The window really does start at the top, so more pages exist to fetch.
+    await expect(page.locator('[data-page-no="1"]')).toHaveCount(1);
 
     // Fetch-ahead should append pages as the reader scrolls.
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
@@ -131,7 +145,9 @@ test.describe("reader", () => {
     }
     await assertNoHorizontalOverflow(page);
   });
+});
 
+test.describe("reader", () => {
   test("font size and theme controls take effect", async ({ page }) => {
     await page.goto(`/books/${seededBookId()}/read`);
     const content = page.getByTestId("reader-content");

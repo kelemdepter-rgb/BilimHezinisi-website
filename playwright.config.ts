@@ -113,6 +113,22 @@ export default defineConfig({
         },
       },
       {
+        // Licence attribution, the legal pages, password recovery and the
+        // account page. Anonymous by default — everything a reader without an
+        // account must be able to reach — with the account block opting into
+        // the staff state itself, which is why setup still has to run first.
+        name: `trust-${viewport.name}`,
+        testMatch: /trust.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,

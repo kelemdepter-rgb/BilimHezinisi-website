@@ -31,6 +31,13 @@ export function hasStaffTestEnv(): boolean {
 }
 
 export const STAFF_STATE_PATH = "tests/.auth/staff.json";
+
+/**
+ * Where the reader keeps its typography choices. Kept in step with
+ * SETTINGS_STORAGE_KEY in lib/reader/settings.ts — the licence clean-up has
+ * to leave readers who stored a now-removed font still able to open a book.
+ */
+export const READER_SETTINGS_KEY = "bh-reader-settings";
 export const STAFF_EMAIL = "bh-e2e-uploader@mailinator.com";
 export const STAFF_PASSWORD = "bh-e2e-password-8842";
 

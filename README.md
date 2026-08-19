@@ -32,6 +32,36 @@ SITE_URL=                       # e.g. https://your-app.vercel.app
 The app renders without these (empty library, auth disabled) so the site can
 be scaffolded and tested before the Supabase project exists.
 
+## Licences and the pages that carry them
+
+- `LICENSE` — MIT, and it covers this project's own source code only.
+- `THIRD-PARTY-NOTICES.md` — every font, text and library the site serves,
+  with its licence and source. It must be kept true to what is actually
+  shipped; `tests/unit/font-licences.test.ts` fails the build if the fonts
+  drift from it.
+- `/about` and `/privacy` are public pages, no account needed, linked from
+  the footer of every page. `/privacy` describes what this code does — check
+  the code before changing a sentence in it.
+- Fonts: only the UKIJ family (LGPL) and KFGQPC's Uthmanic Hafs are served.
+  Rebuild the woff2 files after changing the manifest:
+
+  ```bash
+  node scripts/build-fonts.mjs
+  ```
+
+  Traditional Arabic and Bahij Nazanin may **not** be redistributed and are
+  not in `public/fonts/`. Traditional Arabic is still offered in the reader,
+  resolved from the reader's own Windows install.
+
+## Accounts
+
+- `/forgot-password` sends a Supabase recovery link, which lands on
+  `/reset-password`. The answer is the same whether or not the address has an
+  account, so the form cannot be used to discover who is registered.
+- `/my/account` lets any signed-in reader download everything they own as
+  JSON, or delete their account and every row belonging to it. The last
+  remaining admin is refused, with the reason.
+
 ## Database
 
 Migrations live in `supabase/migrations/`. Apply `0001_init.sql` in the

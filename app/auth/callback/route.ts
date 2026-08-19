@@ -15,5 +15,17 @@ export async function GET(request: NextRequest) {
       if (!error) return NextResponse.redirect(new URL(next, request.url));
     }
   }
+
+  /**
+   * A recovery link that fails here almost always means it was opened in a
+   * different browser from the one that asked for it: the PKCE verifier is a
+   * cookie on this site, and without it the code cannot be exchanged. Sending
+   * that person to the sign-in page with "try signing in again" is the one
+   * piece of advice that cannot help them, so they go back to the form that
+   * can — where the message says what to do.
+   */
+  if (next === "/reset-password") {
+    return NextResponse.redirect(new URL("/forgot-password?xata=link_failed", request.url));
+  }
   return NextResponse.redirect(new URL("/login?xata=confirm_failed", request.url));
 }

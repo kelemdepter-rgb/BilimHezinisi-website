@@ -1,35 +1,58 @@
 @import "tailwindcss";
 
-/* ── Self-hosted fonts (ported from desktop assets/, no third-party CDNs) ── */
+/* ── Self-hosted fonts ─────────────────────────────────────────────────────
+   Only fonts this project is licensed to redistribute are served from here.
+   The UKIJ family is LGPL (Uyghur Computer Science Association, ukij.org) and
+   is converted to woff2 by scripts/build-fonts.mjs. 'Traditional Arabic' and
+   'Bahij Nazanin' were REMOVED in favour of system resolution / removal — see
+   THIRD-PARTY-NOTICES.md. Never add an @font-face for either of them.
+   No third-party CDNs: every file below is served from this origin. */
 @font-face {
   font-family: "UKIJ Ekran";
-  src: url("/fonts/ukijekran.ttf") format("truetype");
+  src: url("/fonts/ukijekran.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Traditional Arabic";
-  src: url("/fonts/trad-arabic.ttf") format("truetype");
+  font-family: "UKIJ Tuz";
+  src: url("/fonts/ukij-tuz.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Traditional Arabic";
-  src: url("/fonts/trad-arabic-bold.ttf") format("truetype");
+  font-family: "UKIJ Tuz";
+  src: url("/fonts/ukij-tuz-bold.woff2") format("woff2");
   font-weight: bold;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Bahij Nazanin";
-  src: url("/fonts/Bahij_Nazanin-Regular.ttf") format("truetype");
+  font-family: "UKIJ Tuz Tom";
+  src: url("/fonts/ukij-tuz-tom.woff2") format("woff2");
   font-weight: normal;
   font-style: normal;
   font-display: swap;
 }
-/* Quran-only fonts (used by the mushaf module) */
+@font-face {
+  font-family: "UKIJ Tuz Kitab";
+  src: url("/fonts/ukij-tuz-kitab.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "UKIJ Tuz Kitab";
+  src: url("/fonts/ukij-tuz-kitab-bold.woff2") format("woff2");
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+/* Quran-only fonts (used by the mushaf module).
+   KFGQPC's licence permits free redistribution but forbids modifying the
+   font software, so these stay in their original .otf form — do NOT convert
+   them to woff2. */
 @font-face {
   font-family: "Uthmanic Hafs";
   src: url("/fonts/UthmanicHafs1-Ex1-Ver12.otf") format("opentype");
@@ -59,6 +82,10 @@
   --glow: 0 0 0 2px var(--am), 0 6px 20px rgba(201, 162, 75, 0.25);
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.045 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
   /* ── shared tokens (inherited by every theme) ── */
+  /* "Traditional Arabic" and "Arabic Typesetting" are named, never served:
+     both are Windows system fonts whose licences forbid redistribution, so
+     they are a free upgrade for readers who already have them and a silent
+     no-op for everyone else, who land on the shipped UKIJ Ekran. */
   --jf: "UKIJ Ekran", "Traditional Arabic", "Arabic Typesetting", serif;
   /* spacing scale: 4 · 8 · 12 · 16 · 24 · 32 */
   --radius: 10px; --radius2: 6px; --radius-lg: 14px;

@@ -43,10 +43,21 @@ modify anything there from this project).
   paper/gold manuscript palette (`--bg #FBF6EC`, `--am #B0832F`, `--gold #C9A24B`,
   grain texture, radii), with dark and sepia theme variants. Reuse the SAME variable
   names and values so themes stay consistent across desktop and web.
-- Fonts: copy from desktop `assets/` into `public/fonts/` — `ukijekran.ttf` (UKIJ
-  Ekran, primary UI), `trad-arabic(.bold).ttf`, `Bahij_Nazanin-Regular.ttf`,
-  `UthmanicHafs*.otf` (Quran only). Self-hosted `@font-face` with `font-display: swap`;
-  convert to woff2 where possible. Never load fonts from third-party CDNs.
+- **Fonts — only what we may legally redistribute.** Shipped from `public/fonts/`:
+  the UKIJ family (LGPL, ukij.org) as woff2 — `ukijekran.woff2` (primary UI),
+  `ukij-tuz`, `ukij-tuz-tom`, `ukij-tuz-kitab` (+ bold cuts) — and
+  `UthmanicHafs*.otf` (Quran only, KFGQPC). Regenerate the woff2 files with
+  `node scripts/build-fonts.mjs`; every source is verified LGPL from its OWN name
+  table, not from its filename (`UKIJEsliye.ttf` is "All Rights Reserved" and is
+  therefore NOT shipped). Self-hosted `@font-face` with `font-display: swap`; never
+  load fonts from third-party CDNs.
+- **DO NOT re-add `trad-arabic(.bold).ttf` or `Bahij_Nazanin-Regular.ttf`.** They were
+  removed in the licence clean-up: Traditional Arabic is a Monotype "Microsoft supplied
+  font" that may not be redistributed (it is still offered in the reader, resolved from
+  the reader's own Windows install — named in the font stack, never served), and Bahij
+  Nazanin's own licence says "Not for reproduction, distribution or commercial use".
+  Uthmanic Hafs stays `.otf`: KFGQPC forbids modifying the font software, and a woff2
+  conversion is a modification. See `THIRD-PARTY-NOTICES.md`.
 - Layout concepts to mirror: top bar with brand, right-side category sidebar
   (drawer on mobile), book grid/list toggle, reader with themes (light/dark/sepia) and
   font-size controls, SVG sprite icons (copy the desktop `<symbol>` icon set).

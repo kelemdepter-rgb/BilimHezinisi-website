@@ -56,12 +56,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           after the CSS parses, so the first paint uses a fallback and the whole
           page reflows when the real font lands. Preloading it removes that
           shift — the single biggest layout-stability win here.
+
+          ONLY this one family is preloaded. The other reading faces (UKIJ Tuz,
+          Tuz Tom, Tuz Kitab) and the Quran's Uthmanic Hafs are fetched lazily
+          by the @font-face rules that reference them, so a visitor who never
+          opens the reader never pays for them.
         */}
         <link
           rel="preload"
-          href="/fonts/ukijekran.ttf"
+          href="/fonts/ukijekran.woff2"
           as="font"
-          type="font/ttf"
+          type="font/woff2"
           crossOrigin="anonymous"
         />
       </head>

@@ -7,6 +7,7 @@ import {
   FONT_LABELS,
   MAX_LINE_HEIGHT,
   MIN_LINE_HEIGHT,
+  READER_FONTS,
   type ReaderFont,
   type ReaderSettings,
 } from "@/lib/reader/settings";
@@ -121,7 +122,7 @@ export function ReaderPanel({
                   value={settings.font}
                   onChange={(event) => onSettingsChange({ font: event.target.value as ReaderFont })}
                 >
-                  {(Object.keys(FONT_LABELS) as ReaderFont[]).map((font) => (
+                  {READER_FONTS.map((font) => (
                     <option key={font} value={font}>
                       {FONT_LABELS[font]}
                     </option>

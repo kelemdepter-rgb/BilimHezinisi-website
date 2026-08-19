@@ -77,8 +77,15 @@ npx playwright test  # mobile (375x667, 390x844) + desktop (1280x800) projects
 - Uyghur search: normalize with `ug_normalize()` (ported from desktop
   `normalizeArabicQuery`) at BOTH index and query time; FTS config `simple` +
   `pg_trgm` for substrings.
-- Fonts are self-hosted in `public/fonts/` (UKIJ Ekran, Traditional Arabic, Bahij
-  Nazanin, Uthmanic Hafs for Quran); `font-display: swap`; no runtime third-party CDNs.
+- Fonts are self-hosted in `public/fonts/` and are **only** the ones we may
+  redistribute: the UKIJ family as woff2 (Ekran, Tuz, Tuz Tom, Tuz Kitab — LGPL) plus
+  Uthmanic Hafs `.otf` for the Quran (KFGQPC forbids modifying it, so no woff2).
+  `font-display: swap`; no runtime third-party CDNs. **Traditional Arabic and Bahij
+  Nazanin are gone and must never be re-added** — Traditional Arabic is a Monotype
+  Windows font (still offered in the reader, resolved from the reader's own system,
+  never served) and Bahij Nazanin's licence forbids distribution. Rebuild the woff2
+  files with `node scripts/build-fonts.mjs`; verify any new font's licence in its own
+  name table, not from its filename.
 - Secrets: only `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` may reach
   the client. `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` are server-only, never
   logged, never committed.

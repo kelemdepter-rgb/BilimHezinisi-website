@@ -47,6 +47,16 @@ const nextConfig: NextConfig = {
         source: "/spellcheck/:file*",
         headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
       },
+      {
+        /**
+         * Fonts are content-stable: a new cut means a new filename, because
+         * scripts/build-fonts.mjs writes one file per face. Without this they
+         * inherit public/'s `max-age=0, must-revalidate` and every visitor
+         * revalidates ~70 KB of UKIJ Ekran before the first paint.
+         */
+        source: "/fonts/:file*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
     ];
   },
 };

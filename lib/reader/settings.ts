@@ -1,6 +1,15 @@
 /** Reader typography settings, persisted locally and applied instantly. */
 
-export type ReaderFont = "ukij" | "trad" | "bahij";
+/**
+ * Every entry here is either a font this project may redistribute (the UKIJ
+ * family, LGPL — served from /fonts) or one resolved from the reader's own
+ * operating system. "Traditional Arabic" is the latter: it ships with Windows
+ * as a Monotype font that may not be redistributed, so it is named in the
+ * stack but no file is served and no @font-face declares it. Readers on
+ * Windows get the exact face they always did; everyone else falls through to
+ * UKIJ Ekran. Never add a "bahij" option back — see THIRD-PARTY-NOTICES.md.
+ */
+export type ReaderFont = "ukij" | "tuz" | "tuztom" | "tuzkitab" | "trad";
 
 export type ReaderSettings = {
   fontSize: number;
@@ -10,15 +19,21 @@ export type ReaderSettings = {
 
 export const FONT_STACKS: Record<ReaderFont, string> = {
   ukij: "'UKIJ Ekran', 'Traditional Arabic', serif",
+  tuz: "'UKIJ Tuz', 'UKIJ Ekran', serif",
+  tuztom: "'UKIJ Tuz Tom', 'UKIJ Ekran', serif",
+  tuzkitab: "'UKIJ Tuz Kitab', 'UKIJ Ekran', serif",
   trad: "'Traditional Arabic', 'UKIJ Ekran', serif",
-  bahij: "'Bahij Nazanin', 'UKIJ Ekran', serif",
 };
 
 export const FONT_LABELS: Record<ReaderFont, string> = {
   ukij: "UKIJ Ekran",
+  tuz: "UKIJ Tuz",
+  tuztom: "UKIJ Tuz Tom",
+  tuzkitab: "UKIJ Tuz Kitab",
   trad: "Traditional Arabic",
-  bahij: "Bahij Nazanin",
 };
+
+export const READER_FONTS = Object.keys(FONT_LABELS) as ReaderFont[];
 
 export const MIN_FONT_SIZE = 14;
 export const MAX_FONT_SIZE = 32;
@@ -33,6 +48,10 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
 
 export const SETTINGS_STORAGE_KEY = "bh-reader-settings";
 
+function isReaderFont(value: unknown): value is ReaderFont {
+  return typeof value === "string" && value in FONT_STACKS;
+}
+
 export function clampSettings(input: Partial<ReaderSettings> | null | undefined): ReaderSettings {
   const fontSize = Number(input?.fontSize);
   const lineHeight = Number(input?.lineHeight);
@@ -44,7 +63,13 @@ export function clampSettings(input: Partial<ReaderSettings> | null | undefined)
     lineHeight: Number.isFinite(lineHeight)
       ? Math.min(Math.max(Number(lineHeight.toFixed(2)), MIN_LINE_HEIGHT), MAX_LINE_HEIGHT)
       : DEFAULT_SETTINGS.lineHeight,
-    font: font === "trad" || font === "bahij" ? font : DEFAULT_SETTINGS.font,
+    /**
+     * A font that no longer exists — "bahij", removed for its licence —
+     * silently becomes the default rather than throwing or rendering an
+     * empty picker. Readers who had it selected notice nothing but a
+     * different face.
+     */
+    font: isReaderFont(font) ? font : DEFAULT_SETTINGS.font,
   };
 }
 

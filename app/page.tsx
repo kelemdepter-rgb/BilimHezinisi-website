@@ -88,6 +88,19 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
         />
       )}
 
+      {/* Confirmation for someone who just deleted their account: they are
+          signed out, so this is the only page left to say it on. */}
+      {params.uqtur === "account_deleted" && (
+        <p
+          role="status"
+          data-testid="account-deleted"
+          className="mb-5 rounded-[var(--radius)] bg-ab px-3.5 py-3 text-[13px] leading-6 text-ink"
+        >
+          ھېساباتىڭىز ۋە ئۇنىڭغا باغلانغان بارلىق ئۇچۇرلار ئۆچۈرۈلدى. كىتاب ئوقۇشنى
+          ھېساباتسىزمۇ داۋاملاشتۇرالايسىز.
+        </p>
+      )}
+
       {!session && total === 0 && (
         <section className="paper grain relative mb-6 overflow-hidden p-6 sm:p-8">
           <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,var(--gold),var(--am),var(--gold))]" />

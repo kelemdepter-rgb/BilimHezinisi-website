@@ -4,7 +4,17 @@ import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureAdminBootstrap } from "@/lib/auth/bootstrap";
-import { SIGN_IN_RULE, SIGN_UP_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
+import {
+  PASSWORD_RESET_RULE,
+  SIGN_IN_RULE,
+  SIGN_UP_RULE,
+  callerKey,
+  isRateLimited,
+} from "@/lib/rate-limit";
+import { absoluteUrl } from "@/lib/seo";
+
+/** Where a recovery link ends up, and where the new password is set. */
+const RESET_PATH = "/reset-password";
 
 /**
  * Supabase auth error code → query key understood by the login/register
@@ -101,4 +111,81 @@ export async function signOutAction() {
   const supabase = await createSupabaseServerClient();
   if (supabase) await supabase.auth.signOut();
   redirect("/");
+}
+
+const RESET_REASONS: Record<string, string> = {
+  email_address_invalid: "bad_email",
+  over_email_send_rate_limit: "email_limit",
+  over_request_rate_limit: "rate_limit",
+  email_provider_disabled: "provider_off",
+};
+
+const UPDATE_PASSWORD_REASONS: Record<string, string> = {
+  weak_password: "short",
+  same_password: "same",
+  session_not_found: "expired",
+  over_request_rate_limit: "rate_limit",
+};
+
+/**
+ * Send a password-recovery email.
+ *
+ * The answer is deliberately the same whether or not the address has an
+ * account: anything else turns this form into a way to ask the site which of
+ * a list of emails are registered here. Supabase's own response does not
+ * distinguish either, so nothing but our own redirect could leak it.
+ *
+ * The link lands on /auth/callback, which exchanges the code for a session
+ * and forwards to /reset-password — the only place the new password is set.
+ */
+export async function requestPasswordResetAction(formData: FormData) {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) redirect("/forgot-password?xata=empty");
+
+  if (isRateLimited(`reset:${await callerKey()}`, PASSWORD_RESET_RULE)) {
+    redirect("/forgot-password?xata=rate_limit");
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) redirect("/forgot-password?xata=config");
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: absoluteUrl(`/auth/callback?next=${encodeURIComponent(RESET_PATH)}`),
+  });
+
+  // Only failures that say nothing about THIS address are surfaced.
+  if (error && (error.code === "over_email_send_rate_limit" || error.code === "email_provider_disabled")) {
+    redirect(`/forgot-password?xata=${reasonFor(error, RESET_REASONS, "failed")}`);
+  }
+  if (error) reasonFor(error, RESET_REASONS, "failed"); // logs the unmapped ones
+
+  redirect("/forgot-password?uqtur=sent");
+}
+
+/**
+ * Set a new password. Reachable only with the session the recovery link
+ * created, which `updateUser` enforces server-side — a signed-out caller gets
+ * an error from Supabase rather than a changed password.
+ */
+export async function updatePasswordAction(formData: FormData) {
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+  if (!password || !confirm) redirect(`${RESET_PATH}?xata=empty`);
+  if (password.length < 6) redirect(`${RESET_PATH}?xata=short`);
+  if (password !== confirm) redirect(`${RESET_PATH}?xata=mismatch`);
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) redirect(`${RESET_PATH}?xata=config`);
+
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data.user) redirect(`${RESET_PATH}?xata=expired`);
+
+  const { error: updateError } = await supabase.auth.updateUser({ password });
+  if (updateError) {
+    redirect(`${RESET_PATH}?xata=${reasonFor(updateError, UPDATE_PASSWORD_REASONS, "failed")}`);
+  }
+
+  // updateUser keeps the session, so they are already signed in with the new
+  // password — no second trip through the login form.
+  redirect("/my/account?uqtur=password_changed");
 }

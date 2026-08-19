@@ -78,7 +78,17 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           </button>
         </form>
 
-        <p className="mt-5 text-[13px] text-ink2">
+        <p className="mt-4 text-[13px] text-ink2">
+          <Link
+            href="/forgot-password"
+            data-testid="forgot-password-link"
+            className="font-semibold text-am underline"
+          >
+            پارولنى ئۇنتۇدىڭىزمۇ؟
+          </Link>
+        </p>
+
+        <p className="mt-3 text-[13px] text-ink2">
           ھېساباتىڭىز يوقمۇ؟{" "}
           <Link href="/register" className="font-semibold text-am underline">
             تىزىمدىن ئۆتۈڭ

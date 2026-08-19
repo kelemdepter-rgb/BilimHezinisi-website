@@ -33,6 +33,13 @@ export type RateLimitRule = { limit: number; windowMs: number };
 export const SIGN_IN_RULE: RateLimitRule = { limit: 8, windowMs: 10 * 60_000 };
 /** Sign-up: each one costs an email send, so it is tighter. */
 export const SIGN_UP_RULE: RateLimitRule = { limit: 4, windowMs: 60 * 60_000 };
+/**
+ * Password reset: also an email send, and the one endpoint that will happily
+ * mail a stranger on request. Someone who genuinely forgot their password
+ * needs it once or twice; anyone asking more often from one address is
+ * spending the project's free email allowance on somebody else's inbox.
+ */
+export const PASSWORD_RESET_RULE: RateLimitRule = { limit: 4, windowMs: 60 * 60_000 };
 
 /**
  * The caller's address, from the proxy header Vercel sets. Falls back to a

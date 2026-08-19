@@ -89,6 +89,10 @@
   --jf: "UKIJ Ekran", "Traditional Arabic", "Arabic Typesetting", serif;
   /* spacing scale: 4 · 8 · 12 · 16 · 24 · 32 */
   --radius: 10px; --radius2: 6px; --radius-lg: 14px;
+  /* Destructive actions (delete account) and the spellchecker's underline.
+     --danger is a foreground/stroke colour, --danger-solid a fill that must
+     stay readable under white text in every theme. */
+  --danger: #B3261E; --danger-solid: #B3261E; --danger-fg: #FFF6F4;
 }
 /* System dark mode applies only while the visitor has not chosen a theme */
 @media (prefers-color-scheme: dark) {
@@ -103,6 +107,7 @@
     --shadow-2: 0 16px 44px rgba(0, 0, 0, 0.6);
     --glow: 0 0 0 2px var(--am), 0 6px 22px rgba(224, 184, 94, 0.3);
     --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+    --danger: #F0857A; --danger-solid: #A5271C;
   }
 }
 :root[data-theme="dark"] {
@@ -117,6 +122,7 @@
   --shadow-2: 0 16px 44px rgba(0, 0, 0, 0.6);
   --glow: 0 0 0 2px var(--am), 0 6px 22px rgba(224, 184, 94, 0.3);
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  --danger: #F0857A; --danger-solid: #A5271C;
 }
 :root[data-theme="sepia"] {
   /* ── SEPIA — warm parchment reading mode, aligned to the Day family ── */
@@ -129,6 +135,7 @@
   --shadow-1: 0 2px 10px rgba(70, 50, 20, 0.10);
   --shadow-2: 0 14px 38px rgba(70, 50, 20, 0.20);
   --glow: 0 0 0 2px var(--am), 0 6px 20px rgba(188, 148, 69, 0.28);
+  --danger: #A5271C; --danger-solid: #A5271C;
 }
 
 /* ── Tailwind token bridge: bg-bg, bg-paper, text-ink, border-bd, text-am … ── */
@@ -149,6 +156,7 @@
   --color-paper-bd: var(--paper-bd);
   --color-bd: var(--border);
   --color-bd2: var(--border2);
+  --color-danger: var(--danger);
   --font-ug: var(--jf);
   --radius-tile: var(--radius);
   --radius-tile2: var(--radius2);
@@ -315,6 +323,26 @@
   }
   .btn-am:hover { filter: brightness(1.06); }
   .btn-am:disabled { opacity: 0.6; cursor: default; }
+  /* Destructive twin of .btn-am — same shape, so it reads as the same kind of
+     control, in the one colour the rest of the site never uses. */
+  .btn-danger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    background: var(--danger-solid);
+    color: var(--danger-fg);
+    border: none;
+    border-radius: var(--radius);
+    padding: 11px 18px;
+    font-family: var(--jf);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-danger:hover { filter: brightness(1.1); }
+  .btn-danger:disabled { opacity: 0.5; cursor: default; }
 
   /* ── Long-form informational pages (/about, /privacy) ──────────────────
      Plain prose at a size that stays comfortable on a 375 px phone. Spacing
@@ -533,7 +561,7 @@
    the one that matters here. Browsers that support the API but not decoration
    inside it still get the background tint, so the word is never unmarked. */
 ::highlight(bh-spell-error) {
-  text-decoration: underline wavy var(--danger, #b3261e);
+  text-decoration: underline wavy var(--danger);
   text-decoration-skip-ink: none;
   text-underline-offset: 0.22em;
   background-color: color-mix(in srgb, #b3261e 9%, transparent);

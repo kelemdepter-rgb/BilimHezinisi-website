@@ -16,7 +16,7 @@ const ERRORS: Record<string, string> = {
     "ئېلخەت ئەۋەتىش Supabase دا ئېتىۋېتىلگەن. Authentication → Sign In / Providers → Email بۆلىكىدىن ئۇنى ئېچىڭ.",
   config: "سايت تېخى ساندانغا ئۇلانمىغان. باشقۇرغۇچى تەڭشىگەندىن كېيىن قايتا سىناڭ.",
   link_failed:
-    "ئۇلانما ئىشلىمىدى. ئۇنى ئۆزىڭىز تەلەپ قىلغان شۇ بىراۋزېردا (شۇ كومپيۇتېر ياكى تېلېفوندا) ئېچىڭ، ياكى تۆۋەندە يېڭى ئۇلانما تەلەپ قىلىڭ.",
+    "ئۇلانما ئىشلىمىدى. ئۇنى ئۆزىڭىز تەلەپ قىلغان شۇ تور كۆرگۈچتە ئېچىڭ، ياكى تۆۋەندە يېڭى ئۇلانما تەلەپ قىلىڭ.",
   failed: "ئەۋەتىش مەغلۇپ بولدى. سەل تۇرۇپ قايتا سىناڭ.",
 };
 
@@ -27,13 +27,14 @@ const ERRORS: Record<string, string> = {
  *
  * The last sentence is not padding. Supabase's recovery link is a PKCE link:
  * the verifier is a cookie written into THIS browser when the form is
- * submitted, so opening the mail on another device — or in the small browser
- * inside a mail app — cannot complete it. Saying so here costs one line and
- * prevents the dead end; /auth/callback still catches it and explains if it
- * happens anyway.
+ * submitted, so the link cannot be completed anywhere else — not on another
+ * device, and not in the small browser inside a mail app, which is a
+ * different browser even on the same phone. That is why the wording says
+ * browser rather than device. Saying it here costs one line and prevents the
+ * dead end; /auth/callback still catches it and explains if it happens anyway.
  */
 const SENT_NOTICE =
-  "ئەگەر بۇ ئېلخەت ئادرېسى بىلەن ھېسابات ئېچىلغان بولسا، پارولنى يېڭىلاش ئۇلانمىسى ئەۋەتىلدى. ساندۇقىڭىزنى، شۇنداقلا «Spam» بۆلىكىنى تەكشۈرۈپ بېقىڭ. ئۇلانمىنى چوقۇم مۇشۇ ئۈسكۈنىدىكى مۇشۇ بىراۋزېردا ئېچىڭ.";
+  "ئەگەر بۇ ئېلخەت ئادرېسى بىلەن ھېسابات ئېچىلغان بولسا، پارولنى يېڭىلاش ئۇلانمىسى ئەۋەتىلدى. ساندۇقىڭىزنى، شۇنداقلا «Spam» بۆلىكىنى تەكشۈرۈپ بېقىڭ. پارول ئەسكەرتىشىنى مۇشۇ تور كۆرگۈچتە ئېچىڭ — ئۇلانما باشقا تور كۆرگۈچتە ئىشلىمەيدۇ.";
 
 export default async function ForgotPasswordPage({
   searchParams,

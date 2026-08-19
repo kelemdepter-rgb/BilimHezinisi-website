@@ -146,7 +146,7 @@ export function ReaderPanel({
               </label>
               <p className="text-[12.5px] leading-6 text-ink3">
                 خەت چوڭلۇقى ۋە تۈس ئۈستىدىكى قوراللار بالدىقىدا. تەڭشەكلىرىڭىز مۇشۇ
-                بىراۋزېردا ساقلىنىدۇ.
+                تور كۆرگۈچتە ساقلىنىدۇ.
               </p>
             </div>
           ) : !signedIn ? (

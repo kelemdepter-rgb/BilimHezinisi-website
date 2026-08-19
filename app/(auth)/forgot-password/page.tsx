@@ -24,9 +24,16 @@ const ERRORS: Record<string, string> = {
  * Deliberately identical whether or not that address has an account. Telling
  * the visitor "no such user" would turn this form into a way to test which
  * emails are registered here.
+ *
+ * The last sentence is not padding. Supabase's recovery link is a PKCE link:
+ * the verifier is a cookie written into THIS browser when the form is
+ * submitted, so opening the mail on another device — or in the small browser
+ * inside a mail app — cannot complete it. Saying so here costs one line and
+ * prevents the dead end; /auth/callback still catches it and explains if it
+ * happens anyway.
  */
 const SENT_NOTICE =
-  "ئەگەر بۇ ئېلخەت ئادرېسى بىلەن ھېسابات ئېچىلغان بولسا، پارولنى يېڭىلاش ئۇلانمىسى ئەۋەتىلدى. ساندۇقىڭىزنى، شۇنداقلا «Spam» بۆلىكىنى تەكشۈرۈپ بېقىڭ.";
+  "ئەگەر بۇ ئېلخەت ئادرېسى بىلەن ھېسابات ئېچىلغان بولسا، پارولنى يېڭىلاش ئۇلانمىسى ئەۋەتىلدى. ساندۇقىڭىزنى، شۇنداقلا «Spam» بۆلىكىنى تەكشۈرۈپ بېقىڭ. ئۇلانمىنى چوقۇم مۇشۇ ئۈسكۈنىدىكى مۇشۇ بىراۋزېردا ئېچىڭ.";
 
 export default async function ForgotPasswordPage({
   searchParams,

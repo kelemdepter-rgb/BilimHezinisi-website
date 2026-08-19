@@ -176,7 +176,10 @@ it rejects the connection. The `dev` script therefore runs with
 `NODE_OPTIONS=--use-system-ca`, which makes Node trust the system store in
 addition to its bundled CAs.
 
-This is deliberately applied to `dev` only. `build` and `start` are left
-untouched so deployments are unaffected — the flag needs Node ≥ 22.15 and the
-interception does not exist on the hosting side. If a standalone script hits
-the same wall, run it as `node --use-system-ca script.mjs`.
+`dev` and `test` both carry it: several specs call Supabase directly with the
+service role (seeding accounts, and proving that a deleted account left no
+rows), and without the flag those calls fail intermittently with a bare
+`fetch failed`. `build` and `start` are left untouched so deployments are
+unaffected — the flag needs Node ≥ 22.15 and the interception does not exist
+on the hosting side. If a standalone script hits the same wall, run it as
+`node --use-system-ca script.mjs`.

@@ -4,6 +4,7 @@ import "./globals.css";
 import { IconSprite } from "@/components/icons";
 import { AppShell } from "@/components/app-shell";
 import { getCategories, getSessionInfo } from "@/lib/data";
+import { THEME_COLOR } from "./manifest";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/seo";
 import { THEME_COOKIE, isTheme } from "@/lib/theme";
 
@@ -34,12 +35,45 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  /**
+   * iOS never offers to install a site by itself — the reader has to pick
+   * "Add to Home Screen" from the share sheet — so these tags are the only
+   * thing standing between an iPhone shortcut that opens Safari with its
+   * chrome and one that opens the library full screen. A large part of this
+   * audience reads on an iPhone, which is why they are spelled out here
+   * rather than left to the manifest, which Safari still only partly reads.
+   */
+  appleWebApp: {
+    capable: true,
+    title: SITE_NAME,
+    // "default" keeps the status bar legible over the ivory paper; the black
+    // translucent style would put white glyphs on it.
+    statusBarStyle: "default",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  /**
+   * Colours the browser's own chrome around the page. Light mode takes the
+   * manuscript gold `--am`, the same value the manifest gives the splash
+   * screen, so an installed copy and a browser tab read as one thing. Dark
+   * mode takes the night theme's `--bg2` instead: gold at full strength is
+   * exactly what someone reading in the dark turned the lights off to avoid.
+   */
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: THEME_COLOR },
+    { media: "(prefers-color-scheme: dark)", color: "#1E1910" },
+  ],
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -69,6 +103,14 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           type="font/woff2"
           crossOrigin="anonymous"
         />
+        {/*
+          Next emits the modern <meta name="mobile-web-app-capable">, which
+          Safari only learned to read in iOS 17.4. Phones older than that —
+          a large part of this audience — still need the apple- prefixed
+          spelling, or "Add to Home Screen" produces a bookmark that opens in
+          Safari with its chrome instead of a full-screen app.
+        */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body className="min-h-dvh">
         <IconSprite />

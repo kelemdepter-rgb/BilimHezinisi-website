@@ -28,6 +28,9 @@ export type IconName =
   | "pencil"
   | "trash"
   | "download"
+  | "printer"
+  | "share"
+  | "image"
   | "sparkles"
   | "info"
   | "chart"
@@ -165,6 +168,9 @@ export function IconSprite() {
         <symbol id="i-mosque" viewBox="0 0 24 24"><path d="M3 21h18" /><path d="M5 21V9" /><path d="M3.7 9a1.3 1.3 0 0 1 2.6 0" /><path d="M19 21V9" /><path d="M17.7 9a1.3 1.3 0 0 1 2.6 0" /><path d="M8 21v-8a4 4 0 0 1 8 0v8" /><path d="M12 9V6" /><path d="M10.5 21v-3.5a1.5 1.5 0 0 1 3 0V21" /></symbol>
         {/* Web-only additions, same lucide stroke style as the desktop set */}
         <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16" /><path d="M4 12h16" /><path d="M4 18h16" /></symbol>
+        <symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><rect width="12" height="8" x="6" y="14" rx="1" /></symbol>
+        <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 2v13" /><path d="m16 6-4-4-4 4" /><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" /></symbol>
+        <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21" /></symbol>
         <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></symbol>
         <symbol id="i-log-in" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><path d="m10 17 5-5-5-5" /><path d="M15 12H3" /></symbol>
         <symbol id="i-log-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5" /><path d="M21 12H9" /></symbol>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
+import { DownloadBook } from "@/components/books/download-book";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
 import { MarkdownContent } from "@/components/reader/markdown-content";
@@ -781,6 +782,8 @@ export function Reader({
           <span className="text-[12.5px] text-ink3" data-testid="page-indicator">
             / {pageCount}
           </span>
+          {/* Opens upwards: this bar is stuck to the bottom of the screen. */}
+          {published && <DownloadBook bookId={bookId} variant="icon" placement="up" />}
           <button
             type="button"
             className="ibtn"
@@ -788,7 +791,8 @@ export function Reader({
             data-testid="print-button"
             onClick={() => window.print()}
           >
-            <Icon name="download" />
+            {/* Was a download arrow, which is now the button beside it. */}
+            <Icon name="printer" />
           </button>
         </div>
       </div>

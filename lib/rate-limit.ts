@@ -42,6 +42,17 @@ export const SIGN_UP_RULE: RateLimitRule = { limit: 4, windowMs: 60 * 60_000 };
 export const PASSWORD_RESET_RULE: RateLimitRule = { limit: 4, windowMs: 60 * 60_000 };
 
 /**
+ * Downloading a whole book.
+ *
+ * One download reads every page of a book out of Supabase — the single most
+ * expensive thing an anonymous visitor can ask this site to do, and the free
+ * plan allows 5 GB of egress a month. Six in ten minutes covers anyone
+ * genuinely collecting a shelf; a script pulling the whole library gets
+ * turned away long before the allowance does.
+ */
+export const BOOK_DOWNLOAD_RULE: RateLimitRule = { limit: 6, windowMs: 10 * 60_000 };
+
+/**
  * The caller's address, from the proxy header Vercel sets. Falls back to a
  * single shared bucket, which is the safe direction: unknown callers share a
  * limit rather than escaping it.

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/icons";
+import { DownloadBook } from "@/components/books/download-book";
 import { BookCover } from "@/components/library/book-cover";
 import { getCategories, getSessionInfo } from "@/lib/data";
 import {
@@ -180,6 +181,8 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
                 ئوقۇش
               </Link>
             )}
+            {/* A draft has nothing to hand out yet, so it is not offered. */}
+            {!isDraft && <DownloadBook bookId={book.id} />}
           </div>
 
           {book.description && (

@@ -47,8 +47,14 @@ const STAMP_HEADER = "x-bh-cached-at";
 /** The one face the first paint needs; the rest load lazily from their CSS. */
 const SHELL_ASSETS = ["/fonts/ukijekran.woff2"];
 
-/** How many of each kind to keep before the oldest entry is dropped. */
-const LIMITS = { [DOCS]: 40, [COVERS]: 60, [STATIC]: 200 };
+/**
+ * How many of each kind to keep before the oldest entry is dropped.
+ *
+ * The text bound is generous — a reader's window of 8 pages is one entry, so
+ * 400 covers a long reading history and several whole downloaded books — but
+ * it exists: without it, downloading books would fill a phone quietly.
+ */
+const LIMITS = { [DOCS]: 40, [TEXT]: 400, [COVERS]: 60, [STATIC]: 200 };
 
 /**
  * How long a cached book page is served without asking the network again.

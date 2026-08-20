@@ -74,7 +74,19 @@ function meter(context) {
       for (const entry of pending) {
         let bytes = 0;
         try {
-          const sizes = await entry.sizes;
+          /**
+           * Raced against a timeout on purpose. A request the service worker
+           * answered out of its own cache never produced a network response,
+           * and asking Playwright for its size simply never returns — which
+           * hung this script for twenty minutes before the race was added.
+           * A size that cannot be learned is zero bytes on the wire, which is
+           * also the truth for a cache hit.
+           */
+          const sizes = await Promise.race([
+            entry.sizes,
+            new Promise((resolve) => setTimeout(() => resolve(null), 2000)),
+          ]);
+          if (!sizes) continue;
           bytes = sizes.responseBodySize + sizes.responseHeadersSize;
         } catch {
           continue; // The context closed before the size was known.

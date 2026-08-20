@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import { CACHEABLE_HEADER } from "@/lib/pwa/constants";
 import { buildContentSecurityPolicy } from "@/lib/security/csp";
 
 /**
@@ -19,8 +20,17 @@ export default async function proxy(request: NextRequest) {
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 
-  const response = await updateSession(request, requestHeaders);
+  const { response, signedIn } = await updateSession(request, requestHeaders);
   response.headers.set("Content-Security-Policy", csp);
+  /**
+   * Tells the service worker whether this response is safe to keep offline.
+   *
+   * A page rendered for a signed-in reader has their reading position — and
+   * on some pages their name — baked into it, and Cache Storage is shared by
+   * everyone who uses the browser profile. Deciding it here, where the
+   * session is already known, means public/sw.js never has to guess.
+   */
+  response.headers.set(CACHEABLE_HEADER, signedIn ? "0" : "1");
   return response;
 }
 

@@ -5,6 +5,7 @@ import { IconSprite } from "@/components/icons";
 import { AppShell } from "@/components/app-shell";
 import { getCategories, getSessionInfo } from "@/lib/data";
 import { THEME_COLOR } from "./manifest";
+import { OfflineBridge } from "@/components/pwa/offline-bridge";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/seo";
 import { THEME_COOKIE, isTheme } from "@/lib/theme";
 
@@ -117,6 +118,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <AppShell theme={theme} session={session} categories={categories}>
           {children}
         </AppShell>
+        {/* Registers the service worker and carries the update toast. Renders
+            nothing at all until there is something to say. */}
+        <OfflineBridge />
       </body>
     </html>
   );

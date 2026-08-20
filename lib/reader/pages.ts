@@ -1,4 +1,5 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabasePublicClient } from "@/lib/supabase/public-client";
 import type { ReadingPosition } from "@/lib/reader/position";
 
 export type BookPage = { page_no: number; content: string };
@@ -11,9 +12,22 @@ export type Annotation = {
   text: string;
 };
 
-/** Pages come straight from Supabase under RLS — no Vercel function in the path. */
-export async function fetchPages(bookId: number, from: number, to: number): Promise<BookPage[]> {
-  const supabase = createSupabaseBrowserClient();
+/**
+ * Pages come straight from Supabase under RLS — no Vercel function in the path.
+ *
+ * A published book is read with the anon key even when someone is signed in:
+ * the rows are public either way, and a request carrying only the public key
+ * is one the service worker is allowed to keep for offline reading. A draft
+ * is the opposite case — visible only to its editor, and never cached — so it
+ * keeps the session client.
+ */
+export async function fetchPages(
+  bookId: number,
+  from: number,
+  to: number,
+  published = true,
+): Promise<BookPage[]> {
+  const supabase = published ? createSupabasePublicClient() : createSupabaseBrowserClient();
   const { data, error } = await supabase
     .from("book_pages")
     .select("page_no, content")

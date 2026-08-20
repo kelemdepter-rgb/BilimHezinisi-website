@@ -10,6 +10,7 @@ import { MarkdownContent } from "@/components/reader/markdown-content";
 import { toSegments, ACTIVE_MATCH_CLASS, MATCH_CLASS } from "@/lib/search/occurrences";
 import { flattenMatches, positionOf, stepPosition } from "@/lib/reader/matches";
 import type { ContentFormat } from "@/lib/books/types";
+import { rememberOfflineBook } from "@/lib/pwa/offline-books";
 import {
   addBookmark,
   addNote,
@@ -42,11 +43,32 @@ import type { Theme } from "@/lib/theme";
 const WINDOW_SIZE = 8;
 const FETCH_AHEAD_PX = 1200;
 
+/**
+ * ?page= as the address bar has it, for a document that came from the cache.
+ *
+ * The server normally parses it and hands down jumpToPage. Offline there is
+ * no server: the worker serves one stored copy of the book for every position
+ * inside it, so the parameter has to be read here or a shared link to page 40
+ * would open at whatever page the reader last left.
+ */
+/** Whether the browser currently believes it has no connection. */
+function offline(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+function requestedPageFromLocation(): number | null {
+  if (typeof window === "undefined") return null;
+  const raw = new URLSearchParams(window.location.search).get("page");
+  const value = Number(raw);
+  return raw !== null && Number.isInteger(value) && value > 0 ? value : null;
+}
+
 export function Reader({
   bookId,
   title,
   pageCount,
   contentFormat,
+  published,
   initialPages,
   initialPosition,
   signedIn,
@@ -60,6 +82,8 @@ export function Reader({
   title: string;
   pageCount: number;
   contentFormat: ContentFormat;
+  /** Drafts are staff-only: they are read with the session and never cached. */
+  published: boolean;
   initialPages: BookPage[];
   initialPosition: ReadingPosition;
   signedIn: boolean;
@@ -101,6 +125,16 @@ export function Reader({
     if (signedIn) void touchRecentRead(bookId).catch(() => undefined);
   }, [bookId, signedIn]);
 
+  /**
+   * A cache entry is only a URL, so the offline page has no way of knowing
+   * what «/books/41/read» is called. Writing the title down as the book opens
+   * is what lets that page list the books by name instead of by number.
+   * Drafts are never cached, so they are never offered.
+   */
+  useEffect(() => {
+    if (published) rememberOfflineBook(bookId, title);
+  }, [bookId, published, title]);
+
   useEffect(() => {
     if (!signedIn) return;
     void fetchAnnotations(bookId)
@@ -136,15 +170,21 @@ export function Reader({
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       const position = currentPosition();
-      if (signedIn) {
-        void saveProgress(bookId, position).catch(() => undefined);
-      } else {
-        try {
-          window.localStorage.setItem(positionStorageKey(bookId), JSON.stringify(position));
-        } catch {
-          // Storage unavailable — position simply is not remembered.
-        }
+      /**
+       * Written locally for everyone, signed in or not.
+       *
+       * The server copy is what follows a reader between devices, but it
+       * cannot be read with no network — and the offline copy of this page is
+       * the public one, rendered as if nobody were signed in. Without the
+       * local mirror, a signed-in reader opening a saved book on a train
+       * would land back on page 1.
+       */
+      try {
+        window.localStorage.setItem(positionStorageKey(bookId), JSON.stringify(position));
+      } catch {
+        // Storage unavailable — position simply is not remembered.
       }
+      if (signedIn) void saveProgress(bookId, position).catch(() => undefined);
     }, 800);
   }, [bookId, currentPosition, signedIn]);
 
@@ -158,7 +198,7 @@ export function Reader({
       }
       setLoading(true);
       try {
-        const more = await fetchPages(bookId, from, to);
+        const more = await fetchPages(bookId, from, to, published);
         if (more.length === 0) return;
         if (direction === "after") {
           setPages((previous) => [...previous, ...more]);
@@ -173,12 +213,16 @@ export function Reader({
           });
         }
       } catch {
-        setError("بەتلەرنى يۈكلىگىلى بولمىدى. ئۇلىنىشىڭىزنى تەكشۈرۈڭ.");
+        setError(
+          offline()
+            ? "تور ئۈزۈلدى — بۇ كىتابنىڭ ساقلانغان بەتلىرىنىلا ئوقۇيالايسىز."
+            : "بەتلەرنى يۈكلىگىلى بولمىدى. ئۇلىنىشىڭىزنى تەكشۈرۈڭ.",
+        );
       } finally {
         setLoading(false);
       }
     },
-    [bookId, firstPage, lastPage, loading, pageCount],
+    [bookId, firstPage, lastPage, loading, pageCount, published],
   );
 
   /** Pull in more pages whenever either edge of the loaded window is close. */
@@ -220,22 +264,28 @@ export function Reader({
     if (restoreDone.current) return;
     restoreDone.current = true;
 
+    const requested = jumpToPage ?? requestedPageFromLocation();
+
     let saved = initialPosition;
-    if (!signedIn && jumpToPage === null) {
+    if (!signedIn && requested === null) {
       saved = parseStoredPosition(
         window.localStorage.getItem(positionStorageKey(bookId)),
         pageCount,
       );
     }
 
-    const target = jumpToPage ?? (shouldRestore(saved) ? saved.pageNo : null);
+    const target = requested
+      ? Math.min(Math.max(1, requested), Math.max(1, pageCount))
+      : shouldRestore(saved)
+        ? saved.pageNo
+        : null;
     if (target === null) return;
 
     const scrollToTarget = () => {
       const node = containerRef.current?.querySelector<HTMLElement>(`[data-page-no="${target}"]`);
       if (node) {
         window.scrollTo({ top: node.offsetTop - 80, behavior: "auto" });
-        if (jumpToPage === null) setRestoredPage(target);
+        if (requested === null) setRestoredPage(target);
         return true;
       }
       return false;
@@ -245,7 +295,7 @@ export function Reader({
       // An anonymous target can sit outside the server-rendered window.
       if (scrollToTarget()) return;
       const window_ = initialPageWindow({ pageNo: target, offset: 0 }, pageCount, WINDOW_SIZE);
-      void fetchPages(bookId, window_.from, window_.to)
+      void fetchPages(bookId, window_.from, window_.to, published)
         .then((fresh) => {
           if (fresh.length === 0) return;
           setPages(fresh);
@@ -253,7 +303,7 @@ export function Reader({
         })
         .catch(() => undefined);
     });
-  }, [bookId, initialPosition, jumpToPage, pageCount, signedIn]);
+  }, [bookId, initialPosition, jumpToPage, pageCount, published, signedIn]);
 
   /**
    * Arriving from the search page, the term is highlighted but nothing knows
@@ -287,7 +337,7 @@ export function Reader({
         setLoading(true);
         try {
           const window_ = initialPageWindow({ pageNo: target, offset: 0 }, pageCount, WINDOW_SIZE);
-          const fresh = await fetchPages(bookId, window_.from, window_.to);
+          const fresh = await fetchPages(bookId, window_.from, window_.to, published);
           setPages(fresh);
           await new Promise((resolve) => requestAnimationFrame(resolve));
           node = containerRef.current?.querySelector<HTMLElement>(`[data-page-no="${target}"]`) ?? undefined;
@@ -299,7 +349,7 @@ export function Reader({
       }
       if (node) window.scrollTo({ top: node.offsetTop - 80, behavior: "smooth" });
     },
-    [bookId, pageCount],
+    [bookId, pageCount, published],
   );
 
   /**
@@ -412,7 +462,11 @@ export function Reader({
       setMatchesCapped(capped);
       if (found[0]) await goToPage(found[0].page_no);
     } catch {
-      setError("كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.");
+      setError(
+        offline()
+          ? "ئىزدەش ئۈچۈن تور ئۇلىنىشى كېرەك."
+          : "كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.",
+      );
     }
   }
 

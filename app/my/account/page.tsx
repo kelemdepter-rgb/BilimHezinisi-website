@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { DeleteAccount } from "@/components/my/delete-account";
+import { OfflineStorage } from "@/components/my/offline-storage";
 import { countAdmins, getAccountOwner } from "@/lib/my/account";
 import type { Role } from "@/lib/types";
 
@@ -115,6 +116,14 @@ export default async function AccountPage({ searchParams }: PageProps<"/my/accou
           <Icon name="download" />
           JSON ھۆججىتىنى چۈشۈرۈش
         </a>
+      </section>
+
+      <section className="paper grain mt-4 p-5 sm:p-6" aria-labelledby="account-offline">
+        <h2 id="account-offline" className="flex items-center gap-2 text-[15px] font-bold">
+          <Icon name="globe" className="text-am" />
+          تورسىز ئوقۇش ئۈچۈن ساقلانغان مەزمۇن
+        </h2>
+        <OfflineStorage />
       </section>
 
       <section className="paper grain mt-4 p-5 sm:p-6" aria-labelledby="account-password">

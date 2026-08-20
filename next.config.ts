@@ -49,6 +49,21 @@ const nextConfig: NextConfig = {
       },
       {
         /**
+         * The service worker script itself must never be served from a stale
+         * HTTP cache: it is the thing that decides how everything else is
+         * cached, so a browser holding on to an old copy would be stuck on an
+         * old caching policy with no way to hear about the new one. The
+         * registration also asks for updateViaCache: "none"; this is the same
+         * instruction from the other end, for proxies in between.
+         */
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        ],
+      },
+      {
+        /**
          * The spellcheck dictionary is a build artifact: it only changes when
          * scripts/build-spelldict.mjs is re-run, and the worker caches it in
          * Cache Storage under a versioned name anyway. Vercel's default for

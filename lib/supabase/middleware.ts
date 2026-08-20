@@ -11,9 +11,12 @@ import { hasSupabaseEnv } from "@/lib/env";
  * or a session refresh would silently drop the nonce and the page would
  * render scripts the browser then refuses to run.
  */
-export async function updateSession(request: NextRequest, requestHeaders: Headers) {
+export async function updateSession(
+  request: NextRequest,
+  requestHeaders: Headers,
+): Promise<{ response: NextResponse; signedIn: boolean }> {
   let response = NextResponse.next({ request: { headers: requestHeaders } });
-  if (!hasSupabaseEnv()) return response;
+  if (!hasSupabaseEnv()) return { response, signedIn: false };
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -35,6 +38,10 @@ export async function updateSession(request: NextRequest, requestHeaders: Header
   );
 
   // Revalidates the token and rotates it when expired.
-  await supabase.auth.getUser();
-  return response;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  // Whether anyone is signed in decides whether the service worker may keep
+  // this page for offline reading — see the header proxy.ts stamps on it.
+  return { response, signedIn: Boolean(user) };
 }

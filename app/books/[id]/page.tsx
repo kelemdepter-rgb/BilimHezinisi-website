@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { DownloadBook } from "@/components/books/download-book";
+import { ShareButton } from "@/components/books/share-button";
 import { BookCover } from "@/components/library/book-cover";
 import { getCategories, getSessionInfo } from "@/lib/data";
 import {
@@ -12,7 +13,7 @@ import {
   getBookDetail,
   getReadingProgress,
 } from "@/lib/library";
-import { SITE_NAME, absoluteUrl, jsonLd } from "@/lib/seo";
+import { SITE_NAME, bookJsonLd, jsonLd } from "@/lib/seo";
 
 export async function generateMetadata({ params }: PageProps<"/books/[id]">): Promise<Metadata> {
   const { id } = await params;
@@ -87,25 +88,22 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
           nonce={nonce}
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: jsonLd({
-              "@context": "https://schema.org",
-              "@type": "Book",
-              name: book.title,
-              url: absoluteUrl(`/books/${book.id}`),
-              inLanguage: book.language || "ug",
-              ...(book.author ? { author: { "@type": "Person", name: book.author } } : {}),
-              ...(book.description ? { description: book.description } : {}),
-              ...(book.date ? { datePublished: book.date } : {}),
-              ...(book.page_count > 0 ? { numberOfPages: book.page_count } : {}),
-              ...(coverUrl ? { image: coverUrl } : {}),
-              ...(trail.length > 0 ? { genre: trail[trail.length - 1].name } : {}),
-              isAccessibleForFree: true,
-              publisher: { "@type": "Organization", name: SITE_NAME, url: absoluteUrl("/") },
-              potentialAction: {
-                "@type": "ReadAction",
-                target: absoluteUrl(`/books/${book.id}/read`),
-              },
-            }),
+            __html: jsonLd(
+              bookJsonLd(
+                {
+                  id: book.id,
+                  title: book.title,
+                  author: book.author,
+                  description: book.description,
+                  date: book.date,
+                  language: book.language,
+                  pageCount: book.page_count,
+                  coverUrl,
+                  genre: trail.length > 0 ? trail[trail.length - 1].name : null,
+                },
+                `/books/${book.id}`,
+              ),
+            ),
           }}
         />
       )}
@@ -183,6 +181,13 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
             )}
             {/* A draft has nothing to hand out yet, so it is not offered. */}
             {!isDraft && <DownloadBook bookId={book.id} />}
+            {!isDraft && (
+              <ShareButton
+                path={`/books/${book.id}`}
+                title={book.title}
+                text={book.author ? `${book.title} — ${book.author}` : book.title}
+              />
+            )}
           </div>
 
           {book.description && (

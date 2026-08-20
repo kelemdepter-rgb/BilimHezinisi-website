@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { DownloadBook } from "@/components/books/download-book";
+import { ShareButton } from "@/components/books/share-button";
+import { QuoteCard } from "@/components/reader/quote-card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
 import { MarkdownContent } from "@/components/reader/markdown-content";
@@ -67,6 +69,7 @@ function requestedPageFromLocation(): number | null {
 export function Reader({
   bookId,
   title,
+  author,
   pageCount,
   contentFormat,
   published,
@@ -81,6 +84,7 @@ export function Reader({
 }: {
   bookId: number;
   title: string;
+  author: string;
   pageCount: number;
   contentFormat: ContentFormat;
   /** Drafts are staff-only: they are read with the session and never cached. */
@@ -304,6 +308,26 @@ export function Reader({
         })
         .catch(() => undefined);
     });
+
+    /**
+     * Assert it a second time, once the load has settled.
+     *
+     * The browser restores a navigation's scroll position to the top after
+     * the first paint, which silently undid the jump above — a shared link to
+     * page 120 opened two pages earlier, at the start of the loaded window,
+     * and looked close enough to be missed. The match jump below already had
+     * to do this; the plain ?page= jump needs it for the same reason.
+     *
+     * Guarded on still being at the top, so a reader who has started scrolling
+     * for themselves is never yanked back.
+     */
+    setTimeout(() => {
+      if (window.scrollY < 10) scrollToTarget();
+    }, 350);
+    // Deliberately not cancelled on cleanup: the guard above already makes
+    // this run once per reader, and in development React mounts effects
+    // twice — cancelling on the first unmount would throw the only attempt
+    // away and leave the reader at the top of the window.
   }, [bookId, initialPosition, jumpToPage, pageCount, published, signedIn]);
 
   /**
@@ -784,6 +808,14 @@ export function Reader({
           </span>
           {/* Opens upwards: this bar is stuck to the bottom of the screen. */}
           {published && <DownloadBook bookId={bookId} variant="icon" placement="up" />}
+          {/* Carries the page the reader is on, read at the moment of the tap
+              — the whole point of sharing from inside a book. */}
+          <ShareButton
+            variant="icon"
+            title={title}
+            path={() => `/books/${bookId}/read?page=${currentPosition().pageNo}`}
+            label="بۇ بەتنى ئۈلەشتۈرۈش"
+          />
           <button
             type="button"
             className="ibtn"
@@ -796,6 +828,14 @@ export function Reader({
           </button>
         </div>
       </div>
+
+      {/* Appears where the reader has selected text; nothing hover-only. */}
+      <QuoteCard
+        containerRef={containerRef}
+        title={title}
+        author={author}
+        currentPage={() => currentPosition().pageNo}
+      />
 
       <ReaderPanel
         open={panelOpen}

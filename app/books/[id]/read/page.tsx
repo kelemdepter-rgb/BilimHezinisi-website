@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { Reader } from "@/components/reader/reader";
 import { getSessionInfo } from "@/lib/data";
-import { getBookDetail, getReadingProgress } from "@/lib/library";
+import { coverUrlFor, getBookDetail, getReadingProgress } from "@/lib/library";
+import { bookJsonLd, jsonLd } from "@/lib/seo";
 import { clampPosition, initialPageWindow } from "@/lib/reader/position";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { THEME_COOKIE, isTheme } from "@/lib/theme";
@@ -19,14 +20,38 @@ export async function generateMetadata({ params }: PageProps<"/books/[id]/read">
   // ?page= and ?q= are the same text at a different scroll position, so they
   // all point back at the clean reading URL. Drafts stay out of the index.
   const canonical = `/books/${book.id}/read`;
+  const description = `${book.title}${book.author ? ` — ${book.author}` : ""}. تور بەتتە ھېساباتسىز ئوقۇڭ.`;
   if (book.status !== "published") {
     return { title: `${book.title} — ئوقۇش`, robots: { index: false, follow: false } };
   }
+
+  /**
+   * A link to an exact page is the most shared thing on this site — somebody
+   * sends a friend the passage they are reading — so the preview card has to
+   * be the book's own cover and blurb, not the site's generic card. The
+   * canonical deliberately keeps no ?page=: it addresses a position inside
+   * this text, not another document.
+   */
+  const coverUrl = await coverUrlFor(book.cover_path);
+  const images = coverUrl ? [{ url: coverUrl, alt: book.title }] : undefined;
+
   return {
     title: `${book.title} — ئوقۇش`,
-    description: `${book.title}${book.author ? ` — ${book.author}` : ""}. تور بەتتە ھېساباتسىز ئوقۇڭ.`,
+    description,
     alternates: { canonical },
-    openGraph: { type: "book", title: book.title, url: canonical },
+    openGraph: {
+      type: "book",
+      title: book.title,
+      description,
+      url: canonical,
+      ...(images ? { images } : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: book.title,
+      description,
+      ...(images ? { images: images.map((image) => image.url) } : {}),
+    },
   };
 }
 
@@ -39,11 +64,13 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/boo
   const book = await getBookDetail(bookId);
   if (!book) notFound();
 
-  const [session, progress, cookieStore, supabase] = await Promise.all([
+  const [session, progress, cookieStore, supabase, coverUrl, requestHeaders] = await Promise.all([
     getSessionInfo(),
     getReadingProgress(bookId),
     cookies(),
     createSupabaseServerClient(),
+    coverUrlFor(book.cover_path),
+    headers(),
   ]);
 
   const requestedPage = typeof query.page === "string" ? Number(query.page) : NaN;
@@ -76,22 +103,53 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/boo
   }
 
   const rawTheme = cookieStore.get(THEME_COOKIE)?.value;
+  const isDraft = book.status !== "published";
 
   return (
-    <Reader
-      bookId={bookId}
-      title={book.title}
-      pageCount={book.page_count}
-      contentFormat={book.content_format === "markdown" ? "markdown" : "text"}
-      published={book.status === "published"}
-      initialPages={initialPages}
-      initialPosition={position}
-      signedIn={Boolean(session)}
-      theme={isTheme(rawTheme) ? rawTheme : null}
-      jumpToPage={Number.isFinite(requestedPage) ? position.pageNo : null}
-      highlight={highlight}
-      jumpToMatch={Number.isInteger(requestedMatch) && requestedMatch >= 0 ? requestedMatch : null}
-      cameFromSearch={cameFromSearch}
-    />
+    <>
+      {/* The same Book description the cover page carries, so a shared
+          ?page= link is understood as this book rather than as an untitled
+          document. Inline <script>, so it needs the proxy's CSP nonce.
+          Drafts describe nothing. */}
+      {!isDraft && (
+        <script
+          nonce={requestHeaders.get("x-nonce") ?? undefined}
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: jsonLd(
+              bookJsonLd(
+                {
+                  id: book.id,
+                  title: book.title,
+                  author: book.author,
+                  description: book.description,
+                  date: book.date,
+                  language: book.language,
+                  pageCount: book.page_count,
+                  coverUrl,
+                },
+                `/books/${book.id}/read`,
+              ),
+            ),
+          }}
+        />
+      )}
+      <Reader
+        bookId={bookId}
+        title={book.title}
+        author={book.author ?? ""}
+        pageCount={book.page_count}
+        contentFormat={book.content_format === "markdown" ? "markdown" : "text"}
+        published={book.status === "published"}
+        initialPages={initialPages}
+        initialPosition={position}
+        signedIn={Boolean(session)}
+        theme={isTheme(rawTheme) ? rawTheme : null}
+        jumpToPage={Number.isFinite(requestedPage) ? position.pageNo : null}
+        highlight={highlight}
+        jumpToMatch={Number.isInteger(requestedMatch) && requestedMatch >= 0 ? requestedMatch : null}
+        cameFromSearch={cameFromSearch}
+      />
+    </>
   );
 }

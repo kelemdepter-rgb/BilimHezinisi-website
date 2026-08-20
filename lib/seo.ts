@@ -44,6 +44,46 @@ export const SITE_NAME = "بىلىم خەزىنىسى";
 export const SITE_DESCRIPTION =
   "«بىلىم خەزىنىسى» — ئۇيغۇرچە ئېلكىتابلارنى ھېساباتسىز ئوقۇش، ئىزدەش ۋە قۇرئان كەرىمنى مۇتالىئە قىلىشقا بولىدىغان ئوچۇق كۇتۇپخانا.";
 
+/** The facts a search engine needs to present a page as a book. */
+export type BookFacts = {
+  id: number;
+  title: string;
+  author?: string | null;
+  description?: string | null;
+  date?: string | null;
+  language?: string | null;
+  pageCount?: number | null;
+  coverUrl?: string | null;
+  genre?: string | null;
+};
+
+/**
+ * schema.org/Book for one of this library's books.
+ *
+ * Shared by the book's own page and by the reader, so a link somebody shares
+ * to an exact page describes the same book as the cover page does rather than
+ * being an anonymous document. The url is always the canonical one — ?page=
+ * addresses a position inside the book, not a different work.
+ */
+export function bookJsonLd(book: BookFacts, canonicalPath: string): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Book",
+    name: book.title,
+    url: absoluteUrl(canonicalPath),
+    inLanguage: book.language || "ug",
+    ...(book.author ? { author: { "@type": "Person", name: book.author } } : {}),
+    ...(book.description ? { description: book.description } : {}),
+    ...(book.date ? { datePublished: book.date } : {}),
+    ...(book.pageCount && book.pageCount > 0 ? { numberOfPages: book.pageCount } : {}),
+    ...(book.coverUrl ? { image: book.coverUrl } : {}),
+    ...(book.genre ? { genre: book.genre } : {}),
+    isAccessibleForFree: true,
+    publisher: { "@type": "Organization", name: SITE_NAME, url: absoluteUrl("/") },
+    potentialAction: { "@type": "ReadAction", target: absoluteUrl(`/books/${book.id}/read`) },
+  };
+}
+
 /**
  * Serialize JSON-LD for embedding in a <script> tag.
  *

@@ -18,6 +18,16 @@ const supabaseHost = (() => {
 
 const nextConfig: NextConfig = {
   /**
+   * Where the build output goes.
+   *
+   * Overridable so the Playwright suite can hold a production build beside a
+   * running dev server: the offline specs have to run against a real build
+   * (the dev server's HMR client chunk is renamed on every load, so a cached
+   * document can never find it again), and both servers writing .next would
+   * pull the ground out from under each other.
+   */
+  distDir: process.env.NEXT_DIST_DIR || ".next",
+  /**
    * The dev-only route indicator is pinned to a viewport corner, where it
    * lands on top of the reader's and the mushaf's sticky bottom bars at phone
    * widths — it swallows taps on the jump button both for whoever is testing

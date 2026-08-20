@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "cross-env NODE_OPTIONS=--use-system-ca playwright test",
+    "test:prod": "cross-env NEXT_DIST_DIR=.next-e2e NODE_OPTIONS=--use-system-ca next build && cross-env NEXT_DIST_DIR=.next-e2e NODE_OPTIONS=--use-system-ca next start -p 3100",
     "test:unit": "vitest run"
   },
   "dependencies": {

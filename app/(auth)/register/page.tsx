@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { OfflineFormNotice } from "@/components/pwa/offline-form-notice";
 import { Icon } from "@/components/icons";
 import { signUpAction } from "../actions";
 
@@ -77,9 +78,11 @@ export default async function RegisterPage({ searchParams }: PageProps<"/registe
               autoComplete="new-password"
             />
           </label>
-          <button type="submit" className="btn-am w-full">
-            تىزىمدىن ئۆتۈش
-          </button>
+          <OfflineFormNotice>
+            <button type="submit" className="btn-am w-full">
+              تىزىمدىن ئۆتۈش
+            </button>
+          </OfflineFormNotice>
         </form>
 
         <p className="mt-5 text-[13px] text-ink2">

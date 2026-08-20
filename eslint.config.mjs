@@ -9,6 +9,9 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    // The production build the offline Playwright specs are served from
+    // (next.config.ts distDir); machine-generated, exactly like .next.
+    ".next-e2e/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

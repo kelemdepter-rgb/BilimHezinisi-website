@@ -107,13 +107,16 @@ self.addEventListener("install", (event) => {
 });
 
 /**
- * The minimum needed to boot with no network: the offline page, the
- * stylesheet it names, and the UI font.
+ * The minimum needed to boot with no network: the offline page, the files it
+ * names, and the UI font.
  *
- * The stylesheet's filename carries a content hash that changes on every
- * deploy, so it cannot be written down here — it is read out of the offline
- * document instead. The icon sprite needs no entry: <IconSprite /> inlines it
- * into every document, so it arrives with the HTML.
+ * Those filenames carry a content hash that changes on every deploy, so they
+ * cannot be written down here — they are read out of the offline document
+ * itself. The scripts matter as much as the stylesheet: without them the page
+ * paints but never hydrates, so it cannot tell a missing book from a search
+ * that needs a connection, and it cannot list what is already on the device.
+ * The icon sprite needs no entry — <IconSprite /> inlines it into every
+ * document, so it arrives with the HTML.
  */
 async function precache() {
   const cache = await caches.open(SHELL);
@@ -124,7 +127,7 @@ async function precache() {
     if (response.ok && !response.redirected) {
       const body = await response.clone().text();
       await cache.put(OFFLINE_URL, response);
-      for (const found of body.matchAll(/["'](\/_next\/static\/[^"']+\.css)["']/g)) {
+      for (const found of body.matchAll(/["'](\/_next\/static\/[^"']+\.(?:css|js))["']/g)) {
         assets.add(found[1]);
       }
     }
@@ -185,7 +188,17 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (isPrivate(url)) return;
+  if (isPrivate(url)) {
+    /**
+     * Never stored — but "never stored" is not the same as "abandoned". A
+     * reader who taps «كىرىش» with no connection should be told so in Uyghur,
+     * not handed the browser's own error page in English. The fallback below
+     * only ever reads the offline page out of the shell cache; nothing about
+     * this request is written anywhere.
+     */
+    if (request.mode === "navigate") event.respondWith(networkOnly(request));
+    return;
+  }
   // Flight data for a client-side navigation is rendered per session, exactly
   // like the document it belongs to, and is never worth the risk.
   if (url.searchParams.has("_rsc")) return;
@@ -295,8 +308,28 @@ async function cachePublicCopy(key) {
 
 /* ── strategies ──────────────────────────────────────────────────────────── */
 
+/** Straight to the network, with the offline page if there is none. */
+async function networkOnly(request) {
+  try {
+    return await fetch(request);
+  } catch {
+    const offline = await caches.match(OFFLINE_URL, { cacheName: SHELL });
+    return offline ?? new Response("", { status: 504, statusText: "Offline" });
+  }
+}
+
+/**
+ * Reads look in EVERY cache, writes go to the named one.
+ *
+ * The offline page's own scripts and stylesheet are precached into the shell
+ * cache, because they must never be trimmed away — but the browser asks for
+ * them under /_next/static, which the handler below files under the static
+ * cache. Scoping the lookup to one cache meant those files were held in one
+ * place and looked for in another: with no network every chunk came back 504
+ * and the offline page painted but never came alive.
+ */
 async function cacheFirst(event, request, cacheName) {
-  const cached = await caches.match(request, { cacheName });
+  const cached = await caches.match(request);
   if (cached) return cached;
   try {
     const response = await fetch(request);
@@ -315,7 +348,7 @@ async function networkFirst(event, request, cacheName) {
     }
     return response;
   } catch {
-    const cached = await caches.match(request, { cacheName });
+    const cached = await caches.match(request);
     return cached ?? new Response("", { status: 504, statusText: "Offline" });
   }
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { OfflineFormNotice } from "@/components/pwa/offline-form-notice";
 import { signInAction } from "../actions";
 
 export const metadata: Metadata = { title: "كىرىش" };
@@ -73,9 +74,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
               autoComplete="current-password"
             />
           </label>
-          <button type="submit" className="btn-am w-full">
-            كىرىش
-          </button>
+          <OfflineFormNotice>
+            <button type="submit" className="btn-am w-full">
+              كىرىش
+            </button>
+          </OfflineFormNotice>
         </form>
 
         <p className="mt-4 text-[13px] text-ink2">

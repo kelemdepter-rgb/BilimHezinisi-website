@@ -16,8 +16,37 @@ npm run dev          # dev server on http://localhost:3000
 npm run typecheck    # next typegen + tsc --noEmit
 npm run lint         # eslint
 npm run build        # production build
-npm run test         # Playwright smoke tests (375x667, 390x844, 1280x800)
+npm run test         # Playwright suite (375x667, 390x844, 1280x800)
+npm run test:unit    # vitest
 ```
+
+`npm run test` starts two servers: the dev server on :3000, and a production
+build on :3100 for the offline specs — Next's dev HMR client chunk is renamed
+on every load, so a document cached for offline use could never find its
+scripts again. That build goes to `.next-e2e/` so it cannot collide with the
+dev server's `.next/`.
+
+Running the suite several times inside ten minutes exhausts the sign-in rate
+limiter (`lib/rate-limit.ts`), which on localhost puts every caller in one
+bucket because there is no proxy header to tell them apart. The setup project
+then fails to sign in. Restart the dev server to clear it — the limiter is
+in-process by design.
+
+## Offline reading, downloads and sharing
+
+- **Installable.** `app/manifest.ts` plus icons generated from the desktop
+  app's own `assets/icon.png` (`node scripts/build-icons.mjs`). iOS needs the
+  `apple-mobile-web-app-capable` tag in `app/layout.tsx` to install full screen.
+- **Offline.** `public/sw.js` is hand-written — no next-pwa. It stores only
+  documents the server marked session-free (`x-bilim-cacheable`, set in
+  `proxy.ts`) and only Supabase reads carrying nothing but the anon key.
+  `tests/unit/sw-parity.test.ts` keeps its constants in step with
+  `lib/pwa/constants.ts`. Bump `VERSION` in both to invalidate every cache.
+- **Downloads.** DOCX and plain text/Markdown, built in the browser
+  (`lib/books/export-book.ts`). `/api/books/[id]/download` authorises the read
+  and rate limits it; the pages themselves still come straight from Supabase.
+- **Egress.** `node scripts/measure-egress.mjs` measures a first and a repeat
+  visit with and without the worker, against a production build on :3100.
 
 ## Environment (.env.local — never commit)
 

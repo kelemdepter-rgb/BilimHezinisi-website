@@ -46,11 +46,16 @@ export const PASSWORD_RESET_RULE: RateLimitRule = { limit: 4, windowMs: 60 * 60_
  *
  * One download reads every page of a book out of Supabase — the single most
  * expensive thing an anonymous visitor can ask this site to do, and the free
- * plan allows 5 GB of egress a month. Six in ten minutes covers anyone
- * genuinely collecting a shelf; a script pulling the whole library gets
- * turned away long before the allowance does.
+ * plan allows 5 GB of egress a month.
+ *
+ * Twenty in ten minutes, not five, because of who reads this library: a great
+ * many of them share one address behind a mobile carrier's NAT, where a tight
+ * per-address cap stops strangers rather than abusers. This is a brake on a
+ * burst, and it is honest about being only that — an in-process counter holds
+ * per server instance and cannot enforce a real monthly total. What it does
+ * stop is one script walking the whole library in an afternoon.
  */
-export const BOOK_DOWNLOAD_RULE: RateLimitRule = { limit: 6, windowMs: 10 * 60_000 };
+export const BOOK_DOWNLOAD_RULE: RateLimitRule = { limit: 20, windowMs: 10 * 60_000 };
 
 /**
  * The caller's address, from the proxy header Vercel sets. Falls back to a

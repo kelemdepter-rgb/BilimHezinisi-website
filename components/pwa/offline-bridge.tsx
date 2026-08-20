@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { SW_URL } from "@/lib/pwa/constants";
 
@@ -19,6 +19,8 @@ export function OfflineBridge() {
   const [waiting, setWaiting] = useState<ServiceWorker | null>(null);
   const [updating, setUpdating] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  /** Set only when the reader has asked for the update, never otherwise. */
+  const applying = useRef(false);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
@@ -64,9 +66,24 @@ export function OfflineBridge() {
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    // The new worker has taken over; the page has to be re-fetched through it
-    // or half the tab is still running the old build.
-    const onChange = () => window.location.reload();
+    /**
+     * Reload ONLY after the reader asked for the update.
+     *
+     * controllerchange also fires the very first time a worker installs and
+     * claims the page — and reloading there means every first visit to the
+     * site silently reloads itself a second or two in, throwing away
+     * whatever the visitor had typed. That is not a cosmetic problem: it
+     * emptied the sign-in form mid-login, and the required fields then
+     * blocked the submit, so signing in appeared to do nothing at all.
+     *
+     * After a deliberate update the reload is still needed: the tab is
+     * running the old build's code while the new worker serves the new one.
+     */
+    const onChange = () => {
+      if (!applying.current) return;
+      applying.current = false;
+      window.location.reload();
+    };
     navigator.serviceWorker.addEventListener("controllerchange", onChange);
     return () => navigator.serviceWorker.removeEventListener("controllerchange", onChange);
   }, []);
@@ -95,6 +112,7 @@ export function OfflineBridge() {
           disabled={updating}
           onClick={() => {
             setUpdating(true);
+            applying.current = true;
             // The reload happens in the controllerchange listener above,
             // once the new worker is actually in charge.
             waiting.postMessage({ type: "SKIP_WAITING" });

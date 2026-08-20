@@ -38,6 +38,11 @@ export const config = {
   matcher: [
     // Skip static assets; run on all pages and API routes. Files in public/
     // get their headers from next.config.ts instead.
-    "/((?!_next/static|_next/image|favicon.ico|fonts/|brand.png|spellcheck/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|ttf|otf|woff2?)$).*)",
+    //
+    // sw.js is excluded deliberately: browsers re-check the service worker
+    // script on navigation, and running the session refresh there would cost
+    // an extra auth round trip per page load for a file that never varies by
+    // reader. Its security headers still come from next.config.ts.
+    "/((?!_next/static|_next/image|favicon.ico|fonts/|brand.png|spellcheck/|sw\.js|icons/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|ttf|otf|woff2?)$).*)",
   ],
 };

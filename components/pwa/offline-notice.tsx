@@ -24,12 +24,15 @@ function subscribeToLocation() {
   return () => {};
 }
 
-type Kind = "search" | "book" | "quran" | "page";
+type Kind = "search" | "book" | "quran" | "auth" | "page";
+
+const AUTH_PATHS = ["/login", "/register", "/forgot-password", "/reset-password", "/my", "/notes"];
 
 function kindOf(pathname: string): Kind {
   if (pathname.startsWith("/search")) return "search";
   if (pathname.startsWith("/books/")) return "book";
   if (pathname.startsWith("/quran")) return "quran";
+  if (AUTH_PATHS.some((path) => pathname.startsWith(path))) return "auth";
   return "page";
 }
 
@@ -37,6 +40,7 @@ const HEADINGS: Record<Kind, string> = {
   search: "ئىزدەش ئۈچۈن تور ئۇلىنىشى كېرەك",
   book: "بۇ كىتاب تېلېفونىڭىزغا ساقلانمىغان",
   quran: "بۇ بۆلۈم تېلېفونىڭىزغا ساقلانمىغان",
+  auth: "كىرىش ئۈچۈن تور ئۇلىنىشى كېرەك",
   page: "تور ئۇلىنىشى يوق",
 };
 
@@ -45,6 +49,7 @@ const EXPLANATIONS: Record<Kind, string> = {
     "ئىزدەش سانلىق مەلۇمات ئامبىرىدا ئېلىپ بېرىلىدۇ، شۇڭا تورسىز ئىشلىمەيدۇ. تور كەلگەندە قايتا سىناڭ.",
   book: "تورسىز چاغدا سىز ئىلگىرى ئېچىپ باققان كىتابلارلا ئېچىلىدۇ. بۇ كىتابنى تور بار چاغدا بىر قېتىم ئېچىڭ، ئاندىن تورسىزمۇ ئوقۇيالايسىز.",
   quran: "تورسىز چاغدا سىز ئىلگىرى ئېچىپ باققان بۆلۈملەرلا ئېچىلىدۇ.",
+  auth: "ھېسابات، خەتكۈچ ۋە خاتىرىلەر مۇلازىمېتىردا ساقلىنىدۇ، شۇڭا تورسىز ئېچىلمايدۇ. كىتاب ئوقۇش ئۈچۈن ھېسابات شەرت ئەمەس — تۆۋەندىكى كىتابلارنى ھازىرمۇ ئوقۇيالايسىز.",
   page: "بۇ بەتنى ئېچىش ئۈچۈن تور ئۇلىنىشى كېرەك.",
 };
 

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  BOOK_DOWNLOAD_RULE,
   SIGN_IN_RULE,
   SIGN_UP_RULE,
   isRateLimited,
@@ -9,6 +10,28 @@ import {
 afterEach(() => {
   resetRateLimits();
   vi.useRealTimers();
+});
+
+describe("whole-book downloads", () => {
+  it("lets a reader collect a shelf, then brakes", () => {
+    for (let attempt = 0; attempt < BOOK_DOWNLOAD_RULE.limit; attempt += 1) {
+      expect(isRateLimited("download:reader", BOOK_DOWNLOAD_RULE), `attempt ${attempt + 1}`).toBe(
+        false,
+      );
+    }
+    expect(isRateLimited("download:reader", BOOK_DOWNLOAD_RULE)).toBe(true);
+  });
+
+  it("is looser than signing in, because a download is not a guess at a password", () => {
+    expect(BOOK_DOWNLOAD_RULE.limit).toBeGreaterThan(SIGN_IN_RULE.limit);
+  });
+
+  it("does not spend the sign-in allowance", () => {
+    for (let attempt = 0; attempt < BOOK_DOWNLOAD_RULE.limit + 5; attempt += 1) {
+      isRateLimited("download:shared", BOOK_DOWNLOAD_RULE);
+    }
+    expect(isRateLimited("signin:shared", SIGN_IN_RULE)).toBe(false);
+  });
 });
 
 describe("isRateLimited", () => {

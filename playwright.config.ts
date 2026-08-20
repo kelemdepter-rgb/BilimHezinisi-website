@@ -3,6 +3,9 @@ import { STAFF_STATE_PATH, loadEnvLocal } from "./tests/env";
 
 loadEnvLocal();
 
+/** Where the production build for the offline specs is served. */
+const PROD_URL = "http://localhost:3100";
+
 const VIEWPORTS = [
   { name: "mobile-375x667", width: 375, height: 667, mobile: true, scale: 2 },
   { name: "mobile-390x844", width: 390, height: 844, mobile: true, scale: 3 },
@@ -129,6 +132,42 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Installability and offline reading. Anonymous by default — reading
+         * without an account is the point — with the private-cache block
+         * opening its own signed-in context, which is why setup runs first.
+         */
+        name: `offline-${viewport.name}`,
+        testMatch: /offline.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          // Against the production build, not the dev server: Next's dev HMR
+          // client chunk is renamed on every load, so a document cached for
+          // offline use could never find its scripts again — an artifact of
+          // the dev server that says nothing about what ships.
+          baseURL: PROD_URL,
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
+        // Downloading a book, sharing a page, and the quote card — all of
+        // which must work for a reader with no account.
+        name: `share-${viewport.name}`,
+        testMatch: /share.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,
@@ -144,10 +183,23 @@ export default defineConfig({
       },
     ]),
   ],
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
-    timeout: 180_000,
-  },
+  webServer: [
+    {
+      command: "npm run dev",
+      url: "http://localhost:3000",
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+    },
+    {
+      /**
+       * A real build, on its own port and its own output directory, for the
+       * offline specs. Reused when it is already up, so running the suite
+       * twice in a row only builds once.
+       */
+      command: "npm run test:prod",
+      url: PROD_URL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 300_000,
+    },
+  ],
 });

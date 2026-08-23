@@ -209,6 +209,9 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
             <Link href="/privacy" data-testid="privacy-link" className="hover:text-am hover:underline">
               مەخپىيەتلىك
             </Link>
+            <Link href="/request" data-testid="request-link" className="hover:text-am hover:underline">
+              كىتاب تەلەپ قىلىش
+            </Link>
             {session && (
               <Link href="/my/account" data-testid="account-link" className="hover:text-am hover:underline">
                 ھېساباتىم

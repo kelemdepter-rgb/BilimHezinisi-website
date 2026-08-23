@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
 import { UsagePanel } from "@/components/admin/usage-panel";
 import { getAdminCounts, getSessionInfo } from "@/lib/data";
+import { countOpenRequests } from "@/lib/requests";
 import { getUsageReport } from "@/lib/usage";
 import type { Role } from "@/lib/types";
 
@@ -18,6 +19,8 @@ export default async function AdminDashboardPage() {
 
   const counts = await getAdminCounts();
   const usage = session.role === "admin" ? await getUsageReport() : null;
+  // RLS hands an uploader nothing here, so the card is admin-only anyway.
+  const openRequests = session.role === "admin" ? await countOpenRequests() : 0;
 
   return (
     <>
@@ -33,6 +36,9 @@ export default async function AdminDashboardPage() {
         <StatCard icon="user" label="سالاھىيىتىڭىز" value={ROLE_LABELS[session.role]} />
         <StatCard icon="book" label="كىتابلار" value={String(counts.books)} />
         <StatCard icon="layers" label="تۈرلەر" value={String(counts.categories)} />
+        {session.role === "admin" && (
+          <StatCard icon="mail" label="يېڭى كىتاب تەلەپلىرى" value={String(openRequests)} />
+        )}
       </div>
 
       {/* Free-tier gauge is admin-only: an uploader manages books, not limits. */}
@@ -51,6 +57,12 @@ export default async function AdminDashboardPage() {
           <Icon name="layers" />
           تۈرلەرنى باشقۇرۇش
         </Link>
+        {session.role === "admin" && (
+          <Link href="/admin/requests" className="hbtn" data-testid="admin-requests-link">
+            <Icon name="mail" />
+            كىتاب تەلەپلىرى
+          </Link>
+        )}
       </div>
     </>
   );

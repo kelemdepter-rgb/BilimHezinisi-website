@@ -211,7 +211,7 @@ export function QuoteCard({
                 onClick={() => void shareImage()}
               >
                 <Icon name="share" />
-                ئەۋەتىش
+                ھەمبەھىرلەش
               </button>
               <button
                 type="button"

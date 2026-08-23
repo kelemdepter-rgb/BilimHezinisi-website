@@ -814,7 +814,7 @@ export function Reader({
             variant="icon"
             title={title}
             path={() => `/books/${bookId}/read?page=${currentPosition().pageNo}`}
-            label="بۇ بەتنى ئۈلەشتۈرۈش"
+            label="بۇ بەتنى ھەمبەھىرلەش"
           />
           <button
             type="button"

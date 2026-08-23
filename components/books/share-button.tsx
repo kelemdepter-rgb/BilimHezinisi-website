@@ -20,7 +20,7 @@ export function ShareButton({
   title,
   text,
   variant = "button",
-  label = "ئۈلەشتۈرۈش",
+  label = "ھەمبەھىرلەش",
 }: {
   /**
    * The site-relative address to share. A function when it depends on where

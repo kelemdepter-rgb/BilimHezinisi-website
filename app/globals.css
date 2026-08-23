@@ -397,6 +397,31 @@
   }
   .legal th { background: var(--bg2); color: var(--text); font-weight: 700; }
 
+  /* ── On-screen Uyghur keyboard ──────────────────────────────────────────
+     One key. 44 px in both directions is the floor, not the target: it is the
+     smallest thing a finger hits reliably, and this keyboard exists for
+     readers who have no other way to type Uyghur at all. */
+  .kbd-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 6px;
+    background: var(--paper);
+    border: 0.5px solid var(--border2);
+    border-radius: var(--radius2);
+    color: var(--text);
+    font-family: var(--jf);
+    font-size: 19px;
+    line-height: 1;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .kbd-key:active { background: var(--ab); border-color: var(--am); }
+  .kbd-key:hover { background: var(--bg3); }
+
   /* ── Safe-area helpers for fixed/sticky bars (notched phones) ── */
   .safe-top { padding-top: env(safe-area-inset-top); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { submitRequestAction } from "@/app/request/actions";
+import { UyghurTextField } from "@/components/search/uyghur-text-field";
 import { REQUEST_LIMITS, issueStamp } from "@/lib/requests";
 import { SITE_NAME } from "@/lib/seo";
 
@@ -83,45 +84,36 @@ export default async function RequestPage({ searchParams }: PageProps<"/request"
           </label>
         </div>
 
-        <label className="block">
-          <span className="mb-1.5 block text-[13px] font-semibold text-ink2">
-            كىتابنىڭ ئىسمى <span className="text-am">*</span>
-          </span>
-          <input
-            className="field"
-            type="text"
-            name="title"
-            required
-            maxLength={REQUEST_LIMITS.title}
-            data-testid="request-title"
-            placeholder="مەسىلەن: قۇتادغۇ بىلىك"
-          />
-        </label>
+        {/* Each field carries the on-screen keyboard: a reader whose phone
+            has no Uyghur keyboard is exactly the reader this form is for. */}
+        <UyghurTextField
+          name="title"
+          required
+          maxLength={REQUEST_LIMITS.title}
+          testId="request-title"
+          placeholder="مەسىلەن: قۇتادغۇ بىلىك"
+          label={
+            <>
+              كىتابنىڭ ئىسمى <span className="text-am">*</span>
+            </>
+          }
+        />
 
-        <label className="block">
-          <span className="mb-1.5 block text-[13px] font-semibold text-ink2">ئاپتورى</span>
-          <input
-            className="field"
-            type="text"
-            name="author"
-            maxLength={REQUEST_LIMITS.author}
-            data-testid="request-author"
-          />
-        </label>
+        <UyghurTextField
+          name="author"
+          label="ئاپتورى"
+          maxLength={REQUEST_LIMITS.author}
+          testId="request-author"
+        />
 
-        <label className="block">
-          <span className="mb-1.5 block text-[13px] font-semibold text-ink2">
-            قوشۇمچە ئىزاھات
-          </span>
-          <textarea
-            className="field min-h-24"
-            name="note"
-            rows={4}
-            maxLength={REQUEST_LIMITS.note}
-            data-testid="request-note"
-            placeholder="نەشرىياتى، يىلى، ياكى قەيەردىن تاپقىلى بولىدىغانلىقى…"
-          />
-        </label>
+        <UyghurTextField
+          name="note"
+          label="قوشۇمچە ئىزاھات"
+          multiline
+          maxLength={REQUEST_LIMITS.note}
+          testId="request-note"
+          placeholder="نەشرىياتى، يىلى، ياكى قەيەردىن تاپقىلى بولىدىغانلىقى…"
+        />
 
         <label className="block">
           <span className="mb-1.5 block text-[13px] font-semibold text-ink2">

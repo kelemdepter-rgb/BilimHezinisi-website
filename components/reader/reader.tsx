@@ -7,6 +7,7 @@ import { Icon } from "@/components/icons";
 import { DownloadBook } from "@/components/books/download-book";
 import { ShareButton } from "@/components/books/share-button";
 import { QuoteCard } from "@/components/reader/quote-card";
+import { KeyboardControl } from "@/components/search/uyghur-keyboard";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
 import { MarkdownContent } from "@/components/reader/markdown-content";
@@ -120,6 +121,7 @@ export function Reader({
   const [error, setError] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreDone = useRef(false);
 
@@ -670,6 +672,7 @@ export function Reader({
                 would drift out of step with it. */}
             <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-2">
               <input
+                ref={findInputRef}
                 className="field min-w-40 flex-1"
                 data-testid="find-input"
                 value={findTerm}
@@ -679,6 +682,9 @@ export function Reader({
                   if (event.key === "Enter") void runFind(findTerm);
                 }}
               />
+              {/* Many phones here have no Uyghur keyboard at all; without
+                  this those readers cannot search inside a book. */}
+              <KeyboardControl inputRef={findInputRef} />
               <button type="button" className="hbtn" data-testid="find-run" onClick={() => void runFind(findTerm)}>
                 ئىزدەش
               </button>

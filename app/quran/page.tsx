@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { SearchField } from "@/components/search/search-field";
 import { AyaText } from "@/components/quran/aya-text";
 import { QuranSourceNote } from "@/components/quran/source-note";
 import { SuraList } from "@/components/quran/sura-list";
@@ -48,14 +49,15 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
       </p>
 
       <form className="mt-4 flex flex-wrap gap-2" role="search" action="/quran">
-        <input
-          className="field min-w-48 flex-1"
-          type="search"
-          name="q"
+        {/* No history here: the Qur'an is a different corpus from the
+            library, and mixing the two lists would offer a reader a search
+            that finds nothing where they are standing. */}
+        <SearchField
           defaultValue={query}
           placeholder="ئەرەبچە ئايەت ياكى ئۇيغۇرچە تەرجىمە بويىچە ئىزدەش…"
-          aria-label="قۇرئاندىن ئىزدەش"
-          data-testid="quran-search-input"
+          ariaLabel="قۇرئاندىن ئىزدەش"
+          testId="quran-search-input"
+          history={false}
         />
         <button type="submit" className="btn-am" data-testid="quran-search-submit">
           <Icon name="search" />

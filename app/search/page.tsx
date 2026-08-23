@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { SearchField } from "@/components/search/search-field";
 import { BookResults, type BookGroup } from "@/components/search/book-results";
 import { getCategories } from "@/lib/data";
 import { runBookSearch, type SearchHit } from "@/lib/search/books";
@@ -84,14 +85,11 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
       </h1>
 
       <form className="mt-4 flex flex-wrap gap-2" role="search" action="/search">
-        <input
-          className="field min-w-48 flex-1"
-          type="search"
-          name="q"
+        <SearchField
           defaultValue={query}
           placeholder="سۆز، ئىبارە ياكى ئاپتور…"
-          aria-label="كۇتۇپخانىدىن ئىزدەش"
-          data-testid="search-input"
+          ariaLabel="كۇتۇپخانىدىن ئىزدەش"
+          testId="search-input"
         />
         <select className="field w-auto" name="cat" defaultValue={categoryId ? String(categoryId) : ""} aria-label="تۈر">
           <option value="">ھەممە تۈرلەر</option>

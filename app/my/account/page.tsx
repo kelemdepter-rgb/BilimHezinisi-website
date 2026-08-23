@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { DeleteAccount } from "@/components/my/delete-account";
 import { OfflineStorage } from "@/components/my/offline-storage";
+import { SearchHistoryControl } from "@/components/my/search-history-control";
 import { countAdmins, getAccountOwner } from "@/lib/my/account";
 import type { Role } from "@/lib/types";
 
@@ -116,6 +117,14 @@ export default async function AccountPage({ searchParams }: PageProps<"/my/accou
           <Icon name="download" />
           JSON ھۆججىتىنى چۈشۈرۈش
         </a>
+      </section>
+
+      <section className="paper grain mt-4 p-5 sm:p-6" aria-labelledby="account-search-history">
+        <h2 id="account-search-history" className="flex items-center gap-2 text-[15px] font-bold">
+          <Icon name="search" className="text-am" />
+          ئىزدەش تارىخىم
+        </h2>
+        <SearchHistoryControl />
       </section>
 
       <section className="paper grain mt-4 p-5 sm:p-6" aria-labelledby="account-offline">

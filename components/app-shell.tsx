@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
+import { SearchField } from "@/components/search/search-field";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { signOutAction } from "@/app/(auth)/actions";
 import type { Category, SessionInfo } from "@/lib/types";
@@ -102,12 +103,11 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
 
           <form role="search" action="/search" className="sbox mx-2 hidden md:flex">
             <Icon name="search" className="text-ink3" />
-            <input
-              className="sinput"
-              type="search"
-              name="q"
+            <SearchField
               placeholder="كىتاب، ئاپتور ياكى مەزمۇن ئىزدەڭ…"
-              aria-label="كۇتۇپخانىدىن ئىزدەش"
+              ariaLabel="كۇتۇپخانىدىن ئىزدەش"
+              variant="sbox"
+              testId="header-search"
             />
           </form>
 
@@ -173,12 +173,11 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
           <div className="border-t border-bd px-3 pb-3 pt-2 md:hidden">
             <form role="search" action="/search" className="sbox flex">
               <Icon name="search" className="text-ink3" />
-              <input
-                className="sinput"
-                type="search"
-                name="q"
+              <SearchField
                 placeholder="كىتاب، ئاپتور ياكى مەزمۇن ئىزدەڭ…"
-                aria-label="كۇتۇپخانىدىن ئىزدەش (تېلېفون)"
+                ariaLabel="كۇتۇپخانىدىن ئىزدەش (تېلېفون)"
+                variant="sbox"
+                testId="header-search-mobile"
                 autoFocus
               />
             </form>

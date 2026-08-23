@@ -168,6 +168,37 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Authors, what is new, the feed and the book-request inbox.
+         * Anonymous by default — none of it may need an account — with the
+         * inbox block opening its own signed-in contexts.
+         */
+        name: `discovery-${viewport.name}`,
+        testMatch: /discovery.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
+        // The on-screen Uyghur keyboard and recent searches: both exist for a
+        // phone, so both are checked at every width.
+        name: `keyboard-${viewport.name}`,
+        testMatch: /keyboard.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,

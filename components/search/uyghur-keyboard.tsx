@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@/components/icons";
 
 /**
@@ -139,7 +140,18 @@ export function KeyboardControl({
         <Icon name="keyboard" className="ic-lg" />
       </button>
 
-      {open && (
+      {/*
+        Rendered into <body>, not where the toggle sits.
+
+        `position: fixed` is measured against the nearest ancestor with a
+        transform, a filter or a backdrop-filter — and the reader's toolbar has
+        `backdrop-blur`, which made "the bottom of the screen" mean "the bottom
+        of the toolbar" and put the whole keyboard above the top of the page. A
+        portal takes it out of reach of whatever a host does to its own
+        stacking, which is the only version of this that stays where it says.
+      */}
+      {open && typeof document !== "undefined" && (
+        createPortal(
         <div
           ref={sheetRef}
           role="group"
@@ -211,7 +223,9 @@ export function KeyboardControl({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+          document.body,
+        )
       )}
     </>
   );

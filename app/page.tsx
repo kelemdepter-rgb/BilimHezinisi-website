@@ -2,11 +2,15 @@ import type { Metadata } from "next";
 import { cookies, headers } from "next/headers";
 import { Icon } from "@/components/icons";
 import { LibraryBrowser } from "@/components/library/library-browser";
+import { BookStrip } from "@/components/library/book-strip";
 import { RecentStrip } from "@/components/library/recent-strip";
 import { getCategories, getSessionInfo } from "@/lib/data";
-import { coverUrlMap, getRecentReads, listBooks } from "@/lib/library";
+import { coverUrlMap, getRecentReads, listBooks, listNewBooks } from "@/lib/library";
 import { LIBRARY_PAGE_SIZE, VIEW_COOKIE, type BookSort } from "@/lib/library-types";
 import { SITE_DESCRIPTION, SITE_NAME, absoluteUrl, jsonLd } from "@/lib/seo";
+
+/** Enough to be worth a look, few enough to stay one screen. */
+const NEW_STRIP_SIZE = 12;
 
 function parseSort(value: unknown): BookSort {
   return value === "title" || value === "author" ? value : "new";
@@ -44,7 +48,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   // Inline <script>, so the CSP nonce the proxy minted has to travel with it.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
-  const [{ books, total }, categories, session, recent] = await Promise.all([
+  const [{ books, total }, categories, session, recent, newest] = await Promise.all([
     listBooks({
       categoryId: Number.isFinite(categoryId) ? categoryId : null,
       sort,
@@ -54,9 +58,12 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
     getCategories(),
     getSessionInfo(),
     getRecentReads(),
+    // Only on the unfiltered home page: inside a category, "new" would mean
+    // something the strip is not showing.
+    categoryId ? Promise.resolve({ books: [], total: 0 }) : listNewBooks({ limit: NEW_STRIP_SIZE }),
   ]);
 
-  const covers = await coverUrlMap([...books, ...recent]);
+  const covers = await coverUrlMap([...books, ...recent, ...newest.books]);
   const withCovers = books.map((book) => ({
     ...book,
     coverUrl: book.cover_path ? (covers.get(book.cover_path) ?? null) : null,
@@ -121,6 +128,19 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
 
       {/* Recent reads are personal — nothing renders for anonymous visitors. */}
       <RecentStrip books={recent} covers={covers} />
+
+      {/* One sideways row, not a grid: on a 375 px phone a grid of new books
+          would push the library's own controls off the screen, and the point
+          of this page is the library. */}
+      <BookStrip
+        testId="new-strip"
+        heading="بۇ ئايدىكى يېڭى كىتابلار"
+        icon="sparkles"
+        books={newest.books}
+        covers={covers}
+        hrefFor={(book) => `/books/${book.id}`}
+        moreHref="/new"
+      />
 
       <LibraryBrowser
         initialBooks={withCovers}

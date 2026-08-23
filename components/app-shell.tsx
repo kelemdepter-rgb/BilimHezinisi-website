@@ -285,6 +285,14 @@ function SidebarContent({
           قۇرئان كەرىم
         </Link>
         <Link
+          href="/new"
+          data-testid="new-sidebar-link"
+          className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+        >
+          <Icon name="sparkles" className="text-am" />
+          يېڭى كىتابلار
+        </Link>
+        <Link
           href="/authors"
           data-testid="authors-sidebar-link"
           className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"

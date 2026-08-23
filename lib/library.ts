@@ -69,6 +69,44 @@ export async function listBooks(options: {
 }
 
 /**
+ * Recently published books, newest first.
+ *
+ * "Recently published" is books.published_at (migration 0021) — the moment a
+ * book became visible on this site — and not created_at, which for the books
+ * imported from the desktop app is all the same afternoon and says nothing
+ * about when a reader could first see them.
+ *
+ * Fails soft: the migration is pasted by hand into the SQL Editor, so there is
+ * a window where this code is deployed and the column does not exist. During
+ * it the home page simply shows no "new books" strip, which is a great deal
+ * better than showing an error.
+ */
+export async function listNewBooks(options: { limit?: number; offset?: number } = {}): Promise<{
+  books: LibraryBook[];
+  total: number;
+}> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { books: [], total: 0 };
+
+  const limit = Math.min(Math.max(1, Math.floor(options.limit ?? LIBRARY_PAGE_SIZE)), LIBRARY_PAGE_SIZE);
+  const offset = Math.min(Math.max(0, Math.floor(options.offset ?? 0)), MAX_OFFSET);
+
+  const { data, count, error } = await supabase
+    .from("books")
+    .select("id, title, author, category_id, page_count, date, cover_path, status", {
+      count: "exact",
+    })
+    .eq("status", "published")
+    .not("published_at", "is", null)
+    .order("published_at", { ascending: false })
+    .order("id", { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) return { books: [], total: 0 };
+  return { books: (data as LibraryBook[] | null) ?? [], total: count ?? 0 };
+}
+
+/**
  * Book detail. Drafts resolve only for staff — RLS already enforces this, so
  * a reader simply gets nothing back.
  */

@@ -112,6 +112,19 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           Safari with its chrome instead of a full-screen app.
         */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        {/*
+          Feed discovery, written into the head directly rather than through
+          metadata.alternates.types. A page that sets its own `alternates`
+          — and every page here sets a canonical — replaces the layout's
+          whole alternates object, which silently took this link away again.
+          A raw tag cannot be overridden by accident.
+        */}
+        <link
+          rel="alternate"
+          type="application/atom+xml"
+          title={SITE_NAME}
+          href="/feed.xml"
+        />
       </head>
       <body className="min-h-dvh">
         <IconSprite />

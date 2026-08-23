@@ -234,21 +234,21 @@ test.describe("the request inbox is the admin's alone", () => {
     await context.close();
   });
 
-  test("lets the admin read, handle and delete", async ({ browser }) => {
+  test("turns an uploader away too — books are not messages", async ({ browser }) => {
+    /**
+     * The seeded staff account is an uploader, which is the interesting case:
+     * they may add and publish books, and still have no business reading
+     * strangers' notes and email addresses.
+     *
+     * What an ADMIN sees is proven one layer down, in
+     * tests/unit/book-requests-sql.test.ts, against the policy itself — there
+     * is no admin account to sign in as here, and creating one would leave a
+     * real administrator behind in the live project.
+     */
     const context = await browser.newContext({ storageState: "tests/.auth/staff.json" });
     const page = await context.newPage();
-
     await page.goto("/admin/requests");
-    // The staff account is an uploader, not an admin — it must be turned away
-    // exactly like a reader. Only a real admin sees this page.
-    if (!page.url().includes("/admin/requests")) {
-      await expect(page).not.toHaveURL(/\/admin\/requests/);
-      await context.close();
-      return;
-    }
-
-    await expect(page.getByRole("heading", { name: "كىتاب تەلەپلىرى" })).toBeVisible();
-    await assertNoHorizontalOverflow(page);
+    await expect(page).not.toHaveURL(/\/admin\/requests/);
     await context.close();
   });
 });

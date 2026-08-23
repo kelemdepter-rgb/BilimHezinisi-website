@@ -1,10 +1,55 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, type Project } from "@playwright/test";
 import { STAFF_STATE_PATH, loadEnvLocal } from "./tests/env";
 
 loadEnvLocal();
 
 /** Where the production build for the offline specs is served. */
 const PROD_URL = "http://localhost:3100";
+
+/**
+ * A distinct caller address per project, per run.
+ *
+ * The site's rate limiters (lib/rate-limit.ts) key on `x-forwarded-for`, and on
+ * localhost there is none — so every caller falls into one shared bucket, and
+ * a full run spends the sign-up allowance partway through and then fails the
+ * rest with an unexplained "could not sign in". Three viewports really are
+ * three devices, and the setup project really is a different visitor from the
+ * request specs, so saying so is honest as well as convenient.
+ *
+ * The run byte changes between runs, so running the suite twice inside ten
+ * minutes does not carry the first run's counters into the second.
+ *
+ * The limiters themselves are untouched and still exercised: discovery.spec.ts
+ * spends its own allowance on purpose and asserts the Uyghur message it gets.
+ */
+const RUN_OCTET = (Math.floor(Date.now() / 1000) % 254) + 1;
+
+function callerFor(name: string): string {
+  let hash = 0;
+  for (const character of name) hash = (hash * 31 + character.charCodeAt(0)) % 251;
+  // 198.18.0.0/15 is reserved for benchmarking and routes nowhere real.
+  return `198.18.${RUN_OCTET}.${hash + 1}`;
+}
+
+/** Every project browses as its own visitor. */
+function asOwnVisitor(projects: Project[]): Project[] {
+  return projects.map((project) => {
+    // Project["use"] is Partial<{}> until a project actually sets something,
+    // so the existing options are widened rather than indexed into.
+    const existing = (project.use ?? {}) as Record<string, unknown>;
+    const headers = (existing.extraHTTPHeaders ?? {}) as Record<string, string>;
+    return {
+      ...project,
+      use: {
+        ...existing,
+        extraHTTPHeaders: {
+          ...headers,
+          "x-forwarded-for": callerFor(project.name ?? "anonymous"),
+        },
+      },
+    } as Project;
+  });
+}
 
 const VIEWPORTS = [
   { name: "mobile-375x667", width: 375, height: 667, mobile: true, scale: 2 },
@@ -31,7 +76,7 @@ export default defineConfig({
     baseURL: "http://localhost:3000",
     trace: "on-first-retry",
   },
-  projects: [
+  projects: asOwnVisitor([
     { name: "setup", testMatch: /auth\.setup\.ts/, teardown: "cleanup" },
     { name: "cleanup", testMatch: /auth\.teardown\.ts/ },
     ...VIEWPORTS.flatMap((viewport) => [
@@ -213,7 +258,7 @@ export default defineConfig({
         },
       },
     ]),
-  ],
+  ]),
   webServer: [
     {
       command: "npm run dev",

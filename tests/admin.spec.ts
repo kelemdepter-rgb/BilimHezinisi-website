@@ -182,7 +182,11 @@ test.describe("book management", () => {
     // Scoped by label: the site header carries its own role="search" box.
     await expect(page.getByRole("searchbox", { name: "كىتاب ئىزدەش" })).toBeVisible();
     await scrollDownAndBackUp(page);
-    await expect(page.getByRole("link", { name: "يېڭى كىتاب" })).toBeVisible();
+    // Scoped to the page's own content: the site sidebar now carries a
+    // «يېڭى كىتابلار» link, and an unscoped name match found both.
+    await expect(
+      page.getByRole("main").getByRole("link", { name: "يېڭى كىتاب", exact: true }),
+    ).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 });

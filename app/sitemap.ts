@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getCategories } from "@/lib/data";
+import { AUTHORS_PAGE_SIZE, listAuthors } from "@/lib/authors";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { absoluteUrl } from "@/lib/seo";
 
@@ -13,12 +14,16 @@ export const revalidate = 3600;
 /** 114 suras, always. */
 const SURA_COUNT = 114;
 
+/** As many authors as the sitemap will ever list. Far beyond today's shelf. */
+const AUTHOR_LIMIT = 3000;
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   const staticPages: MetadataRoute.Sitemap = [
     { url: absoluteUrl("/"), lastModified: now, changeFrequency: "daily", priority: 1 },
     { url: absoluteUrl("/quran"), lastModified: now, changeFrequency: "monthly", priority: 0.9 },
+    { url: absoluteUrl("/authors"), lastModified: now, changeFrequency: "weekly", priority: 0.6 },
     { url: absoluteUrl("/search"), lastModified: now, changeFrequency: "monthly", priority: 0.3 },
     { url: absoluteUrl("/about"), lastModified: now, changeFrequency: "yearly", priority: 0.4 },
     { url: absoluteUrl("/privacy"), lastModified: now, changeFrequency: "yearly", priority: 0.3 },
@@ -54,6 +59,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const categories = await getCategories();
 
+  /**
+   * Author pages, read the same way the books are: the RPC caps a page at 100,
+   * so a single call would silently stop listing once the shelf outgrew it.
+   * Bounded, because a sitemap that walks forever is its own outage.
+   */
+  const authors: { key: string }[] = [];
+  for (let offset = 0; offset < AUTHOR_LIMIT; offset += AUTHORS_PAGE_SIZE) {
+    const { authors: batch, total } = await listAuthors({ limit: AUTHORS_PAGE_SIZE, offset });
+    authors.push(...batch.map((author) => ({ key: author.key })));
+    if (batch.length < AUTHORS_PAGE_SIZE || authors.length >= total) break;
+  }
+
+  const authorPages: MetadataRoute.Sitemap = authors.map((author) => ({
+    url: absoluteUrl(`/authors/${encodeURIComponent(author.key)}`),
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.5,
+  }));
+
   const bookPages: MetadataRoute.Sitemap = books
     .flatMap((book) => [
       {
@@ -77,5 +101,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticPages, ...categoryPages, ...bookPages, ...suraPages];
+  return [...staticPages, ...categoryPages, ...authorPages, ...bookPages, ...suraPages];
 }

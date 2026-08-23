@@ -1,3 +1,4 @@
+import { ug_normalize_client } from "@/lib/reader/normalize";
 import type { Category } from "@/lib/types";
 
 /**
@@ -8,6 +9,19 @@ import type { Category } from "@/lib/types";
  */
 
 export type BookSort = "new" | "title" | "author";
+
+/**
+ * The key an author is grouped under — the JavaScript twin of the generated
+ * `books.author_key` column (migration 0021).
+ *
+ * It exists so a page that already has a book's author can link to that
+ * author without asking the database for the column. The two must agree
+ * exactly or the link would lead to an empty shelf, so
+ * tests/unit/authors-sql.test.ts runs both over the same names.
+ */
+export function authorKey(author: string): string {
+  return ug_normalize_client(author).replace(/\s+/g, " ").trim();
+}
 
 export type LibraryBook = {
   id: number;

@@ -284,6 +284,14 @@ function SidebarContent({
           <Icon name="mosque" className="text-am" />
           قۇرئان كەرىم
         </Link>
+        <Link
+          href="/authors"
+          data-testid="authors-sidebar-link"
+          className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+        >
+          <Icon name="feather" className="text-am" />
+          ئاپتورلار
+        </Link>
         {session && (
           <Link
             href="/notes"

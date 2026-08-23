@@ -13,6 +13,7 @@ import {
   getBookDetail,
   getReadingProgress,
 } from "@/lib/library";
+import { authorKey } from "@/lib/library-types";
 import { SITE_NAME, bookJsonLd, jsonLd } from "@/lib/seo";
 
 export async function generateMetadata({ params }: PageProps<"/books/[id]">): Promise<Metadata> {
@@ -145,7 +146,18 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
             </p>
           )}
           <h1 className="text-2xl font-bold leading-relaxed">{book.title}</h1>
-          {book.author && <p className="mt-1.5 text-[15px] text-ink2">{book.author}</p>}
+          {book.author && (
+            <p className="mt-1.5 text-[15px] text-ink2">
+              {/* The author's name is the way to the rest of their shelf. */}
+              <Link
+                href={`/authors/${encodeURIComponent(authorKey(book.author))}`}
+                data-testid="book-author-link"
+                className="hover:text-am hover:underline"
+              >
+                {book.author}
+              </Link>
+            </p>
+          )}
 
           {/* A plain list, not a <dl>: these are single facts, not term and
               definition pairs, and a <dl> holding bare spans is invalid. */}

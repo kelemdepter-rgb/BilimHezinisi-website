@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
 import {
   createCategoryAction,
@@ -75,7 +76,31 @@ function descendantsOf(categories: Category[], id: number): Set<number> {
 }
 
 export function CategoryTree({ initial }: { initial: Category[] }) {
-  const [categories, setCategories] = useState<Category[]>(initial);
+  const router = useRouter();
+  /**
+   * THE SERVER'S LIST IS THE TRUTH; the overlay is only a hope.
+   *
+   * This used to be `useState(initial)` — one copy, taken at mount and never
+   * refreshed — with `window.location.reload()` after every add and delete to
+   * paper over the fact that a new `initial` could not get in. That reload was
+   * the bug: it is asynchronous, so it could land AFTER a move had been
+   * clicked, throwing away the optimistic state and the in-flight save with
+   * it. The move then vanished without a word, about one time in three.
+   *
+   * So there is no second copy any more. `overlay` holds the shape a move is
+   * hoping for and lives only until the server answers; the moment a new
+   * `initial` arrives it is dropped, because the server has spoken. Nothing
+   * reloads the page, and nothing can be lost by a navigation that was already
+   * on its way.
+   */
+  const [overlay, setOverlay] = useState<Category[] | null>(null);
+  const [seenFromServer, setSeenFromServer] = useState(initial);
+  if (initial !== seenFromServer) {
+    setSeenFromServer(initial);
+    setOverlay(null);
+  }
+  const categories = overlay ?? initial;
+
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
@@ -85,16 +110,41 @@ export function CategoryTree({ initial }: { initial: Category[] }) {
 
   function persist(next: Category[]) {
     const numbered = renumber(next);
-    setCategories(numbered);
+    setOverlay(numbered);
+
+    /**
+     * Send only what actually moved.
+     *
+     * This used to send every category, one UPDATE per row, one after another
+     * — sixteen round trips for a move that changed one parent, and about
+     * three and a half seconds during which every button in the tree was
+     * disabled. A typical move touches one or two rows, so this is now one or
+     * two round trips, and the wait is short enough not to be a wait.
+     */
+    const changed = numbered.filter((row) => {
+      const before = initial.find((original) => original.id === row.id);
+      return (
+        !before || before.parent_id !== row.parent_id || before.sort_order !== row.sort_order
+      );
+    });
+    if (changed.length === 0) {
+      setOverlay(null);
+      return;
+    }
+
     startTransition(async () => {
       const result = await reorderCategoriesAction(
-        numbered.map((c) => ({ id: c.id, parent_id: c.parent_id, sort_order: c.sort_order })),
+        changed.map((c) => ({ id: c.id, parent_id: c.parent_id, sort_order: c.sort_order })),
       );
       if (!result.ok) {
         setNotice({ ok: false, text: result.error });
-        setCategories(initial);
+        // Back to whatever the server currently says, not to a copy of what it
+        // said when this page was opened.
+        setOverlay(null);
       } else {
         setNotice(null);
+        // The refreshed list supersedes the overlay when it lands.
+        router.refresh();
       }
     });
   }
@@ -185,8 +235,13 @@ export function CategoryTree({ initial }: { initial: Category[] }) {
       if (result.ok) {
         setNotice({ ok: true, text: result.message ?? "ساقلاندى." });
         after?.();
-        // Server revalidation refreshes `initial`; mirror it locally too.
-        window.location.reload();
+        /**
+         * A refresh, not a reload. The whole page reloading here is what used
+         * to lose a move that had just been clicked — see the comment on
+         * `overlay` above. `router.refresh()` re-fetches this route and hands
+         * the tree a new `initial`, which is all that was ever needed.
+         */
+        router.refresh();
       } else {
         setNotice({ ok: false, text: result.error ?? "مەشغۇلات مەغلۇپ بولدى." });
       }

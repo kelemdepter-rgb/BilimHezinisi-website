@@ -93,6 +93,51 @@ test.describe("category management", () => {
     }
   });
 
+  /**
+   * The regression guard for a move that used to vanish about one time in
+   * three.
+   *
+   * The tree used to call `window.location.reload()` after every add and
+   * delete, because its state was a copy of the server's list taken once at
+   * mount and a new one could not get in any other way. That reload is
+   * asynchronous: it could land AFTER a move had been clicked, discarding the
+   * optimistic state and the save that was still in flight, and the move
+   * disappeared without a word.
+   *
+   * Asserting on the outcome alone would not catch a reintroduction — the race
+   * only fires sometimes. So this asserts the INVARIANT instead: adding a
+   * category must not tear the page down. A marker on `window` survives a
+   * client-side refresh and cannot survive a reload.
+   */
+  test("adds a category by refreshing, never by reloading the page", async ({ page }) => {
+    const name = "__e2e_tur_reload__";
+    await page.goto("/admin/categories");
+    await expect(page.getByRole("heading", { name: "تۈرلەرنى باشقۇرۇش" })).toBeVisible();
+
+    await page.evaluate(() => {
+      (window as unknown as { __bhStillHere?: boolean }).__bhStillHere = true;
+    });
+
+    try {
+      await addCategory(page, name);
+      const survived = await page.evaluate(
+        () => (window as unknown as { __bhStillHere?: boolean }).__bhStillHere === true,
+      );
+      expect(survived, "adding a category must not reload the whole page").toBe(true);
+
+      // And a move made straight afterwards really reaches the database.
+      const row = page.getByTestId("category-row").filter({ hasText: name }).first();
+      await row.getByTestId("category-indent").click();
+      await expect(row.getByTestId("category-outdent")).toBeEnabled({ timeout: 20_000 });
+
+      await page.reload();
+      const afterReload = page.getByTestId("category-row").filter({ hasText: name }).first();
+      await expect(afterReload.getByTestId("category-outdent")).toBeEnabled();
+    } finally {
+      await removeCategory(page, name);
+    }
+  });
+
   test("offers a button for every drag-and-drop move", async ({ page }) => {
     await page.goto("/admin/categories");
     const first = page.getByTestId("category-row").first();

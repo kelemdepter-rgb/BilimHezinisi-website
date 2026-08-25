@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { SEED_BOOK_TITLE, hasStaffTestEnv, loadEnvLocal } from "./env";
+import { SEED_BOOK_TITLE, SEED_REQUEST_PREFIX, hasStaffTestEnv, loadEnvLocal } from "./env";
 
 loadEnvLocal();
 
@@ -131,7 +131,7 @@ test.describe("what is new", () => {
 });
 
 test.describe("the feed", () => {
-  test("is valid Atom, served as Atom", async ({ request }) => {
+  test("is valid Atom, served as Atom", async ({ request, page }) => {
     const response = await request.get("/feed.xml");
     expect(response.status()).toBe(200);
     expect(response.headers()["content-type"]).toContain("application/atom+xml");
@@ -153,9 +153,16 @@ test.describe("the feed", () => {
       expect(firstEntry, `an entry must carry ${required}`).toContain(required);
     }
 
-    // Well-formed, checked by an actual XML parser rather than by eye.
-    const parsed = await request.get("/feed.xml");
-    expect(parsed.ok()).toBe(true);
+    /**
+     * Well formed, checked by a real XML parser rather than by eye. One
+     * unescaped ampersand in a book's title makes the whole feed unreadable,
+     * and string assertions would never notice.
+     */
+    const parseError = await page.evaluate((xml) => {
+      const document_ = new DOMParser().parseFromString(xml, "application/xml");
+      return document_.querySelector("parsererror")?.textContent ?? null;
+    }, body);
+    expect(parseError, "the feed must parse as XML").toBeNull();
   });
 
   test("is discoverable from the page a reader is on", async ({ page }) => {
@@ -169,7 +176,7 @@ test.describe("the feed", () => {
 test.describe("asking for a book", () => {
   test("takes a request from a signed-out visitor", async ({ page }) => {
     await page.goto("/request");
-    await page.getByTestId("request-title").fill("قۇتادغۇ بىلىك — سىناق تەلىپى");
+    await page.getByTestId("request-title").fill(`${SEED_REQUEST_PREFIX} قۇتادغۇ بىلىك`);
     await page.getByTestId("request-author").fill("يۈسۈپ خاس ھاجىپ");
     await page.getByTestId("request-note").fill("Playwright سىنىقى.");
 
@@ -183,7 +190,7 @@ test.describe("asking for a book", () => {
 
   test("swallows a bot without telling it why", async ({ page }) => {
     await page.goto("/request");
-    await page.getByTestId("request-title").fill("بوت تەلىپى");
+    await page.getByTestId("request-title").fill(`${SEED_REQUEST_PREFIX} بوت تەلىپى`);
     // The honeypot: a field no person can see or tab to.
     await page.evaluate(() => {
       const field = document.querySelector<HTMLInputElement>('input[name="website"]');
@@ -204,7 +211,7 @@ test.describe("asking for a book", () => {
     // and then reads the message the fourth attempt gets.
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await page.goto("/request");
-      await page.getByTestId("request-title").fill(`تېز تەلەپ ${attempt}`);
+      await page.getByTestId("request-title").fill(`${SEED_REQUEST_PREFIX} تېز تەلەپ ${attempt}`);
       await page.waitForTimeout(2100);
       await page.getByTestId("request-submit").click();
       await page.waitForLoadState("load");

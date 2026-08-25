@@ -422,7 +422,6 @@
   .kbd-key:active { background: var(--ab); border-color: var(--am); }
   .kbd-key:hover { background: var(--bg3); }
 
-  /* ── Safe-area helpers for fixed/sticky bars (notched phones) ── */
   /* «تەكلىپ» — this value came from the file, not from the admin. Small and
      quiet, but present on every pre-filled field in the batch importer, so
      what still needs checking is visible at a glance. */
@@ -439,6 +438,7 @@
     white-space: nowrap;
   }
 
+  /* ── Safe-area helpers for fixed/sticky bars (notched phones) ── */
   .safe-top { padding-top: env(safe-area-inset-top); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   .safe-x {

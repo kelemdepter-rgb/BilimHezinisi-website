@@ -4,7 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runBookSearch, type SearchHit } from "@/lib/search/books";
 import { runQuranSearch } from "@/lib/quran/data";
 import { findOccurrences } from "@/lib/search/occurrences";
-import { stripMarkdown } from "@/lib/books/render-markdown";
+import { stripMarkdown } from "@/lib/books/strip-markdown";
 import { NOTE_SOURCE_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
 import { reportServerError } from "@/lib/server-log";
 import type { Aya, QuranHit } from "@/lib/quran/types";

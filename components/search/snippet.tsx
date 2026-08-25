@@ -1,5 +1,5 @@
 import { toSegments, MATCH_CLASS } from "@/lib/search/occurrences";
-import { stripMarkdown } from "@/lib/books/render-markdown";
+import { stripMarkdown } from "@/lib/books/strip-markdown";
 
 /**
  * Render a search-result snippet with the query highlighted.

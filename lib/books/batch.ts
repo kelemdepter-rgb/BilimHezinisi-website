@@ -14,7 +14,7 @@
  * Inventing a plausible-looking author for a library of religious and
  * historical texts would be worse than leaving the work to be done by hand.
  */
-import { stripMarkdown } from "@/lib/books/render-markdown";
+import { stripMarkdown } from "@/lib/books/strip-markdown";
 import { isUsableEmbeddedTitle, titleFromFileName } from "@/lib/books/metadata";
 import type { BookFormat, BookStatus, ContentFormat } from "@/lib/books/types";
 import type { DuplicateHit } from "@/lib/books/save";

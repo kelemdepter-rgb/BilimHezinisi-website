@@ -24,6 +24,7 @@
  * stranger wrote it, whatever the editor already did.
  */
 import { parseFragment, serialize } from "parse5";
+import { SAFE_ALIGN, SAFE_COLOR, keepAllowedDeclarations } from "@/lib/notes/style-allow";
 
 /** Same list as the browser sanitizer, kept in step deliberately. */
 const ALLOWED_TAGS = new Set([
@@ -48,12 +49,8 @@ const DROP_SUBTREE = new Set([
 ]);
 
 const ALLOWED_ATTR = new Set([
-  "href", "title", "dir", "lang", "colspan", "rowspan", "style", "color", "align",
+  "href", "title", "dir", "lang", "colspan", "rowspan", "style", "color", "align", "face",
 ]);
-
-const SAFE_ALIGN = /^(right|left|center|justify|start|end)$/i;
-/** #rgb / #rrggbb, rgb()/rgba(), or a plain keyword. Nothing with url() or a function name in it. */
-const SAFE_COLOR = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]{3,20})$/i;
 
 /** Blocked outright; anything else without a scheme is a relative link. */
 const UNSAFE_SCHEME = /^(javascript|data|vbscript|file|blob|about):/i;
@@ -82,24 +79,17 @@ function safeHref(value: string): string | null {
   return value.trim();
 }
 
-/** Keep a checked text-align and colour; drop every other declaration. */
+/** Keep the declarations the shared allow-list admits; drop every other one. */
 function safeStyle(value: string): string | null {
-  const kept: string[] = [];
-  for (const declaration of value.split(";")) {
-    const split = declaration.indexOf(":");
-    if (split < 0) continue;
-    const property = declaration.slice(0, split).trim().toLowerCase();
-    const raw = declaration.slice(split + 1).trim();
-    if (property === "text-align" && SAFE_ALIGN.test(raw)) kept.push(`text-align: ${raw}`);
-    if (property === "color" && SAFE_COLOR.test(raw)) kept.push(`color: ${raw}`);
-  }
+  const kept = keepAllowedDeclarations(value);
   return kept.length > 0 ? kept.join("; ") : null;
 }
 
 /**
  * Fold the legacy presentational markup execCommand still emits (`<font
- * color>`, `align=`) into inline styles, so stored notes have one shape rather
- * than three — the reader and the DOCX export both read the style.
+ * color>`, `<font face>`, `align=`) into inline styles, so stored notes have
+ * one shape rather than three — the reader and the DOCX export both read the
+ * style.
  */
 function foldPresentation(element: Node): void {
   const attrs = element.attrs ?? [];
@@ -112,14 +102,21 @@ function foldPresentation(element: Node): void {
   const align = read("align");
   if (SAFE_ALIGN.test(align)) declarations.push(`text-align: ${align}`);
 
-  const color = read("color");
-  if (element.tagName === "font" && SAFE_COLOR.test(color)) declarations.push(`color: ${color}`);
+  if (element.tagName === "font") {
+    const color = read("color");
+    if (SAFE_COLOR.test(color)) declarations.push(`color: ${color}`);
+    // A `face` is a font-family written the old way; it goes through the same
+    // family allow-list as any other, rather than being trusted for its age.
+    const face = safeStyle(`font-family: ${read("face")}`);
+    if (face) declarations.push(face);
+  }
 
   const kept: Attr[] = [];
   for (const attr of attrs) {
     if (!ALLOWED_ATTR.has(attr.name)) continue;
     // Handled above, and never emitted as attributes of their own again.
     if (attr.name === "style" || attr.name === "align" || attr.name === "color") continue;
+    if (attr.name === "face") continue;
     if (attr.name === "href") {
       const href = safeHref(attr.value);
       if (href !== null) kept.push({ name: "href", value: href });

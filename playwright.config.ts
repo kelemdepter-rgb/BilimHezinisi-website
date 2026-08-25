@@ -3,6 +3,18 @@ import { STAFF_STATE_PATH, loadEnvLocal } from "./tests/env";
 
 loadEnvLocal();
 
+/**
+ * Where the dev server runs.
+ *
+ * Overridable because Windows hands whole port ranges to Hyper-V on a whim —
+ * `netsh interface ipv4 show excludedportrange protocol=tcp` has been seen
+ * holding 2988-3087, which takes 3000 with it and makes `next dev` fail with
+ * EACCES. `PW_DEV_PORT=3200 npm test` gets a run through without editing
+ * anything; the default is unchanged.
+ */
+const DEV_PORT = process.env.PW_DEV_PORT ?? "3000";
+const DEV_URL = `http://localhost:${DEV_PORT}`;
+
 /** Where the production build for the offline specs is served. */
 const PROD_URL = "http://localhost:3100";
 
@@ -73,7 +85,7 @@ export default defineConfig({
   reporter: [["list"]],
   timeout: 60_000,
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: DEV_URL,
     trace: "on-first-retry",
   },
   projects: asOwnVisitor([
@@ -150,6 +162,24 @@ export default defineConfig({
         // second, different account itself.
         name: `notes-${viewport.name}`,
         testMatch: /notes.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
+        /**
+         * Citing the library and the Qur'an from inside a note, find and
+         * replace, and the notebook's typography. Signed in, like the rest of
+         * the notebook, and against the seeded book the setup project writes.
+         */
+        name: `notes-sources-${viewport.name}`,
+        testMatch: /notes-sources.spec.ts/,
         dependencies: ["setup"],
         use: {
           browserName: "chromium" as const,
@@ -261,8 +291,8 @@ export default defineConfig({
   ]),
   webServer: [
     {
-      command: "npm run dev",
-      url: "http://localhost:3000",
+      command: `npm run dev -- --port ${DEV_PORT}`,
+      url: DEV_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
     },

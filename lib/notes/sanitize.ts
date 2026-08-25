@@ -1,4 +1,5 @@
 import DOMPurify from "dompurify";
+import { SAFE_ALIGN, SAFE_COLOR, keepAllowedDeclarations } from "@/lib/notes/style-allow";
 
 /**
  * Sanitizer for notebook HTML.
@@ -11,7 +12,8 @@ import DOMPurify from "dompurify";
  *
  * Allowing `style` wholesale is not the answer either: it is an attribute with
  * a CSS parser behind it. Instead the attribute survives sanitizing and is then
- * cut down to exactly two declarations with checked values.
+ * cut down to the few declarations lib/notes/style-allow.ts admits, each with
+ * its value checked against a closed set.
  */
 const ALLOWED_TAGS = [
   "p", "br", "hr", "div", "span", "h1", "h2", "h3", "h4", "h5", "h6",
@@ -22,28 +24,15 @@ const ALLOWED_TAGS = [
 
 // No `src`: notes never carry images (a pasted screenshot is a multi-megabyte
 // data URI in a text column). No `srcset`, no event handlers, no data-*.
-const ALLOWED_ATTR = ["href", "title", "dir", "lang", "colspan", "rowspan", "style", "color", "align"];
-
-const SAFE_ALIGN = /^(right|left|center|justify|start|end)$/i;
-/** #rgb / #rrggbb, rgb()/rgba(), or a plain keyword. Nothing with url() or a function name in it. */
-const SAFE_COLOR = /^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]{3,20})$/i;
+const ALLOWED_ATTR = [
+  "href", "title", "dir", "lang", "colspan", "rowspan", "style", "color", "align", "face",
+];
 
 type DomWindow = Window & typeof globalThis;
 
-/** Strip every declaration except a checked text-align and colour. */
+/** Strip every declaration the shared allow-list does not admit. */
 function keepSafeStyle(element: Element) {
-  const declarations = (element.getAttribute("style") ?? "").split(";");
-  const kept: string[] = [];
-
-  for (const declaration of declarations) {
-    const split = declaration.indexOf(":");
-    if (split < 0) continue;
-    const property = declaration.slice(0, split).trim().toLowerCase();
-    const value = declaration.slice(split + 1).trim();
-    if (property === "text-align" && SAFE_ALIGN.test(value)) kept.push(`text-align: ${value}`);
-    if (property === "color" && SAFE_COLOR.test(value)) kept.push(`color: ${value}`);
-  }
-
+  const kept = keepAllowedDeclarations(element.getAttribute("style") ?? "");
   if (kept.length > 0) element.setAttribute("style", kept.join("; "));
   else element.removeAttribute("style");
 }
@@ -66,11 +55,20 @@ function normalizePresentation(root: Element, documentRef: Document) {
   for (const font of Array.from(root.querySelectorAll("font"))) {
     const span = documentRef.createElement("span");
     const color = font.getAttribute("color") ?? "";
-    const style = font.getAttribute("style") ?? "";
-    span.setAttribute("style", SAFE_COLOR.test(color) ? `${style};color: ${color}` : style);
+    // execCommand("fontName") emits `<font face>`, which says the same thing as
+    // a font-family and has to fold into one, or the face is lost on save.
+    const face = font.getAttribute("face") ?? "";
+    const declarations = [font.getAttribute("style") ?? ""];
+    if (SAFE_COLOR.test(color)) declarations.push(`color: ${color}`);
+    if (face) declarations.push(`font-family: ${face}`);
+    span.setAttribute("style", declarations.filter(Boolean).join(";"));
     while (font.firstChild) span.appendChild(font.firstChild);
     font.replaceWith(span);
   }
+
+  // `face` only means anything on a <font>, which is gone by now; anywhere
+  // else it is a leftover that has already been folded or was never ours.
+  for (const node of Array.from(root.querySelectorAll("[face]"))) node.removeAttribute("face");
 
   for (const node of Array.from(root.querySelectorAll("[style]"))) keepSafeStyle(node);
 }

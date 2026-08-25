@@ -1,10 +1,16 @@
 /**
- * Aya clipboard, ported from desktop src/quran.js `copyAyaToClipboard`.
+ * Aya rendering and clipboard, ported from desktop src/quran.js
+ * `copyAyaToClipboard`.
  *
  * Writes rich text and plain text together, so pasting into Word keeps the
  * Uthmani face and the ornate brackets, while a plain-text target still gets
  * readable output. Falls back to writeText, then to a hidden textarea, so an
  * older browser or a denied clipboard permission still copies something.
+ *
+ * The HTML builder is exported because the notebook inserts ayas too
+ * (lib/notes/insert.ts). One builder, so a verse pasted into Word and a verse
+ * inserted into a note are the same markup — and so the note sanitizer only
+ * ever has to admit one shape (lib/notes/style-allow.ts).
  */
 import type { Aya } from "@/lib/quran/types";
 
@@ -17,7 +23,10 @@ const CLOSE_AYA = "﴾";
 const OPEN_QUOTE = "«";
 const CLOSE_QUOTE = "»";
 
-function escapeHtml(value: string): string {
+/** What of a verse to render: the Arabic, the translation, or both. */
+export type AyaRenderMode = "ar" | "ug" | "both";
+
+export function escapeHtml(value: string): string {
   return value.replace(
     /[&<>"']/g,
     (char) =>
@@ -25,33 +34,57 @@ function escapeHtml(value: string): string {
   );
 }
 
+/** The Arabic, in the Uthmani face, inside its ornate brackets. */
+function arabicSpan(aya: Aya): string {
+  return (
+    `<span style="font-family:${FONT_STACK_AR};font-size:20pt;line-height:1.9">` +
+    `${OPEN_AYA}${escapeHtml(aya.text_ar)}${CLOSE_AYA}</span>`
+  );
+}
+
+/** The Uyghur translation, in the reading face, inside guillemets. */
+function uyghurSpan(aya: Aya): string {
+  return (
+    `<span style="font-family:${FONT_STACK_UG};font-size:13pt;line-height:1.7;color:#333">` +
+    `${OPEN_QUOTE}${escapeHtml(aya.text_ug)}${CLOSE_QUOTE}</span>`
+  );
+}
+
+/**
+ * One verse as a single RTL paragraph. `mode` falls back to the Arabic when a
+ * translation was asked for and the verse carries none, which is the desktop's
+ * behaviour and better than emitting an empty quotation.
+ */
+export function ayaHtml(aya: Aya, mode: AyaRenderMode): string {
+  const hasTranslation = Boolean(aya.text_ug);
+  const wanted: AyaRenderMode = mode !== "ar" && !hasTranslation ? "ar" : mode;
+
+  const parts: string[] = [];
+  if (wanted !== "ug") parts.push(arabicSpan(aya));
+  if (wanted !== "ar") parts.push(uyghurSpan(aya));
+
+  return `<p dir="rtl" style="text-align:right;margin:0 0 12pt 0;">${parts.join("<br>")}</p>`;
+}
+
+/** The same verse as plain text, for a plain-text clipboard target. */
+export function ayaText(aya: Aya, mode: AyaRenderMode): string {
+  const hasTranslation = Boolean(aya.text_ug);
+  const wanted: AyaRenderMode = mode !== "ar" && !hasTranslation ? "ar" : mode;
+
+  const parts: string[] = [];
+  if (wanted !== "ug") parts.push(`${OPEN_AYA}${aya.text_ar}${CLOSE_AYA}`);
+  if (wanted !== "ar") parts.push(`${OPEN_QUOTE}${aya.text_ug}${CLOSE_QUOTE}`);
+  return parts.join(" ");
+}
+
 export async function copyAyas(ayas: Aya[], withTranslation: boolean): Promise<boolean> {
   if (ayas.length === 0) return false;
 
-  const htmlParts: string[] = [];
-  const textParts: string[] = [];
-
-  for (const aya of ayas) {
-    const arabic =
-      `<span style="font-family:${FONT_STACK_AR};font-size:20pt;line-height:1.9">` +
-      `${OPEN_AYA}${escapeHtml(aya.text_ar)}${CLOSE_AYA}</span>`;
-    if (withTranslation && aya.text_ug) {
-      htmlParts.push(
-        `<p dir="rtl" style="text-align:right;margin:0 0 12pt 0;">${arabic}<br>` +
-          `<span style="font-family:${FONT_STACK_UG};font-size:13pt;line-height:1.7;color:#333">` +
-          `${OPEN_QUOTE}${escapeHtml(aya.text_ug)}${CLOSE_QUOTE}</span></p>`,
-      );
-      textParts.push(
-        `${OPEN_AYA}${aya.text_ar}${CLOSE_AYA} ${OPEN_QUOTE}${aya.text_ug}${CLOSE_QUOTE}`,
-      );
-    } else {
-      htmlParts.push(`<p dir="rtl" style="text-align:right;margin:0 0 12pt 0;">${arabic}</p>`);
-      textParts.push(`${OPEN_AYA}${aya.text_ar}${CLOSE_AYA}`);
-    }
-  }
-
-  const html = `<html><head><meta charset="utf-8"></head><body>${htmlParts.join("\n")}</body></html>`;
-  const text = textParts.join("\n\n");
+  const mode: AyaRenderMode = withTranslation ? "both" : "ar";
+  const html = `<html><head><meta charset="utf-8"></head><body>${ayas
+    .map((aya) => ayaHtml(aya, mode))
+    .join("\n")}</body></html>`;
+  const text = ayas.map((aya) => ayaText(aya, mode)).join("\n\n");
 
   try {
     if (navigator.clipboard && typeof window.ClipboardItem === "function") {

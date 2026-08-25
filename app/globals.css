@@ -592,6 +592,19 @@
   background-color: color-mix(in srgb, #b3261e 9%, transparent);
 }
 
+/* ── Find & replace, painted the same way ─────────────────────────────────
+   Nothing is inserted into the note to show a match, so a search leaves the
+   saved document byte-for-byte unchanged. The current hit is the darker of
+   the two so stepping through is visible without reading the counter. */
+::highlight(bh-find-hit) {
+  background-color: color-mix(in srgb, var(--gold) 34%, transparent);
+  color: var(--text);
+}
+::highlight(bh-find-current) {
+  background-color: var(--am);
+  color: var(--at);
+}
+
 /* ── Quran (mushaf) — ported from desktop src/quran.css onto the same tokens.
      Type sizes come from the reader's font-size control via inline styles, so
      everything here is structure and colour only. */

@@ -70,6 +70,20 @@ export const BOOK_DOWNLOAD_RULE: RateLimitRule = { limit: 20, windowMs: 10 * 60_
 export const BOOK_REQUEST_RULE: RateLimitRule = { limit: 3, windowMs: 60 * 60_000 };
 
 /**
+ * Searching the library from inside a note.
+ *
+ * Every keystroke is debounced into at most one search, and a writer looking
+ * for a passage tries several wordings before finding it — so this is loose
+ * where the others are tight. It is also the one rule keyed on the USER rather
+ * than the address (see `notebookKey`): the notebook needs an account, and a
+ * writer behind a carrier's NAT must not spend a stranger's allowance.
+ *
+ * What it stops is a signed-in account driving the search RPC in a loop, which
+ * is the only thing here that costs the free tier real work.
+ */
+export const NOTE_SOURCE_RULE: RateLimitRule = { limit: 90, windowMs: 10 * 60_000 };
+
+/**
  * The caller's address, from the proxy header Vercel sets. Falls back to a
  * single shared bucket, which is the safe direction: unknown callers share a
  * limit rather than escaping it.

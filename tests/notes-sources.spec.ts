@@ -48,8 +48,15 @@ async function openSourcePanel(page: Page) {
   await expect(page.getByTestId("source-panel")).toBeVisible();
 }
 
-/** Download the note as .docx and read the text Word would show. */
-async function exportedText(page: Page): Promise<string> {
+/**
+ * Download the note as .docx and read what Word would open.
+ *
+ * The relationships part comes back too: a hyperlink's target is NOT in
+ * document.xml — Word keeps it in word/_rels/document.xml.rels and the run
+ * only carries a relationship id. Asserting on document.xml alone would prove
+ * the citation's TEXT survived while saying nothing about the link.
+ */
+async function exportedDocx(page: Page): Promise<{ xml: string; rels: string }> {
   await page.getByTestId("toolbar-more").click();
   const download = page.waitForEvent("download", { timeout: 30_000 });
   await page.getByTestId("export-docx").click();
@@ -60,8 +67,9 @@ async function exportedText(page: Page): Promise<string> {
   for await (const chunk of stream) chunks.push(chunk as Buffer);
   const zip = await JSZip.loadAsync(Buffer.concat(chunks));
   const xml = await zip.file("word/document.xml")!.async("string");
+  const rels = (await zip.file("word/_rels/document.xml.rels")?.async("string")) ?? "";
   await page.getByTestId("toolbar-more").click();
-  return xml;
+  return { xml, rels };
 }
 
 test.describe("citing a book from a note", () => {
@@ -106,11 +114,13 @@ test.describe("citing a book from a note", () => {
     const opened = await page.request.get(href!);
     expect(opened.status()).toBe(200);
 
-    const xml = await exportedText(page);
+    const { xml, rels } = await exportedDocx(page);
     expect(xml).toContain(label.trim());
-    // The href survives as a Word hyperlink, resolved to an absolute address.
-    const relationships = xml;
-    expect(relationships.length).toBeGreaterThan(0);
+    // And the link is a real Word hyperlink, resolved to an absolute address
+    // so it still opens from a file sitting on somebody's desktop.
+    const bookPath = href!.split("?")[0];
+    expect(rels, "the citation must survive as a hyperlink").toContain(bookPath);
+    expect(rels).toContain("http");
 
     await deleteNote(page, path);
   });
@@ -194,7 +204,7 @@ test.describe("citing a verse from a note", () => {
     await expect(reloaded.locator('[style*="Uthmanic Hafs"]')).toHaveCount(2);
     await expect(reloaded.locator('[style*="Uthmanic Hafs"]').first()).toHaveText(arabic);
 
-    const xml = await exportedText(page);
+    const { xml } = await exportedDocx(page);
     // The verse itself, its face, and the credit its licence requires.
     expect(xml).toContain(arabic.replace(/^﴿/, "").replace(/﴾$/, "").slice(0, 12));
     expect(xml).toContain("Uthmanic Hafs");

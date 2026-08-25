@@ -423,6 +423,22 @@
   .kbd-key:hover { background: var(--bg3); }
 
   /* ── Safe-area helpers for fixed/sticky bars (notched phones) ── */
+  /* «تەكلىپ» — this value came from the file, not from the admin. Small and
+     quiet, but present on every pre-filled field in the batch importer, so
+     what still needs checking is visible at a glance. */
+  .chip-hint {
+    display: inline-flex;
+    align-items: center;
+    padding-inline: 6px;
+    border-radius: 999px;
+    background: var(--ab);
+    color: var(--am);
+    font-size: 10.5px;
+    font-weight: 700;
+    line-height: 1.7;
+    white-space: nowrap;
+  }
+
   .safe-top { padding-top: env(safe-area-inset-top); }
   .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
   .safe-x {

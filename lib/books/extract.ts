@@ -10,6 +10,7 @@
 import { sha256Hex } from "@/lib/books/hash";
 import { normalizeText } from "@/lib/books/chunk";
 import { formatFromFileName, guessTitle, todayIso } from "@/lib/books/metadata";
+import { NO_PROPERTIES, readDocxProperties, type DocxProperties } from "@/lib/books/docx-props";
 import type { BookFormat, ContentFormat, ExtractedBook } from "@/lib/books/types";
 
 /** Server route limit for legacy .doc — Vercel's body cap with headroom. */
@@ -46,12 +47,20 @@ export function assertAcceptedFile(file: { name: string; type?: string }): void 
 /**
  * DOCX → HTML → Markdown, so headings, bold, lists and tables survive.
  * extractRawText would throw all of that away.
+ *
+ * The file's own core properties come back alongside: Word records the author
+ * and title on every save, and a batch import that can pre-fill them is a
+ * batch import the admin corrects instead of types.
  */
-async function extractDocx(file: File): Promise<string> {
+async function extractDocx(file: File): Promise<{ text: string; properties: DocxProperties }> {
   const mammoth = await import("mammoth/mammoth.browser");
   const { htmlToMarkdown } = await import("@/lib/books/markdown");
-  const result = await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
-  return htmlToMarkdown(result.value ?? "");
+  const buffer = await file.arrayBuffer();
+  const [result, properties] = await Promise.all([
+    mammoth.convertToHtml({ arrayBuffer: buffer }),
+    readDocxProperties(buffer),
+  ]);
+  return { text: htmlToMarkdown(result.value ?? ""), properties };
 }
 
 async function extractHtml(file: File): Promise<string> {
@@ -91,12 +100,17 @@ export async function extractFromFile(
   // nothing is rendered that the source never expressed.
   let contentFormat: ContentFormat = "text";
 
+  let properties: DocxProperties = NO_PROPERTIES;
+
   onProgress?.(0.1);
   switch (format) {
-    case "DOCX":
-      text = await extractDocx(file);
+    case "DOCX": {
+      const docx = await extractDocx(file);
+      text = docx.text;
+      properties = docx.properties;
       contentFormat = "markdown";
       break;
+    }
     case "DOC":
       text = await extractDoc(file);
       break;
@@ -126,8 +140,15 @@ export async function extractFromFile(
     contentFormat,
     // Desktop parity: the hash covers the extracted text, not the raw bytes.
     fileHash: await sha256Hex(normalized),
-    title: guessTitle({ fileName: file.name, text: normalized }),
-    author: "",
+    title: guessTitle({
+      fileName: file.name,
+      embeddedTitle: properties.title,
+      text: normalized,
+    }),
+    // Only what the file itself states — an author is never guessed.
+    author: properties.author,
+    embeddedTitle: properties.title,
+    embeddedAuthor: properties.author,
     date: todayIso(),
     file,
   };

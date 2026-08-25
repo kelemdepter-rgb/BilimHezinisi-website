@@ -50,6 +50,29 @@ export const READER_STATE_PATH = "tests/.auth/reader.json";
 export const READER_EMAIL = "bh-e2e-reader@mailinator.com";
 export const READER_PASSWORD = "bh-e2e-password-5517";
 
+/**
+ * Marks every book request a test writes.
+ *
+ * These rows land in the OWNER'S real inbox and count against the daily cap,
+ * so the teardown deletes them by this prefix — a test run must not leave the
+ * admin a page of its own noise to wade through.
+ */
+export const SEED_REQUEST_PREFIX = "__e2e_telep__";
+
+/**
+ * Marks every book the batch-import spec creates.
+ *
+ * That spec writes REAL books to the owner's library — it is the only honest
+ * way to prove an import worked — so every one of them is named with this
+ * prefix and removed again, both by the spec and by the teardown, in case a
+ * run is interrupted partway through.
+ *
+ * No underscores or asterisks, unlike the other markers here: this one appears
+ * inside a Markdown heading in a fixture, where `__like_this__` is bold and the
+ * importer would quite correctly strip the marks back off again.
+ */
+export const BATCH_PREFIX = "e2eToplam";
+
 /** Disposable published book used by the reader and search specs. */
 export const SEED_PATH = "tests/.auth/seed.json";
 export const SEED_BOOK_TITLE = "__e2e_kitab__ سىناق كىتابى";

@@ -22,6 +22,14 @@ export type ExtractedBook = {
   /** Guessed metadata, editable in the wizard. */
   title: string;
   author: string;
+  /**
+   * What the FILE itself states, before anything was guessed from it — a
+   * DOCX's `docProps/core.xml`. Empty when the file says nothing, which is
+   * what lets the batch import leave an author field blank rather than
+   * inventing one.
+   */
+  embeddedTitle?: string;
+  embeddedAuthor?: string;
   date: string;
   /** Original bytes, kept only when the admin opts to store the source file. */
   file?: File;

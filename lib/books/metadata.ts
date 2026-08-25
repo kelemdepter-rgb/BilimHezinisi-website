@@ -45,6 +45,23 @@ export function headingFromText(text: string): string {
 }
 
 /**
+ * Is an embedded title worth using, or is it the producer talking?
+ *
+ * Word writes "Microsoft Word - report.doc" into the title property on a
+ * save-as, and a converter that never set one leaves "Untitled" or
+ * "Document1". None of those is what the book is called. The prefix match
+ * matters: the junk always has the real filename tacked on after it, so an
+ * anchored whole-string test would never fire.
+ */
+export function isUsableEmbeddedTitle(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 120) return false;
+  if (/^(untitled|document\s*\d*)$/i.test(trimmed)) return false;
+  if (/^microsoft word\s*[-–]/i.test(trimmed)) return false;
+  return true;
+}
+
+/**
  * Pick the best available title: embedded document metadata first, then a
  * leading heading, then the file name (always non-empty).
  */
@@ -54,10 +71,7 @@ export function guessTitle(options: {
   text?: string;
 }): string {
   const embedded = (options.embeddedTitle ?? "").trim();
-  // Producers often leave junk like "Microsoft Word - file.doc" behind.
-  if (embedded && embedded.length <= 120 && !/^(untitled|microsoft word -|document\d*)$/i.test(embedded)) {
-    return embedded;
-  }
+  if (isUsableEmbeddedTitle(embedded)) return embedded;
   const heading = options.text ? headingFromText(options.text) : "";
   if (heading) return heading;
   return titleFromFileName(options.fileName);

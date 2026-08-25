@@ -40,10 +40,16 @@ export default async function AdminBooksPage({ searchParams }: PageProps<"/admin
           <Icon name="book" className="ic-lg text-am" />
           كىتابلار
         </h1>
-        <Link href="/admin/books/new" className="btn-am">
-          <Icon name="plus" />
-          يېڭى كىتاب
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/books/batch" className="hbtn" data-testid="batch-import-link">
+            <Icon name="layers" />
+            توپلاپ قوشۇش
+          </Link>
+          <Link href="/admin/books/new" className="btn-am">
+            <Icon name="plus" />
+            يېڭى كىتاب
+          </Link>
+        </div>
       </div>
 
       <form className="mt-4 flex flex-wrap gap-2" role="search">

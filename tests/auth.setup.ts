@@ -1,4 +1,4 @@
-import { test as setup, expect } from "@playwright/test";
+import { test as setup, expect, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
@@ -31,6 +31,48 @@ import {
 loadEnvLocal();
 
 /**
+ * Sign in, and try once more if the session did not take.
+ *
+ * Signing in is the one thing in this suite that depends on something outside
+ * it: Supabase Auth applies its own rate limit centrally, per address, across
+ * every run from this machine. Running the suite repeatedly while developing
+ * is enough to meet it, and when it fires the whole run collapses at the setup
+ * project with an error that says nothing about the real cause.
+ *
+ * A single retry after a pause is not papering over a product bug — the app's
+ * own limiter is still exercised, deliberately and by name, in
+ * discovery.spec.ts. This is about the harness not lying about what failed.
+ */
+async function signIn(
+  page: Page,
+  email: string,
+  password: string,
+  proof: Locator,
+): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await page.goto("/login");
+    await page.locator('input[name="email"]').fill(email);
+    await page.locator('input[name="password"]').fill(password);
+    await page.getByRole("button", { name: "كىرىش" }).click();
+
+    try {
+      await expect(proof).toBeVisible({ timeout: 20_000 });
+      return;
+    } catch (failure) {
+      const message = (await page.locator('[role="alert"]').first().textContent()) ?? "";
+      if (attempt === 1) {
+        throw new Error(
+          `could not sign in as ${email}${message ? ` — the page said: ${message.trim()}` : ""}`,
+          { cause: failure },
+        );
+      }
+      // Long enough for a short central window to roll over.
+      await page.waitForTimeout(30_000);
+    }
+  }
+}
+
+/**
  * Provision a disposable `uploader` account and save its signed-in state, so
  * the admin specs exercise the real guard rather than a mock. Removed again by
  * auth.teardown.ts.
@@ -61,13 +103,8 @@ setup("create and sign in a staff account", async ({ page }) => {
     .eq("id", created.user.id);
   if (roleError) throw new Error(`could not set uploader role: ${roleError.message}`);
 
-  await page.goto("/login");
-  await page.locator('input[name="email"]').fill(STAFF_EMAIL);
-  await page.locator('input[name="password"]').fill(STAFF_PASSWORD);
-  await page.getByRole("button", { name: "كىرىش" }).click();
-
   // The admin link only renders for a staff session, so it proves the role took.
-  await expect(page.getByRole("link", { name: /باشقۇرۇش/ })).toBeVisible({ timeout: 20_000 });
+  await signIn(page, STAFF_EMAIL, STAFF_PASSWORD, page.getByRole("link", { name: /باشقۇرۇش/ }));
 
   mkdirSync(dirname(STAFF_STATE_PATH), { recursive: true });
   await page.context().storageState({ path: STAFF_STATE_PATH });
@@ -237,13 +274,8 @@ setup("create and sign in a plain reader account", async ({ page }) => {
   });
   if (error || !created.user) throw new Error(`could not create reader user: ${error?.message}`);
 
-  await page.goto("/login");
-  await page.locator('input[name="email"]').fill(READER_EMAIL);
-  await page.locator('input[name="password"]').fill(READER_PASSWORD);
-  await page.getByRole("button", { name: "كىرىش" }).click();
-
   // No admin link for this one — the sign-out control is what proves a session.
-  await expect(page.getByRole("button", { name: /چىقىش/ })).toBeVisible({ timeout: 20_000 });
+  await signIn(page, READER_EMAIL, READER_PASSWORD, page.getByRole("button", { name: /چىقىش/ }));
 
   mkdirSync(dirname(READER_STATE_PATH), { recursive: true });
   await page.context().storageState({ path: READER_STATE_PATH });

@@ -4,6 +4,13 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 export const FREE_DB_BYTES = 500 * 1024 * 1024;
 export const FREE_STORAGE_BYTES = 1024 * 1024 * 1024;
 
+/**
+ * The share of the free plan past which the database stops being comfortable.
+ * The same 85% `levelFor` already calls critical, so a batch import that would
+ * cross it warns with the same number the dashboard shows.
+ */
+export const SAFE_DB_RATIO = 0.85;
+
 export type UsageLevel = "normal" | "warning" | "critical";
 
 export type UsageReport = {
@@ -19,6 +26,62 @@ export type UsageReport = {
   storageLevel: UsageLevel;
   lastPing: string | null;
 };
+
+/**
+ * What a page of a book actually costs, measured rather than assumed.
+ *
+ * A batch import has to be able to say "this will add about 6 MB and you have
+ * 380 MB left" BEFORE it writes anything, and a made-up multiplier would say it
+ * wrong in whichever direction was convenient. The honest number is the one the
+ * database already knows: the whole size of book_pages, including its indexes
+ * and its search vector, divided by the rows in it.
+ *
+ * Service role, because RLS would hide every unpublished page from the count
+ * and make each page look more expensive than it is.
+ */
+export type PageStorageStats = {
+  available: boolean;
+  dbBytes: number;
+  pageRows: number;
+  pageBytes: number;
+  /** Whole bytes charged per stored page. 0 when there is nothing to measure. */
+  bytesPerPage: number;
+};
+
+export async function getPageStorageStats(): Promise<PageStorageStats> {
+  const empty: PageStorageStats = {
+    available: false,
+    dbBytes: 0,
+    pageRows: 0,
+    pageBytes: 0,
+    bytesPerPage: 0,
+  };
+
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return empty;
+
+  const [{ data: dbBytes, error }, sizes, pages] = await Promise.all([
+    supabase.rpc("db_total_size"),
+    supabase.rpc("db_size_stats"),
+    supabase.from("book_pages").select("book_id", { count: "exact", head: true }),
+  ]);
+  if (error) return empty;
+
+  type SizeRow = { table_name: string; total_bytes: number };
+  const pageTable = ((sizes.data as SizeRow[] | null) ?? []).find(
+    (row) => row.table_name === "book_pages",
+  );
+  const pageBytes = Number(pageTable?.total_bytes ?? 0);
+  const pageRows = pages.count ?? 0;
+
+  return {
+    available: true,
+    dbBytes: Number(dbBytes ?? 0),
+    pageRows,
+    pageBytes,
+    bytesPerPage: pageRows > 0 ? pageBytes / pageRows : 0,
+  };
+}
 
 function levelFor(used: number, limit: number): UsageLevel {
   const ratio = used / limit;

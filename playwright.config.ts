@@ -29,12 +29,15 @@ const PROD_URL = "http://localhost:3100";
  * request specs, so saying so is honest as well as convenient.
  *
  * The run byte changes between runs, so running the suite twice inside ten
- * minutes does not carry the first run's counters into the second.
+ * minutes does not carry the first run's counters into the second. It is drawn
+ * at random rather than from the clock: a second-derived byte repeats itself
+ * every 254 seconds, which is exactly the interval at which the suite gets run
+ * twice while something is being fixed.
  *
  * The limiters themselves are untouched and still exercised: discovery.spec.ts
  * spends its own allowance on purpose and asserts the Uyghur message it gets.
  */
-const RUN_OCTET = (Math.floor(Date.now() / 1000) % 254) + 1;
+const RUN_OCTET = Math.floor(Math.random() * 254) + 1;
 
 function callerFor(name: string): string {
   let hash = 0;
@@ -271,6 +274,24 @@ export default defineConfig({
           isMobile: viewport.mobile,
           hasTouch: viewport.mobile,
           deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
+        /**
+         * Importing many books at once. Writes real books and reads their
+         * metadata back out of the database, so it runs signed in as staff and
+         * removes everything it created.
+         */
+        name: `batch-${viewport.name}`,
+        testMatch: /batch-import.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
         },
       },
       {

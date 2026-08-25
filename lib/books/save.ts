@@ -105,6 +105,31 @@ export async function uploadToBucket(
   return uploadFile(supabase, bucket, path, body);
 }
 
+/**
+ * How many pages the database actually holds for a book.
+ *
+ * The batch importer writes every book as a draft, then asks this, and only
+ * publishes when the answer matches what it extracted. Without the check a
+ * dropped connection halfway through a 300-page book would publish a third of
+ * it, and nobody would notice until a reader hit the missing part.
+ */
+export async function countStoredPages(bookId: number): Promise<number> {
+  const supabase = createSupabaseBrowserClient();
+  const { count, error } = await supabase
+    .from("book_pages")
+    .select("book_id", { count: "exact", head: true })
+    .eq("book_id", bookId);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+/** Flip a verified draft to the status the admin chose for it. */
+export async function setBookStatus(bookId: number, status: string): Promise<void> {
+  const supabase = createSupabaseBrowserClient();
+  const { error } = await supabase.from("books").update({ status }).eq("id", bookId);
+  if (error) throw new Error(error.message);
+}
+
 export async function setBookPaths(
   bookId: number,
   paths: { cover_path?: string | null; original_file_path?: string | null },

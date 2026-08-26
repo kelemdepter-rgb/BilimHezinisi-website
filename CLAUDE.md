@@ -20,11 +20,16 @@ modify anything there from this project).
   budget. Nothing may require a paid plan, now or later.**
 - **Vercel** hosting (Hobby, non-commercial free library); git push → auto deploy.
   GitHub account: `kelemdepter-rgb`.
-- **Gemini AI — LAST phase, bring-your-own-key.** The owner does NOT pay for AI.
-  Each signed-in user supplies their OWN Gemini key (Google's free tier is enough),
-  stored per user and never exposed to anyone else; calls still go through server
-  routes only (the key never reaches another user's browser). SSE streaming; STRICT
-  user-selected model (never silently switch); per-user usage shown to that user.
+- **Gemini AI — LAST phase, bring-your-own-key, BROWSER-ONLY.** The owner does NOT
+  pay for AI and runs NO server code for it. Each signed-in reader supplies their
+  OWN free Gemini key; it is stored **in that reader's browser only** and the
+  request goes **directly from their browser to Google**. It never reaches our
+  server, is never written to Supabase, and is never logged. There is no
+  `GEMINI_API_KEY` env var and no AI server route — verified on 2026-08-26 that
+  `generativelanguage.googleapis.com` answers cross-origin browser requests,
+  streaming endpoint included (see "AI Layer" below). SSE streaming; STRICT
+  user-selected model (never silently switch); four key slots with automatic
+  failover; per-user usage kept in that reader's browser.
   Port prompts/logic from desktop `ai.js` and `_mobile-ai-reference/`.
 
 ## Core Principles
@@ -84,7 +89,9 @@ text_ar, text_ar_simple, text_ug) + FTS ·
 `bookmarks`, `book_notes`, `reading_progress`, `recent_reads` (all per-user:
 user_id + book_id + position) ·
 `note_documents` (user_id, title, content_html sanitized, content_text) — Notebook ·
-`ai_usage` (user_id, day, model, requests, tokens_in, tokens_out) ·
+`ai_usage` (user_id, day, model, requests, tokens_in, tokens_out) — **UNUSED, and
+must stay that way**: AI runs entirely in the reader's browser, so nothing writes
+here. The table is left in place because an applied migration is never edited ·
 `settings` (key, value) — admin-editable site settings.
 
 ## Search (must match desktop quality)
@@ -147,8 +154,11 @@ user_id + book_id + position) ·
   after scroll down+up).
 
 ## Security / DO-NOT-TOUCH
-- `SUPABASE_SERVICE_ROLE_KEY` and `GEMINI_API_KEY` are server-only: never sent to the
-  client, never logged, never committed. `.env*` stays in `.gitignore`.
+- `SUPABASE_SERVICE_ROLE_KEY` is server-only: never sent to the client, never logged,
+  never committed. `.env*` stays in `.gitignore`. There is **no** `GEMINI_API_KEY`:
+  the only Gemini key that exists is the reader's own, in the reader's own browser.
+- **Never accept, forward, proxy or log a reader's Gemini key.** No route may take one
+  as a parameter, and no prompt or answer may be logged on either side.
 - **RLS enabled on EVERY table.** Public (anon) SELECT only on `status='published'`
   books/pages, categories, quran, and public settings. Writes to books/categories only
   for admin/uploader (checked via `profiles.role`, not client claims). Per-user tables
@@ -168,7 +178,7 @@ verify the preview URL on a real phone.
 ## Environment Variables
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY` (server-only), `ADMIN_EMAIL` (admin bootstrap),
-`SITE_URL`, `GEMINI_API_KEY` (last phase, server-only).
+`SITE_URL`. **There is deliberately no `GEMINI_API_KEY`** — see AI Layer below.
 
 ## Phases (build in order; each phase ships deployable)
 1. **Foundation**: scaffold, design-token theme system ported from desktop, RTL app
@@ -186,17 +196,46 @@ verify the preview URL on a real phone.
 6. **Polish & Migration**: SEO/share metadata per book, performance passes,
    `scripts/migrate-from-desktop.mjs` importing a copy of the desktop `library.db`
    placed in `migration-data/` (batched, resumable, service-role).
-7. **AI Layer**: paid Gemini key, model picker (strict), streaming chat/translate/
-   summarize/ask ported from desktop prompts, per-user daily quotas, admin usage
-   dashboard, key never exposed.
+7. **AI Layer**: each reader's own free Gemini key, held in their browser; model
+   picker (strict), streaming chat/translate/summarize/ask ported from desktop
+   prompts, per-reader usage shown to that reader. No server key, no admin usage
+   dashboard (the owner never sees anyone's traffic — there is nothing to see).
+
+## AI Layer (browser-only — do NOT rebuild this as a server proxy)
+The reader's Gemini key lives in the reader's browser and nowhere else. This is a
+decision, not an oversight; the design below is what is built, and reversing it would
+put a bill on the owner and make us the custodian of other people's secrets.
+- **No `GEMINI_API_KEY`. No AI route handler. No Server Action takes a key.** The
+  browser calls `https://generativelanguage.googleapis.com` itself. That host is in
+  `connect-src` in `lib/security/csp.ts` and is the ONLY thing AI added to the CSP.
+- Verified 2026-08-26 from a page on our own origin: the endpoint answers cross-origin
+  browser requests (`response.type === "cors"`, body readable) for
+  `:generateContent` AND for `:streamGenerateContent?alt=sse`, with the key in the
+  `x-goog-api-key` header — so the preflight passes too. Google's advice to proxy from
+  a backend is about protecting the DEVELOPER's key; here the key is the reader's own.
+- Everything AI keeps state in `localStorage` via `lib/ai/storage.ts`: the on/off
+  switch (default OFF, forever, until the reader turns it on), four key slots, the
+  chosen model, which slot last worked, and today's usage counters. `ai_usage` in
+  Postgres stays empty.
+- `lib/ai/client.ts` is the only place that talks to Google: SSE streaming, a 60 s
+  watchdog, retry with backoff, and automatic failover down the four key slots on 429
+  and 5xx. **Failover changes the KEY, never the MODEL** — the model the reader picked
+  is the model that is called, always.
+- Nothing logs a key, a prompt or an answer, on the client or the server.
+- Exactly three models are offered (`lib/ai/models.ts`), each badged (ھەقسىز) or
+  (پۇللۇق). A paid-only model on a key without billing gets its own named Uyghur
+  message — never a generic error and never a silent downgrade.
+- Before a reader can enable AI they are shown, in Uyghur, what Google does with
+  free-tier data. That notice is not optional and is not behind a link.
 
 ## Cost / Free-Tier Notes
 - Supabase free projects PAUSE after ~7 days without requests → keep an external
   uptime ping (e.g. cron / UptimeRobot) once live; upgrade to Pro ($25/mo) when the
   library grows.
-- Gemini paid tier: billing is enabled in Google AI Studio on a Google Cloud project
-  (prepay credit model); costs are per token — enforce app-side daily quotas and show
-  usage to the admin.
+- Gemini costs the owner **nothing, by construction**: there is no server-side key and
+  no AI server route, so no request the site makes is billable to anyone. A reader who
+  wants the paid-only model enables billing on their OWN Google account; the site never
+  asks for and never sees a payment detail.
 
 <!-- BEGIN:nextjs-agent-rules -->
 

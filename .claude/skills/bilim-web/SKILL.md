@@ -87,8 +87,8 @@ npx playwright test  # mobile (375x667, 390x844) + desktop (1280x800) projects
   files with `node scripts/build-fonts.mjs`; verify any new font's licence in its own
   name table, not from its filename.
 - Secrets: only `NEXT_PUBLIC_SUPABASE_URL` + `NEXT_PUBLIC_SUPABASE_ANON_KEY` may reach
-  the client. `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY` are server-only, never
-  logged, never committed.
+  the client. `SUPABASE_SERVICE_ROLE_KEY` is server-only, never logged, never committed.
+  There is no `GEMINI_API_KEY` — see the AI layer below.
 - Book/note HTML is sanitized (DOMPurify) before render.
 
 ## Migrating the desktop library
@@ -106,7 +106,13 @@ typecheck/lint/build/Playwright green → bump version → commit (English, one 
 change) → push → Vercel auto-deploys → open the URL on a real phone and verify
 scrolling/tapping → done.
 
-## AI layer (LAST phase)
-Gemini called only from server routes with the paid key from Google AI Studio billing;
-SSE streaming; strict model selection (never silently switch); per-user daily quotas
-in `ai_usage`; admin usage dashboard. Port prompts from desktop `ai.js`.
+## AI layer (browser-only — never rebuild it as a server proxy)
+Each reader's OWN free Gemini key, stored in THEIR browser (`lib/ai/storage.ts`), with
+the request going straight from that browser to Google. **No `GEMINI_API_KEY`, no AI
+route handler, no Server Action that takes a key, nothing written to `ai_usage`** — the
+owner must never pay for AI or hold anyone else's secret. `generativelanguage.googleapis.com`
+is in `connect-src` and is the only host AI added to the CSP. `lib/ai/client.ts` does SSE
+streaming, a 60 s watchdog, and automatic failover across four key slots on 429/5xx —
+**failover changes the key, never the model**. Nothing logs a key, a prompt or an answer.
+Three models only (`lib/ai/models.ts`), each badged (ھەقسىز)/(پۇللۇق). Port prompts from
+desktop `ai.js`.

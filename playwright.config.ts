@@ -295,6 +295,26 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * The AI layer, against a fake Gemini endpoint installed in the page
+         * (tests/fixtures/gemini-mock.ts) — a CI run must never spend the
+         * owner's or anybody else's real quota. Signed in, because the
+         * settings screen is; the "no account, no sign of AI" block opens its
+         * own anonymous context.
+         */
+        name: `ai-${viewport.name}`,
+        testMatch: /ai.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,

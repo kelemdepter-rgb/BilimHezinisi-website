@@ -19,6 +19,12 @@ export const PERSONAL_TABLES = [
   "recent_reads",
   "quran_bookmarks",
   "note_documents",
+  /**
+   * Always empty, and meant to be: AI runs entirely in the reader's browser,
+   * so nothing writes here. The table stays because an applied migration is
+   * never edited, and it stays in THIS list because if it ever did hold a row
+   * it would be personal — an export must carry it and a deletion must take it.
+   */
   "ai_usage",
 ] as const;
 

@@ -127,6 +127,23 @@ export default async function AccountPage({ searchParams }: PageProps<"/my/accou
         <SearchHistoryControl />
       </section>
 
+      <section className="paper grain mt-4 p-5 sm:p-6" aria-labelledby="account-ai">
+        <h2 id="account-ai" className="flex items-center gap-2 text-[15px] font-bold">
+          <Icon name="sparkles" className="text-am" />
+          سۈنئىي ئىدراك ۋە Gemini ئاچقۇچىم
+        </h2>
+        <p className="mt-2 text-[13px] leading-7 text-ink2">
+          سۈنئىي ئىدراك ئىختىيارىي ۋە سۈكۈتتە ئېتىك تۇرىدۇ. ئۇنى ئىشلەتسىڭىز، ئۆزىڭىزنىڭ
+          Gemini ئاچقۇچى پەقەت مۇشۇ توركۆرگۈدە ساقلىنىدۇ — بىزنىڭ مۇلازىمېتىرىمىزغا
+          كەلمەيدۇ ۋە ساندانغا يېزىلمايدۇ. تۆۋەندىكى بەتتىن ئۇنى تەڭشىگىلى ۋە بىر بېسىشتا
+          تولۇق ئۆچۈرگىلى بولىدۇ.
+        </p>
+        <Link href="/my/ai" className="hbtn mt-4" data-testid="account-ai-link">
+          <Icon name="sparkles" />
+          سۈنئىي ئىدراك تەڭشىكى
+        </Link>
+      </section>
+
       <section className="paper grain mt-4 p-5 sm:p-6" aria-labelledby="account-offline">
         <h2 id="account-offline" className="flex items-center gap-2 text-[15px] font-bold">
           <Icon name="globe" className="text-am" />

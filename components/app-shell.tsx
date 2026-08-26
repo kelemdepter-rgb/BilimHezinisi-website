@@ -312,6 +312,18 @@ function SidebarContent({
             خاتىرە دەپتىرىم
           </Link>
         )}
+        {/* AI is optional and off by default, so it is a place to go and never
+            a prompt: one quiet row beside the other personal pages. */}
+        {session && (
+          <Link
+            href="/my/ai"
+            data-testid="ai-sidebar-link"
+            className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+          >
+            <Icon name="sparkles" className="text-am" />
+            سۈنئىي ئىدراك
+          </Link>
+        )}
       </nav>
 
       <nav aria-label="كىتاب تۈرلىرى">

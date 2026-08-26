@@ -10,6 +10,17 @@
  * are ours and read `x-nonce` from the request headers.
  */
 
+/**
+ * Google's Gemini endpoint — the ONE host the AI layer added to this policy.
+ *
+ * The reader's own key never leaves their browser, which means their browser
+ * is what calls Google. Verified on 2026-08-26 from a page on this origin:
+ * the endpoint answers cross-origin requests for both :generateContent and
+ * :streamGenerateContent?alt=sse, so no server route sits in the path and
+ * nothing here needs relaxing beyond this single connect-src entry.
+ */
+export const GEMINI_ORIGIN = "https://generativelanguage.googleapis.com";
+
 /** Where the Supabase project lives, if it is configured. */
 function supabaseOrigin(): string | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -60,17 +71,20 @@ export function buildContentSecurityPolicy(nonce: string, isDev: boolean): strin
     "font-src 'self'",
 
     /**
-     * Supabase is the only outside host the browser talks to: PostgREST,
-     * Auth, Storage uploads, and the websocket the auth client keeps.
+     * Two outside hosts, and no more.
      *
-     * WHEN THE AI LAYER LANDS, add https://generativelanguage.googleapis.com
-     * here — and nothing else. Do not relax the policy to make one request
-     * work; a missing origin is a one-line fix in this list.
+     * Supabase: PostgREST, Auth, Storage uploads, and the websocket the auth
+     * client keeps. Google: the reader's own AI requests, which leave from
+     * their browser because their key never leaves it either — that is the
+     * whole reason the AI layer costs the owner nothing and stores nobody's
+     * secret. Do not relax the policy to make one request work; a missing
+     * origin is a one-line fix in this list.
      */
     [
       "connect-src 'self'",
       supabase,
       supabaseSocket,
+      GEMINI_ORIGIN,
       // The dev server's HMR socket and its own origin.
       isDev ? "ws: http://localhost:* http://127.0.0.1:*" : null,
     ]

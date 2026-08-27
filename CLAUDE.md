@@ -227,6 +227,23 @@ put a bill on the owner and make us the custodian of other people's secrets.
   message — never a generic error and never a silent downgrade.
 - Before a reader can enable AI they are shown, in Uyghur, what Google does with
   free-tier data. That notice is not optional and is not behind a link.
+- Three surfaces use it, all through the SAME transport: `/my/ai` (the switch,
+  the four key slots, the model), the reader's panel
+  (`components/reader/ai-panel.tsx`) and the notebook's workspace
+  (`components/notes/ai-panel.tsx`). Adding a fourth means calling
+  `askStream`/`chatStream` — never a new fetch to Google.
+- **Prompts are ported VERBATIM from the desktop's `ai.js`** into
+  `lib/ai/prompts.ts`, extracted mechanically rather than retyped. Do not
+  reword them. Two bypass SYSTEM_BASE deliberately: translation (or "translate
+  into Arabic" answers in Uyghur) and proofreading (its instructions are in
+  English and must not be told to answer in Uyghur).
+- **Proofreading applies whole or not at all.** `lib/ai/proofread.ts` numbers
+  every visual line `⟦N⟧` and REJECTS a reply whose segments are missing,
+  extra or reordered. A correction is previewed as a diff, applied only on a
+  tap, and undoable in one. Blocks holding a citation or a Qur'an verse are
+  never sent and never changed.
+- The offline spellchecker (PROMPTs 10–12) is a SEPARATE feature and is not to
+  be merged with, replaced by, or reopened for AI proofreading.
 
 ## Cost / Free-Tier Notes
 - Supabase free projects PAUSE after ~7 days without requests → keep an external

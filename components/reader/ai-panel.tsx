@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { askStream, type StreamHandle } from "@/lib/ai/client";
 import type { AiFailure } from "@/lib/ai/errors";
@@ -23,33 +23,10 @@ import {
 } from "@/lib/ai/book-context";
 import { renderMarkdown } from "@/lib/books/render-markdown";
 import { saveAnswerToNotebook } from "@/lib/ai/save-answer";
+import { useDockedLayout } from "@/lib/ai/use-docked-layout";
 import type { BookPage } from "@/lib/reader/pages";
 
-/**
- * Where the panel stops being a sheet and becomes a column.
- *
- * Below this it covers the screen, because a 375 px phone cannot show a book
- * and a third column at once and trying would leave both unreadable. At and
- * above it the panel docks beside the text and the reader keeps reading while
- * an answer arrives, which is how the desktop app has always worked.
- */
-const DOCKED_QUERY = "(min-width: 1024px)";
-
-function subscribeToWidth(callback: () => void) {
-  const query = window.matchMedia(DOCKED_QUERY);
-  query.addEventListener("change", callback);
-  return () => query.removeEventListener("change", callback);
-}
-
-export function useDockedLayout(): boolean {
-  return useSyncExternalStore(
-    subscribeToWidth,
-    () => window.matchMedia(DOCKED_QUERY).matches,
-    // The server cannot know the width, and a phone is the safer assumption:
-    // it renders the sheet, which is correct at every width until JS runs.
-    () => false,
-  );
-}
+export { useDockedLayout };
 
 /** Shown once per session, the first time the panel is opened. */
 const NOTICE_KEY = "bh-ai-reader-notice";

@@ -180,6 +180,36 @@ export function buildTranslationPrompt(from: LangCode, to: LangCode, text: strin
   ].join("\n");
 }
 
+/* ── the notebook's own two prompts ───────────────────────────────────── */
+
+/**
+ * The free-form chatbot's system instruction, ported verbatim from ai.js.
+ *
+ * Sent as Gemini `systemInstruction`, which is why it is NOT folded into
+ * SYSTEM_BASE: the chat is not about a book, so the per-content-type framing
+ * above does not apply to it.
+ */
+export const CHAT_SYSTEM = "سىز بىلىمى كەڭ، سەمىمىي ياردەمچىسىز. قائىدىلەر:\n- سوئال قايسى تىلدا بولسا شۇ تىلدا، ئادەتتە ئۇيغۇر تىلىدا (ئۇيغۇر يېزىقىدا) جاۋاب بېرىڭ.\n- ھەدىس، ئايەت ياكى ئالىم سۆزىنى نەقىل قىلسىڭىز، پەقەت راست مەنبەدىنلا نەقىل قىلىڭ؛ مەنبەسىنى (توپلام، كىتاب) كۆرسىتىڭ. ئېنىق بىلمىسىڭىز «بۇ ھەقتە ئېنىق مەنبە تاپالمىدىم» دەڭ — ئويدۇرماڭ.\n- جاۋابنى Markdown بىلەن رەتلىك تۈزۈڭ.\n- ھېكايە، شېئىر قاتارلىق ئىجادىي تەلەپلەرنى خۇشاللىق بىلەن ئورۇنداڭ.";
+
+/**
+ * Proofreading, on numbered ⟦N⟧ segments — ported verbatim from ai.js
+ * buildProofreadPrompt, and it bypasses SYSTEM_BASE like translation does.
+ *
+ * The marker protocol is the whole point. Handing a model a long document and
+ * asking it to "fix the spelling" invites it to quietly reword a sentence,
+ * merge two paragraphs, or drop the last one — and the writer would never
+ * know. Numbering every segment and demanding the same markers back, in the
+ * same order, turns that from an invisible loss into something a program can
+ * check: lib/ai/proofread.ts REJECTS a reply whose segments are missing or
+ * reordered rather than applying part of it.
+ *
+ * It corrects spelling, orthography and punctuation only. Word choice belongs
+ * to the author, and genuinely Arabic quotations are left exactly as written.
+ */
+export function buildProofreadPrompt(segmented: string): string {
+  return "TASK: Proofread modern Uyghur text (Arabic script). Fix ONLY spelling, orthography, and punctuation. Output the corrected text and NOTHING else.\n\nYou are an expert editor of modern standard Uyghur (ھازىرقى زامان ئۇيغۇر ئەدەبىي تىلى) with complete command of the current official orthography and punctuation rules.\n\nThe input consists of numbered segments. Each segment starts with a marker like ⟦1⟧, ⟦2⟧ … on its own line region. You MUST return the SAME segments with the SAME markers in the SAME order — one corrected segment per marker, no segments added, merged, split, or dropped.\n\nCORRECT (and nothing more):\n1. Spelling per current Uyghur orthography: correct hemze (ئ) usage at word/syllable starts; correct Uyghur vowel letters (ا ە ې ى و ۇ ۆ ۈ); vowel-harmony-consistent suffix forms; commonly confused consonants (ق/ك، غ/خ، ھ/خ) judged by the intended word.\n2. Character-level intrusions from Arabic/Persian keyboards: ی→ي، ك variants→ك، ه used as a vowel→ە، ة→ت where the word is Uyghur. Never \"correct\" genuinely Arabic quotations (Quran, hadith, duas) — leave Arabic passages exactly as written.\n3. Punctuation per Uyghur rules: sentence-final «.», question «؟», exclamation «!», comma «،», semicolon «؛», colon «:», quotes «...» for quotations; no space BEFORE punctuation, exactly one space AFTER; paired punctuation balanced.\n4. Spacing: collapse double spaces; fix spaces around parentheses and dashes; fix wrongly joined or split words ONLY when the correct form is unambiguous.\n\nNEVER:\n- Rephrase, reorder, summarize, expand, or \"improve\" wording. Word choice belongs to the author.\n- Change names, numbers, dates, Latin-script words, or Arabic quotations.\n- Add or remove sentences. If a word is ambiguous and context does not decide it, leave it unchanged.\n\nOUTPUT: only the corrected segments with their ⟦N⟧ markers. No preamble, no explanations, no diff.\n\nINPUT SEGMENTS:\n" + String(segmented ?? "");
+}
+
 /* ── the prompt a request actually sends ──────────────────────────────── */
 
 export type PromptOptions = {
@@ -199,6 +229,13 @@ export function buildPrompt(options: PromptOptions): string {
       options.translateTo,
       (options.context ?? "").slice(0, MAX_CONTEXT_CHARS),
     );
+  }
+
+  // Proofreading bypasses SYSTEM_BASE too: its instructions are in English
+  // because Gemini follows meta-instructions in English most reliably, and
+  // "always answer in Uyghur" would fight the "return only the segments" rule.
+  if (options.type === "uy_proofread") {
+    return buildProofreadPrompt((options.context ?? "").slice(0, MAX_CONTEXT_CHARS));
   }
 
   const type = (options.type || "general") as PromptType;

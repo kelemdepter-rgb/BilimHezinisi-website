@@ -36,6 +36,7 @@ import {
   type AiFailure,
 } from "./errors";
 import { GEMINI_API_BASE, type ModelId } from "./models";
+import { CHAT_SYSTEM } from "./prompts";
 import {
   bumpUsage,
   readEnabled,
@@ -86,8 +87,14 @@ export type AskOptions = {
   prompt: string;
   /** Gemini systemInstruction, when the caller has one. */
   system?: string;
-  /** Prior turns, oldest first. Only the last six are sent. */
+  /** Prior turns, oldest first. */
   history?: readonly { role: "user" | "model"; text: string }[];
+  /**
+   * How many prior turns to send. Six is right for a one-shot question about
+   * a passage; a conversation needs the thread, so the notebook's chat raises
+   * it to the desktop's twenty.
+   */
+  historyLimit?: number;
   temperature?: number;
   maxOutputTokens?: number;
   /** Deep reasoning. Off by default so the budget goes to visible output. */
@@ -125,7 +132,7 @@ type GeminiResponse = {
 
 function buildContents(options: AskOptions) {
   const contents: { role: string; parts: { text: string }[] }[] = [];
-  for (const turn of (options.history ?? []).slice(-6)) {
+  for (const turn of (options.history ?? []).slice(-(options.historyLimit ?? 6))) {
     if (!turn?.text) continue;
     contents.push({
       role: turn.role === "model" ? "model" : "user",
@@ -537,6 +544,44 @@ async function readSseStream(
 
   if (timedOut) throw new GeminiError(TIMED_OUT);
   return { usage, stopReason };
+}
+
+/**
+ * The free-form chat, in the desktop's shape (ai.js chatStream).
+ *
+ * NOT a second transport: it builds AskOptions and hands them to askStream
+ * above, so failover, the watchdogs, strict model selection and the Uyghur
+ * errors are all the same code. What differs is the input — a thread of turns
+ * rather than one framed question — and the system instruction, which is the
+ * chatbot's rather than the library's per-content-type framing.
+ */
+export function chatStream(
+  messages: readonly { role: "user" | "model"; text: string }[],
+  onChunk: (delta: string) => void,
+  onDone: (fullText: string, model: ModelId, usage: GeminiUsage | null, meta: AskDoneMeta) => void,
+  onError: (failure: AiFailure) => void,
+  onReset: (textSoFar: string) => void = () => {},
+): StreamHandle {
+  const turns = messages.filter((turn) => turn?.text?.trim());
+  const last = turns[turns.length - 1];
+  if (!last) {
+    onError({ ok: false, error: "سوئال يوق." });
+    return { abort: () => {} };
+  }
+  return askStream(
+    {
+      prompt: last.text,
+      system: CHAT_SYSTEM,
+      history: turns.slice(0, -1),
+      historyLimit: 20,
+      // A conversation is looser than a question about a passage.
+      temperature: 0.7,
+    },
+    onChunk,
+    onDone,
+    onError,
+    onReset,
+  );
 }
 
 /* ── testing one key ──────────────────────────────────────────────────── */

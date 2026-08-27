@@ -296,6 +296,24 @@ export default defineConfig({
       },
       {
         /**
+         * The notebook's AI workspace, against the same fake endpoint. Signed
+         * in as an ordinary reader, because notes are per-user and this spec
+         * writes real ones and removes them again.
+         */
+        name: `notes-ai-${viewport.name}`,
+        testMatch: /notes-ai\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
+        /**
          * The reader's AI panel, against the same fake endpoint. Signed in and
          * against the seeded book, because the panel only exists for a reader
          * with an account who has switched AI on — the "no account, no sign of

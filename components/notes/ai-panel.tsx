@@ -16,7 +16,14 @@ import {
   type Change,
   type Segment,
 } from "@/lib/ai/proofread";
-import { applyBlockText, collectBlocks, sendableBlocks, type NoteBlock } from "@/lib/ai/note-blocks";
+import {
+  applyUnitLines,
+  collectUnits,
+  countQuoted,
+  sendableLines,
+  type NoteUnit,
+  type UnitLine,
+} from "@/lib/ai/note-blocks";
 import { useDockedLayout } from "@/lib/ai/use-docked-layout";
 import { renderMarkdown } from "@/lib/books/render-markdown";
 
@@ -122,7 +129,8 @@ export function NotesAiPanel({
   /** The document as it was before applying, so undo is one tap. */
   const [snapshot, setSnapshot] = useState<string | null>(null);
   const [pending, setPending] = useState<{
-    blocks: NoteBlock[];
+    units: NoteUnit[];
+    lines: UnitLine[];
     corrected: Map<number, string>;
   } | null>(null);
 
@@ -289,15 +297,17 @@ export function NotesAiPanel({
     const editor = editorRef.current;
     if (!editor) return;
 
-    const blocks = collectBlocks(editor);
-    const sendable = sendableBlocks(blocks);
-    setSkipped(blocks.length - sendable.length);
-    if (!sendable.length) {
+    const units = collectUnits(editor);
+    const lines = sendableLines(units);
+    setSkipped(countQuoted(units));
+    if (!lines.length) {
       setFailure({ ok: false, error: "تۈزىتىدىغان تېكىست تېپىلمىدى." });
       return;
     }
 
-    const segments: Segment[] = sendable.map((block, index) => ({ num: index + 1, text: block.text }));
+    // One segment per visual LINE, so a <br> the writer typed cannot be
+    // merged away by a correction.
+    const segments: Segment[] = lines.map((line, index) => ({ num: index + 1, text: line.text }));
     const batches = buildBatches(segments);
     begin();
     setChanges(null);
@@ -322,12 +332,12 @@ export function NotesAiPanel({
     }
 
     if (cancelled.current) return;
-    setPending({ blocks: sendable, corrected });
+    setPending({ units, lines, corrected });
     setChanges(
       buildDiff(
-        sendable.map((block) => block.text),
+        lines.map((line) => line.text),
         corrected,
-        (index) => sendable[index].formatted,
+        (index) => units[lines[index].unit].formatted,
       ),
     );
     setBusy(false);
@@ -369,9 +379,26 @@ export function NotesAiPanel({
     // be undone reliably through the browser's own stack, so the panel keeps
     // the document as it was and offers to put it back in a single tap.
     setSnapshot(editor.innerHTML);
+
+    /**
+     * Rebuild only the units that actually changed, and rebuild each one
+     * WHOLE — its unchanged lines carried over as they were. Writing back line
+     * by line would leave a half-corrected unit if anything went wrong
+     * partway, and touching an unchanged unit at all would flatten formatting
+     * for no reason.
+     */
+    const touched = new Map<number, string[]>();
     for (const change of changes) {
-      const text = pending.corrected.get(change.index);
-      if (typeof text === "string") applyBlockText(pending.blocks[change.index], text);
+      const line = pending.lines[change.index];
+      const corrected = pending.corrected.get(change.index);
+      if (!line || typeof corrected !== "string") continue;
+      const unit = pending.units[line.unit];
+      const next = touched.get(line.unit) ?? [...unit.lines];
+      next[line.line] = corrected;
+      touched.set(line.unit, next);
+    }
+    for (const [unitIndex, nextLines] of touched) {
+      applyUnitLines(pending.units[unitIndex], nextLines);
     }
     setApplied(true);
     onDocumentChanged();
@@ -416,9 +443,15 @@ export function NotesAiPanel({
             ? `safe-top inset-y-0 end-0 h-dvh w-[26rem] border-s ${
                 open ? "visible translate-x-0" : "invisible -translate-x-full"
               }`
-            : // Stops below the editor's sticky toolbar, so the toolbar stays
-              // visible and tappable even with the keyboard up.
-              `inset-x-0 bottom-0 max-h-[calc(100dvh-7rem)] rounded-t-2xl border-t ${
+            : /**
+               * Stops below the editor's sticky toolbar, so the toolbar stays
+               * visible and tappable even with the keyboard up — it is the bar
+               * a writer needs while typing, which is why it is at the top in
+               * the first place. 11rem clears both of its rows at 375 px;
+               * tests/notes-ai.spec.ts measures the real thing rather than
+               * trusting the number.
+               */
+              `inset-x-0 bottom-0 max-h-[calc(100dvh-11rem)] rounded-t-2xl border-t ${
                 open ? "visible translate-y-0" : "invisible translate-y-full"
               }`
         }`}

@@ -26,12 +26,18 @@ export function QuoteCard({
   title,
   author,
   currentPage,
+  onAskAi,
 }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
   title: string;
   author: string;
   /** Read at the moment the card is made, so it credits the right page. */
   currentPage: () => number;
+  /**
+   * Ask the AI panel about this selection. Undefined — and therefore absent —
+   * for anyone who has not switched AI on, which is nearly everyone.
+   */
+  onAskAi?: (selection: string) => void;
 }) {
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [image, setImage] = useState<{ url: string; blob: Blob; pageNo: number } | null>(null);
@@ -61,7 +67,7 @@ export function QuoteCard({
      * same strip is how a reader ends up tapping the wrong one. Clamped so it
      * never lands under the sticky bars at either end.
      */
-    const width = 168;
+    const width = onAskAi ? 260 : 168;
     const below = rect.bottom + 10;
     const top = Math.min(Math.max(below, 64), window.innerHeight - 120);
     const left = Math.min(
@@ -69,7 +75,7 @@ export function QuoteCard({
       window.innerWidth - width - 12,
     );
     return { top, left };
-  }, [containerRef]);
+  }, [containerRef, onAskAi]);
 
   useEffect(() => {
     const update = () => setAnchor(locate());
@@ -155,16 +161,29 @@ export function QuoteCard({
           // collapse the very selection this button exists to use.
           onPointerDown={(event) => event.preventDefault()}
         >
-          <button
-            type="button"
-            className="hbtn on shadow-[var(--shadow-2)]"
-            data-testid="quote-card-open"
-            disabled={busy}
-            onClick={() => void make()}
-          >
-            <Icon name="image" />
-            {busy ? "ياسىلىۋاتىدۇ…" : "نەقىل رەسىمى"}
-          </button>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              className="hbtn on shadow-[var(--shadow-2)]"
+              data-testid="quote-card-open"
+              disabled={busy}
+              onClick={() => void make()}
+            >
+              <Icon name="image" />
+              {busy ? "ياسىلىۋاتىدۇ…" : "نەقىل رەسىمى"}
+            </button>
+            {onAskAi && (
+              <button
+                type="button"
+                className="hbtn on shadow-[var(--shadow-2)]"
+                data-testid="ai-selection-ask"
+                onClick={() => onAskAi(selected.current)}
+              >
+                <Icon name="sparkles" />
+                AI
+              </button>
+            )}
+          </div>
         </div>
       )}
 

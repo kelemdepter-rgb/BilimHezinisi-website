@@ -10,7 +10,10 @@ import { QuoteCard } from "@/components/reader/quote-card";
 import { KeyboardControl } from "@/components/search/uyghur-keyboard";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
+import { AiPanel, useDockedLayout } from "@/components/reader/ai-panel";
+import { readSelection } from "@/lib/ai/book-context";
 import { MarkdownContent } from "@/components/reader/markdown-content";
+import { useAiState } from "@/lib/ai/use-ai-state";
 import { toSegments, ACTIVE_MATCH_CLASS, MATCH_CLASS } from "@/lib/search/occurrences";
 import { flattenMatches, positionOf, stepPosition } from "@/lib/reader/matches";
 import type { ContentFormat } from "@/lib/books/types";
@@ -108,6 +111,17 @@ export function Reader({
   );
   const [loading, setLoading] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  /** Bumped on every open so the panel can reset itself during render. */
+  const [aiToken, setAiToken] = useState(0);
+  /**
+   * What the panel starts from, captured the moment it is opened.
+   *
+   * Read here rather than inside the panel because both values come from the
+   * DOM — the live selection, and the page under the viewport — and a
+   * component may not touch a ref while it is rendering.
+   */
+  const [aiSeed, setAiSeed] = useState({ selection: "", pageText: "" });
   const [restoredPage, setRestoredPage] = useState<number | null>(null);
   const [bookmarks, setBookmarks] = useState<Annotation[]>([]);
   const [notes, setNotes] = useState<Annotation[]>([]);
@@ -127,6 +141,18 @@ export function Reader({
 
   const firstPage = pages[0]?.page_no ?? 1;
   const lastPage = pages[pages.length - 1]?.page_no ?? 1;
+
+  /**
+   * AI exists here only for a signed-in reader who has switched it on and put
+   * a key in. Everyone else gets no button, no teaser and no disabled control
+   * — the library is complete without it, so there is nothing to advertise.
+   * The values come from localStorage, so this is false until hydration and
+   * the button simply appears when it resolves.
+   */
+  const ai = useAiState();
+  const aiAvailable = signedIn && ai.enabled && ai.hasKey;
+  /** At laptop widths the panel docks beside the text instead of covering it. */
+  const aiDocked = useDockedLayout();
 
   useEffect(() => {
     if (signedIn) void touchRecentRead(bookId).catch(() => undefined);
@@ -171,6 +197,26 @@ export function Reader({
     }
     return { pageNo: lastPage, offset: 1 };
   }, [firstPage, lastPage]);
+
+  /**
+    * Open the AI panel, capturing what it should start from: the reader's live
+    * selection (or the one they tapped «AI» on) and the page under the
+    * viewport. Both are read HERE, in an event handler — the panel itself may
+    * not touch a ref while rendering.
+    */
+  const openAi = useCallback(
+    (selection?: string) => {
+      const chosen = selection ?? readSelection(containerRef.current);
+      const pageNo = currentPosition().pageNo;
+      setAiSeed({
+        selection: chosen,
+        pageText: pages.find((page) => page.page_no === pageNo)?.content ?? "",
+      });
+      setAiToken((token) => token + 1);
+      setAiOpen(true);
+    },
+    [currentPosition, pages],
+  );
 
   /** Debounced so scrolling does not hammer the database. */
   const scheduleSave = useCallback(() => {
@@ -538,7 +584,12 @@ export function Reader({
   }
 
   return (
-    <div className="min-h-dvh">
+    /**
+     * Docked, the panel takes 26rem off the inline end and the reader is given
+     * that width back as padding — so the text moves aside rather than being
+     * covered, and every toolbar control stays where the reader can reach it.
+     */
+    <div className={`min-h-dvh${aiOpen && aiDocked ? " lg:pe-[26rem]" : ""}`}>
       {/* Sticky, never auto-hiding: every control stays reachable after any
           amount of scrolling (CLAUDE.md Mobile Rules). */}
       <header
@@ -651,6 +702,18 @@ export function Reader({
               onClick={createBookmark}
             >
               <Icon name="bookmark" className="ic-lg" />
+            </button>
+          )}
+          {aiAvailable && (
+            <button
+              type="button"
+              className="ibtn"
+              data-testid="ai-toggle"
+              aria-label="سۈنئىي ئىدراك ياردەمچىسى"
+              aria-expanded={aiOpen}
+              onClick={() => openAi()}
+            >
+              <Icon name="sparkles" className="ic-lg" />
             </button>
           )}
           <button
@@ -835,12 +898,33 @@ export function Reader({
         </div>
       </div>
 
-      {/* Appears where the reader has selected text; nothing hover-only. */}
+      {/* Appears where the reader has selected text; nothing hover-only. The
+          AI action rides in the SAME floating group rather than a second chip
+          — two bars fighting for the strip under a selection is how a reader
+          ends up tapping the wrong one. */}
       <QuoteCard
         containerRef={containerRef}
         title={title}
         author={author}
         currentPage={() => currentPosition().pageNo}
+        onAskAi={aiAvailable ? openAi : undefined}
+      />
+
+      <AiPanel
+        open={aiOpen}
+        openToken={aiToken}
+        docked={aiDocked}
+        onClose={() => setAiOpen(false)}
+        bookId={bookId}
+        title={title}
+        author={author}
+        pageCount={pageCount}
+        published={published}
+        loadedPages={pages}
+        currentPage={() => currentPosition().pageNo}
+        containerRef={containerRef}
+        initialSelection={aiSeed.selection}
+        initialPageText={aiSeed.pageText}
       />
 
       <ReaderPanel

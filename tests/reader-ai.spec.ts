@@ -524,6 +524,47 @@ test.describe("on a phone", () => {
   });
 });
 
+/* ── The laptop ──────────────────────────────────────────────────────────── */
+
+test.describe("on a laptop", () => {
+  test("docks beside the text instead of covering it", async ({ page }, testInfo) => {
+    test.skip(!testInfo.project.name.includes("desktop"), "docked behaviour");
+
+    await enableAi(page);
+    await page.goto(`/books/${seededBookId()}/read`);
+
+    const content = page.getByTestId("reader-content");
+    const before = (await content.boundingBox())!;
+    await openPanel(page);
+
+    const panel = page.getByTestId("ai-panel");
+    await expect(panel).toHaveAttribute("data-docked", "1");
+
+    // The text moved aside rather than being painted over: no overlap at all
+    // between the panel's box and the book's.
+    const panelBox = (await panel.boundingBox())!;
+    const after = (await content.boundingBox())!;
+    const overlap =
+      Math.min(after.x + after.width, panelBox.x + panelBox.width) - Math.max(after.x, panelBox.x);
+    expect(overlap, "the panel must not sit on top of the book").toBeLessThanOrEqual(0);
+
+    // It really did move — this is the whole point of docking.
+    expect(after.x).not.toBe(before.x);
+
+    // No overlay, so the book stays readable and the reader keeps scrolling.
+    await expect(page.getByTestId("ai-overlay")).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("");
+    await page.evaluate(() => window.scrollTo(0, 600));
+    await page.waitForTimeout(200);
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
+
+    // Every reader control is still on top of itself, none swallowed.
+    expect(await topMostTestIdAt(page, "ai-toggle")).toBe("ai-toggle");
+    expect(await topMostTestIdAt(page, "panel-toggle")).toBe("panel-toggle");
+    await assertNoHorizontalOverflow(page);
+  });
+});
+
 /* ── The first-open notice ───────────────────────────────────────────────── */
 
 test.describe("telling the reader where their text goes", () => {

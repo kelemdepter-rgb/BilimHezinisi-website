@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
@@ -14,7 +21,11 @@ import { AiPanel, useDockedLayout } from "@/components/reader/ai-panel";
 import { readSelection } from "@/lib/ai/book-context";
 import { MarkdownContent } from "@/components/reader/markdown-content";
 import { useAiState } from "@/lib/ai/use-ai-state";
-import { toSegments, ACTIVE_MATCH_CLASS, MATCH_CLASS } from "@/lib/search/occurrences";
+import {
+  toSegments,
+  ACTIVE_MATCH_CLASS,
+  MATCH_CLASS,
+} from "@/lib/search/occurrences";
 import { flattenMatches, positionOf, stepPosition } from "@/lib/reader/matches";
 import type { ContentFormat } from "@/lib/books/types";
 import { rememberOfflineBook } from "@/lib/pwa/offline-books";
@@ -38,7 +49,12 @@ import {
   shouldRestore,
   type ReadingPosition,
 } from "@/lib/reader/position";
-import { FONT_STACKS, MAX_FONT_SIZE, MIN_FONT_SIZE, type ReaderSettings } from "@/lib/reader/settings";
+import {
+  FONT_STACKS,
+  MAX_FONT_SIZE,
+  MIN_FONT_SIZE,
+  type ReaderSettings,
+} from "@/lib/reader/settings";
 import {
   getSettingsServerSnapshot,
   getSettingsSnapshot,
@@ -191,7 +207,10 @@ export function Reader({
       const rect = node.getBoundingClientRect();
       if (rect.bottom > 120) {
         const pageNo = Number(node.dataset.pageNo) || firstPage;
-        const offset = rect.height > 0 ? Math.min(Math.max(-rect.top / rect.height, 0), 1) : 0;
+        const offset =
+          rect.height > 0
+            ? Math.min(Math.max(-rect.top / rect.height, 0), 1)
+            : 0;
         return { pageNo, offset };
       }
     }
@@ -199,11 +218,11 @@ export function Reader({
   }, [firstPage, lastPage]);
 
   /**
-    * Open the AI panel, capturing what it should start from: the reader's live
-    * selection (or the one they tapped «AI» on) and the page under the
-    * viewport. Both are read HERE, in an event handler — the panel itself may
-    * not touch a ref while rendering.
-    */
+   * Open the AI panel, capturing what it should start from: the reader's live
+   * selection (or the one they tapped «AI» on) and the page under the
+   * viewport. Both are read HERE, in an event handler — the panel itself may
+   * not touch a ref while rendering.
+   */
   const openAi = useCallback(
     (selection?: string) => {
       const chosen = selection ?? readSelection(containerRef.current);
@@ -233,7 +252,10 @@ export function Reader({
        * would land back on page 1.
        */
       try {
-        window.localStorage.setItem(positionStorageKey(bookId), JSON.stringify(position));
+        window.localStorage.setItem(
+          positionStorageKey(bookId),
+          JSON.stringify(position),
+        );
       } catch {
         // Storage unavailable — position simply is not remembered.
       }
@@ -244,9 +266,19 @@ export function Reader({
   const loadAround = useCallback(
     async (direction: "before" | "after") => {
       if (loading) return;
-      const from = direction === "after" ? lastPage + 1 : Math.max(1, firstPage - WINDOW_SIZE);
-      const to = direction === "after" ? Math.min(pageCount, lastPage + WINDOW_SIZE) : firstPage - 1;
-      if (from > to || (direction === "after" && lastPage >= pageCount) || (direction === "before" && firstPage <= 1)) {
+      const from =
+        direction === "after"
+          ? lastPage + 1
+          : Math.max(1, firstPage - WINDOW_SIZE);
+      const to =
+        direction === "after"
+          ? Math.min(pageCount, lastPage + WINDOW_SIZE)
+          : firstPage - 1;
+      if (
+        from > to ||
+        (direction === "after" && lastPage >= pageCount) ||
+        (direction === "before" && firstPage <= 1)
+      ) {
         return;
       }
       setLoading(true);
@@ -283,7 +315,8 @@ export function Reader({
     const container = containerRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    if (rect.bottom - window.innerHeight < FETCH_AHEAD_PX) void loadAround("after");
+    if (rect.bottom - window.innerHeight < FETCH_AHEAD_PX)
+      void loadAround("after");
     if (rect.top > -FETCH_AHEAD_PX && firstPage > 1) void loadAround("before");
   }, [firstPage, loadAround]);
 
@@ -335,7 +368,9 @@ export function Reader({
     if (target === null) return;
 
     const scrollToTarget = () => {
-      const node = containerRef.current?.querySelector<HTMLElement>(`[data-page-no="${target}"]`);
+      const node = containerRef.current?.querySelector<HTMLElement>(
+        `[data-page-no="${target}"]`,
+      );
       if (node) {
         window.scrollTo({ top: node.offsetTop - 80, behavior: "auto" });
         if (requested === null) setRestoredPage(target);
@@ -347,7 +382,11 @@ export function Reader({
     requestAnimationFrame(() => {
       // An anonymous target can sit outside the server-rendered window.
       if (scrollToTarget()) return;
-      const window_ = initialPageWindow({ pageNo: target, offset: 0 }, pageCount, WINDOW_SIZE);
+      const window_ = initialPageWindow(
+        { pageNo: target, offset: 0 },
+        pageCount,
+        WINDOW_SIZE,
+      );
       void fetchPages(bookId, window_.from, window_.to, published)
         .then((fresh) => {
           if (fresh.length === 0) return;
@@ -403,24 +442,42 @@ export function Reader({
 
   const goToPage = useCallback(
     async (pageNo: number) => {
-      const target = Math.min(Math.max(1, Math.floor(pageNo)), Math.max(1, pageCount));
-      let node = containerRef.current?.querySelector<HTMLElement>(`[data-page-no="${target}"]`);
+      const target = Math.min(
+        Math.max(1, Math.floor(pageNo)),
+        Math.max(1, pageCount),
+      );
+      let node = containerRef.current?.querySelector<HTMLElement>(
+        `[data-page-no="${target}"]`,
+      );
       if (!node) {
         // Outside the loaded window — reload a window around the target.
         setLoading(true);
         try {
-          const window_ = initialPageWindow({ pageNo: target, offset: 0 }, pageCount, WINDOW_SIZE);
-          const fresh = await fetchPages(bookId, window_.from, window_.to, published);
+          const window_ = initialPageWindow(
+            { pageNo: target, offset: 0 },
+            pageCount,
+            WINDOW_SIZE,
+          );
+          const fresh = await fetchPages(
+            bookId,
+            window_.from,
+            window_.to,
+            published,
+          );
           setPages(fresh);
           await new Promise((resolve) => requestAnimationFrame(resolve));
-          node = containerRef.current?.querySelector<HTMLElement>(`[data-page-no="${target}"]`) ?? undefined;
+          node =
+            containerRef.current?.querySelector<HTMLElement>(
+              `[data-page-no="${target}"]`,
+            ) ?? undefined;
         } catch {
           setError("بۇ بەتنى ئاچقىلى بولمىدى.");
         } finally {
           setLoading(false);
         }
       }
-      if (node) window.scrollTo({ top: node.offsetTop - 80, behavior: "smooth" });
+      if (node)
+        window.scrollTo({ top: node.offsetTop - 80, behavior: "smooth" });
     },
     [bookId, pageCount, published],
   );
@@ -470,7 +527,9 @@ export function Reader({
       if (!node) {
         await goToPage(target.pageNo);
         await new Promise((resolve) => requestAnimationFrame(resolve));
-        node = containerRef.current?.querySelector<HTMLElement>(selector) ?? undefined;
+        node =
+          containerRef.current?.querySelector<HTMLElement>(selector) ??
+          undefined;
       }
       // Instant, not smooth: stepping matches is a find-next, and the browser's
       // own find jumps rather than animates — over hundreds of pages a smooth
@@ -501,7 +560,12 @@ export function Reader({
    */
   const arrivalScrolled = useRef(false);
   useEffect(() => {
-    if (arrivalScrolled.current || jumpToMatch === null || occurrences.length === 0) return;
+    if (
+      arrivalScrolled.current ||
+      jumpToMatch === null ||
+      occurrences.length === 0
+    )
+      return;
     arrivalScrolled.current = true;
 
     // Asserted more than once on purpose. Following a result is a client-side
@@ -553,8 +617,15 @@ export function Reader({
     const name = window.prompt("خەتكۈچ ئىسمى:", `${position.pageNo}-بەت`);
     if (name === null) return;
     try {
-      const created = await addBookmark(bookId, position.pageNo, name.trim() || `${position.pageNo}-بەت`);
-      if (created) setBookmarks((previous) => [...previous, created].sort((a, b) => a.page_no - b.page_no));
+      const created = await addBookmark(
+        bookId,
+        position.pageNo,
+        name.trim() || `${position.pageNo}-بەت`,
+      );
+      if (created)
+        setBookmarks((previous) =>
+          [...previous, created].sort((a, b) => a.page_no - b.page_no),
+        );
     } catch {
       setError("خەتكۈچ قوشۇلمىدى.");
     }
@@ -567,7 +638,10 @@ export function Reader({
     if (text === null || !text.trim()) return;
     try {
       const created = await addNote(bookId, position.pageNo, text.trim());
-      if (created) setNotes((previous) => [...previous, created].sort((a, b) => a.page_no - b.page_no));
+      if (created)
+        setNotes((previous) =>
+          [...previous, created].sort((a, b) => a.page_no - b.page_no),
+        );
     } catch {
       setError("خاتىرە قوشۇلمىدى.");
     }
@@ -576,7 +650,8 @@ export function Reader({
   async function removeAnnotation(kind: "bookmark" | "note", id: number) {
     try {
       await deleteAnnotation(kind, id);
-      if (kind === "bookmark") setBookmarks((previous) => previous.filter((item) => item.id !== id));
+      if (kind === "bookmark")
+        setBookmarks((previous) => previous.filter((item) => item.id !== id));
       else setNotes((previous) => previous.filter((item) => item.id !== id));
     } catch {
       setError("ئۆچۈرگىلى بولمىدى.");
@@ -613,11 +688,18 @@ export function Reader({
               <Icon name="undo" className="ic-lg" />
             </button>
           ) : (
-            <Link href={`/books/${bookId}`} className="ibtn" aria-label="كىتاب بېتىگە قايتىش" data-testid="reader-back">
+            <Link
+              href={`/books/${bookId}`}
+              className="ibtn"
+              aria-label="كىتاب بېتىگە قايتىش"
+              data-testid="reader-back"
+            >
               <Icon name="undo" className="ic-lg" />
             </Link>
           )}
-          <h1 className="min-w-0 flex-1 truncate text-[14px] font-bold">{title}</h1>
+          <h1 className="min-w-0 flex-1 truncate text-[14px] font-bold">
+            {title}
+          </h1>
 
           <button
             type="button"
@@ -645,7 +727,10 @@ export function Reader({
               this is the control that was missing when a reader arrived here
               from the search page. */}
           {occurrences.length > 0 && (
-            <span className="flex shrink-0 items-center" data-testid="match-nav">
+            <span
+              className="flex shrink-0 items-center"
+              data-testid="match-nav"
+            >
               <button
                 type="button"
                 className="ibtn"
@@ -678,7 +763,10 @@ export function Reader({
           {/* Searched, and this book does not carry it — say so rather than
               leaving the toolbar looking the same as before the search. */}
           {findRan && activeTerm.trim() !== "" && occurrences.length === 0 && (
-            <span className="whitespace-nowrap px-1 text-[12.5px] text-ink3" data-testid="match-none">
+            <span
+              className="whitespace-nowrap px-1 text-[12.5px] text-ink3"
+              data-testid="match-none"
+            >
               تېپىلمىدى
             </span>
           )}
@@ -748,11 +836,19 @@ export function Reader({
               {/* Many phones here have no Uyghur keyboard at all; without
                   this those readers cannot search inside a book. */}
               <KeyboardControl inputRef={findInputRef} />
-              <button type="button" className="hbtn" data-testid="find-run" onClick={() => void runFind(findTerm)}>
+              <button
+                type="button"
+                className="hbtn"
+                data-testid="find-run"
+                onClick={() => void runFind(findTerm)}
+              >
                 ئىزدەش
               </button>
               {findRan && occurrences.length === 0 && (
-                <span className="text-[12.5px] text-ink3" data-testid="find-count">
+                <span
+                  className="text-[12.5px] text-ink3"
+                  data-testid="find-count"
+                >
                   تېپىلمىدى
                 </span>
               )}
@@ -772,7 +868,10 @@ export function Reader({
       )}
 
       {error && (
-        <p role="alert" className="mx-auto mt-3 w-fit rounded-[var(--radius)] border border-bd2 bg-ab2 px-4 py-2 text-[12.5px] print:hidden">
+        <p
+          role="alert"
+          className="mx-auto mt-3 w-fit rounded-[var(--radius)] border border-bd2 bg-ab2 px-4 py-2 text-[12.5px] print:hidden"
+        >
           {error}
         </p>
       )}
@@ -788,7 +887,11 @@ export function Reader({
         }}
       >
         {firstPage > 1 && (
-          <button type="button" className="hbtn mx-auto mb-4 flex print:hidden" onClick={() => void loadAround("before")}>
+          <button
+            type="button"
+            className="hbtn mx-auto mb-4 flex print:hidden"
+            onClick={() => void loadAround("before")}
+          >
             ئالدىنقى بەتلەرنى يۈكلەش
           </button>
         )}
@@ -800,7 +903,9 @@ export function Reader({
             data-testid="reader-page"
             className="reader-page mb-8 break-after-page"
           >
-            <p className="mb-2 text-center text-[12px] text-ink3 print:text-[10px]">{page.page_no}</p>
+            <p className="mb-2 text-center text-[12px] text-ink3 print:text-[10px]">
+              {page.page_no}
+            </p>
             {contentFormat === "markdown" ? (
               <MarkdownContent
                 source={page.content}
@@ -810,22 +915,28 @@ export function Reader({
             ) : (
               <div className="whitespace-pre-wrap break-words">
                 {activeTerm.trim()
-                  ? toSegments(page.content, activeTerm).map((segment, index) => {
-                      if (!segment.match) return <span key={index}>{segment.text}</span>;
-                      // The ordinal comes from the matcher, so it is numbered
-                      // the same way the Markdown path numbers its marks and
-                      // the same way ↑ ↓ address them.
-                      const isActive = activeOnPage(page.page_no) === segment.occurrence;
-                      return (
-                        <mark
-                          key={index}
-                          data-match={segment.occurrence}
-                          className={isActive ? ACTIVE_MATCH_CLASS : MATCH_CLASS}
-                        >
-                          {segment.text}
-                        </mark>
-                      );
-                    })
+                  ? toSegments(page.content, activeTerm).map(
+                      (segment, index) => {
+                        if (!segment.match)
+                          return <span key={index}>{segment.text}</span>;
+                        // The ordinal comes from the matcher, so it is numbered
+                        // the same way the Markdown path numbers its marks and
+                        // the same way ↑ ↓ address them.
+                        const isActive =
+                          activeOnPage(page.page_no) === segment.occurrence;
+                        return (
+                          <mark
+                            key={index}
+                            data-match={segment.occurrence}
+                            className={
+                              isActive ? ACTIVE_MATCH_CLASS : MATCH_CLASS
+                            }
+                          >
+                            {segment.text}
+                          </mark>
+                        );
+                      },
+                    )
                   : page.content}
               </div>
             )}
@@ -833,10 +944,14 @@ export function Reader({
         ))}
 
         {loading && (
-          <p className="py-4 text-center text-[13px] text-ink3 print:hidden">يۈكلىنىۋاتىدۇ…</p>
+          <p className="py-4 text-center text-[13px] text-ink3 print:hidden">
+            يۈكلىنىۋاتىدۇ…
+          </p>
         )}
         {lastPage >= pageCount && pages.length > 0 && (
-          <p className="py-6 text-center text-[13px] text-ink3 print:hidden">— كىتاب ئاخىرلاشتى —</p>
+          <p className="py-6 text-center text-[13px] text-ink3 print:hidden">
+            — كىتاب ئاخىرلاشتى —
+          </p>
         )}
       </div>
 
@@ -844,14 +959,21 @@ export function Reader({
           space with pb-24 so this never covers the last line. */}
       <div className="safe-bottom safe-x sticky bottom-0 z-20 border-t border-bd bg-bg2/95 backdrop-blur print:hidden">
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-center gap-2 px-3 py-2">
-          <button type="button" className="ibtn" aria-label="بېشىغا" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+          <button
+            type="button"
+            className="ibtn"
+            aria-label="بېشىغا"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          >
             <Icon name="align-right" />
           </button>
           <form
             className="flex items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
-              const value = Number(new FormData(event.currentTarget).get("page"));
+              const value = Number(
+                new FormData(event.currentTarget).get("page"),
+              );
               if (Number.isFinite(value)) void goToPage(value);
             }}
           >
@@ -872,17 +994,24 @@ export function Reader({
               بېرىش
             </button>
           </form>
-          <span className="text-[12.5px] text-ink3" data-testid="page-indicator">
+          <span
+            className="text-[12.5px] text-ink3"
+            data-testid="page-indicator"
+          >
             / {pageCount}
           </span>
           {/* Opens upwards: this bar is stuck to the bottom of the screen. */}
-          {published && <DownloadBook bookId={bookId} variant="icon" placement="up" />}
+          {published && (
+            <DownloadBook bookId={bookId} variant="icon" placement="up" />
+          )}
           {/* Carries the page the reader is on, read at the moment of the tap
               — the whole point of sharing from inside a book. */}
           <ShareButton
             variant="icon"
             title={title}
-            path={() => `/books/${bookId}/read?page=${currentPosition().pageNo}`}
+            path={() =>
+              `/books/${bookId}/read?page=${currentPosition().pageNo}`
+            }
             label="بۇ بەتنى ھەمبەھىرلەش"
           />
           <button
@@ -910,22 +1039,24 @@ export function Reader({
         onAskAi={aiAvailable ? openAi : undefined}
       />
 
-      <AiPanel
-        open={aiOpen}
-        openToken={aiToken}
-        docked={aiDocked}
-        onClose={() => setAiOpen(false)}
-        bookId={bookId}
-        title={title}
-        author={author}
-        pageCount={pageCount}
-        published={published}
-        loadedPages={pages}
-        currentPage={() => currentPosition().pageNo}
-        containerRef={containerRef}
-        initialSelection={aiSeed.selection}
-        initialPageText={aiSeed.pageText}
-      />
+      {aiAvailable && (
+        <AiPanel
+          open={aiOpen}
+          openToken={aiToken}
+          docked={aiDocked}
+          onClose={() => setAiOpen(false)}
+          bookId={bookId}
+          title={title}
+          author={author}
+          pageCount={pageCount}
+          published={published}
+          loadedPages={pages}
+          currentPage={() => currentPosition().pageNo}
+          containerRef={containerRef}
+          initialSelection={aiSeed.selection}
+          initialPageText={aiSeed.pageText}
+        />
+      )}
 
       <ReaderPanel
         open={panelOpen}
@@ -945,4 +1076,3 @@ export function Reader({
     </div>
   );
 }
-

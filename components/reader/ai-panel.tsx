@@ -438,7 +438,7 @@ export function AiPanel({
             ? `safe-top inset-y-0 end-0 h-dvh w-[26rem] border-s ${
                 open ? "visible translate-x-0" : "invisible -translate-x-full"
               }`
-            : `inset-x-0 bottom-0 max-h-[88dvh] rounded-t-2xl border-t ${
+            : `inset-x-0 bottom-0 max-h-[calc(100dvh-7rem)] rounded-t-2xl border-t ${
                 open ? "visible translate-y-0" : "invisible translate-y-full"
               }`
         }`}

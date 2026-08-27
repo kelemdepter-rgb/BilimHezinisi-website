@@ -296,6 +296,25 @@ export default defineConfig({
       },
       {
         /**
+         * The reader's AI panel, against the same fake endpoint. Signed in and
+         * against the seeded book, because the panel only exists for a reader
+         * with an account who has switched AI on — the "no account, no sign of
+         * AI" block opens its own anonymous context.
+         */
+        name: `reader-ai-${viewport.name}`,
+        testMatch: /reader-ai.spec.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
+        /**
          * The AI layer, against a fake Gemini endpoint installed in the page
          * (tests/fixtures/gemini-mock.ts) — a CI run must never spend the
          * owner's or anybody else's real quota. Signed in, because the

@@ -27,7 +27,9 @@ import type { NoteDocument } from "@/lib/notes/data";
 import { SpellPopup } from "@/components/notes/spell-popup";
 import { useSpellcheck } from "@/components/notes/use-spellcheck";
 import { SourcePanel } from "@/components/notes/source-panel";
+import { NotesAiPanel } from "@/components/notes/ai-panel";
 import { FindBar } from "@/components/notes/find-bar";
+import { useAiState } from "@/lib/ai/use-ai-state";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
 
 const SAVE_DEBOUNCE_MS = 1200;
@@ -66,6 +68,18 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [sourceOpen, setSourceOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  /** Bumped on every open so the panel resets itself during render. */
+  const [aiToken, setAiToken] = useState(0);
+  /**
+   * What the AI panel would send, captured HERE and handed down.
+   *
+   * The panel has to show it before anything leaves — a writer must never send
+   * their whole private notebook to Google by accident — and a component may
+   * not read a ref while rendering. So the editor reads it in an event
+   * handler, which is exactly where reading the DOM belongs.
+   */
+  const [aiScope, setAiScope] = useState({ selection: "", note: "" });
   /** Whatever was selected in the note when a panel was opened. */
   const [selectionText, setSelectionText] = useState("");
   /** Bumped on every content change, so the find bar re-finds its hits. */
@@ -95,6 +109,15 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
    * tell it when the text changed and where a tap landed.
    */
   const spell = useSpellcheck(editorRef, spellOpen);
+
+  /**
+   * AI exists in the notebook only for a writer who switched it on at /my/ai
+   * and put a key in. Everyone else gets no button and no mention of it — the
+   * notebook is complete without it, offline included, so there is nothing to
+   * advertise. The offline spellchecker beside it is untouched either way.
+   */
+  const ai = useAiState();
+  const aiAvailable = ai.enabled && ai.hasKey;
 
   const recount = useCallback(() => {
     const editor = editorRef.current;
@@ -280,6 +303,86 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     [markChanged, recount, scheduleSave, spell],
   );
 
+  /**
+   * Plain text at the caret, from a panel.
+   *
+   * insertText rather than insertHTML: an AI answer is text, and execCommand's
+   * insertText is one undo step in every browser that implements it.
+   */
+  const insertText = useCallback(
+    (text: string) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      const selection = window.getSelection();
+      const range = savedRange.current;
+      if (range && editor.contains(range.commonAncestorContainer)) {
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      } else if (selection) {
+        const atEnd = document.createRange();
+        atEnd.selectNodeContents(editor);
+        atEnd.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(atEnd);
+      }
+      document.execCommand("insertText", false, text);
+      const after = window.getSelection();
+      savedRange.current = after && after.rangeCount > 0 ? after.getRangeAt(0).cloneRange() : null;
+      setNotice("قىستۇرۇلدى.");
+      scheduleSave();
+      recount();
+      markChanged();
+      spell.scheduleCheck();
+    },
+    [markChanged, recount, scheduleSave, spell],
+  );
+
+  /** Replace what was selected — one undoable step, like the desktop. */
+  const replaceSelectionWith = useCallback(
+    (text: string) => {
+      const editor = editorRef.current;
+      const range = savedRange.current;
+      if (!editor || !range || range.collapsed) {
+        setNotice("ئالماشتۇرىدىغان تاللاش يوق.");
+        return;
+      }
+      editor.focus();
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      document.execCommand("insertText", false, text);
+      savedRange.current = null;
+      setNotice("ئالماشتۇرۇلدى.");
+      scheduleSave();
+      recount();
+      markChanged();
+      spell.scheduleCheck();
+    },
+    [markChanged, recount, scheduleSave, spell],
+  );
+
+  /**
+   * The panel rewrote blocks itself (proofread apply, or its undo). The
+   * document changed without an input event, so everything that normally
+   * follows one has to be run by hand — including autosave, or a correction
+   * would sit on screen and never reach the database.
+   */
+  const afterPanelEdit = useCallback(() => {
+    scheduleSave();
+    recount();
+    markChanged();
+    spell.scheduleCheck();
+  }, [markChanged, recount, scheduleSave, spell]);
+
+  /** Re-read the selection and the note, for the panel's scope line. */
+  const captureAiScope = useCallback(() => {
+    setAiScope({
+      selection: currentSelection(),
+      note: (editorRef.current?.innerText ?? "").trim(),
+    });
+  }, []);
+
   function updateTypography(patch: Partial<NoteTypography>) {
     updateTypographyStore(patch);
   }
@@ -406,6 +509,26 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           </button>
 
           <span className="ms-auto flex items-center gap-0.5">
+            {aiAvailable && (
+              <button
+                type="button"
+                className="hbtn"
+                data-testid="notes-ai-toggle"
+                aria-label="سۈنئىي ئىدراك ياردەمچىسى"
+                aria-expanded={aiOpen}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  // Read the selection HERE, while it still exists: opening a
+                  // panel moves focus and collapses it.
+                  captureAiScope();
+                  setAiToken((token) => token + 1);
+                  setAiOpen(true);
+                }}
+              >
+                <Icon name="sparkles" />
+                <span className="hidden sm:inline">AI</span>
+              </button>
+            )}
             <button
               type="button"
               className={spellOpen ? "hbtn on" : "hbtn"}
@@ -645,6 +768,21 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         onClose={() => setSourceOpen(false)}
         onInsert={insertAtCaret}
       />
+
+      {aiAvailable && (
+        <NotesAiPanel
+          open={aiOpen}
+          openToken={aiToken}
+          onClose={() => setAiOpen(false)}
+          editorRef={editorRef}
+          selectionText={aiScope.selection}
+          noteText={aiScope.note}
+          onRescope={captureAiScope}
+          onInsert={insertText}
+          onReplaceSelection={replaceSelectionWith}
+          onDocumentChanged={afterPanelEdit}
+        />
+      )}
 
       {spell.popup && (
         <SpellPopup

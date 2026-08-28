@@ -23,6 +23,8 @@ import {
 } from "@/lib/ai/book-context";
 import { renderMarkdown } from "@/lib/books/render-markdown";
 import { saveAnswerToNotebook } from "@/lib/ai/save-answer";
+import { DEFAULT_THINKING_LEVEL, deepThinkChangesAnything } from "@/lib/ai/models";
+import { useAiState } from "@/lib/ai/use-ai-state";
 import { useDockedLayout } from "@/lib/ai/use-docked-layout";
 import type { BookPage } from "@/lib/reader/pages";
 
@@ -103,6 +105,16 @@ export function AiPanel({
   const [notice, setNotice] = useState(false);
 
   const [lastRequest, setLastRequest] = useState<Request | null>(null);
+
+  /**
+   * Whether «چوڭقۇر مۇلاھىزە» is worth offering at all.
+   *
+   * The toggle asks for `thinkingLevel: "high"`. gemini-3.1-pro-preview
+   * already runs at `high` by default, so for that model the control would
+   * change precisely nothing — and it is not shown rather than shown as a lie.
+   */
+  const { model } = useAiState();
+  const deepAvailable = deepThinkChangesAnything(model);
 
   const stream = useRef<StreamHandle | null>(null);
   const gather = useRef<AbortController | null>(null);
@@ -301,7 +313,7 @@ export function AiPanel({
       type: kind === "term_explain_auto" ? "term_explain" : kind,
       context: context.text,
       question: "",
-      deepThink: deep,
+      deepThink: deep && deepAvailable,
     });
   }
 
@@ -338,7 +350,7 @@ export function AiPanel({
       setFailure({ ok: false, error: "ئالدى بىلەن ئوقۇغۇچتىكى تېكىستنى تاللاڭ." });
       return;
     }
-    run({ type, context: context.text, question: text, deepThink: deep });
+    run({ type, context: context.text, question: text, deepThink: deep && deepAvailable });
   }
 
   function stop() {
@@ -663,16 +675,24 @@ export function AiPanel({
               <Icon name="sparkles" />
               سوراش
             </button>
-            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[11.5px] text-ink2">
-              <input
-                type="checkbox"
-                className="size-4 accent-[var(--am)]"
-                data-testid="ai-deep"
-                checked={deep}
-                onChange={(event) => setDeep(event.target.checked)}
-              />
-              چوڭقۇر مۇلاھىزە <span className="text-ink3">(سۈپەتلىك، ئاستىراق)</span>
-            </label>
+            {deepAvailable ? (
+              <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[11.5px] text-ink2">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-[var(--am)]"
+                  data-testid="ai-deep"
+                  checked={deep}
+                  onChange={(event) => setDeep(event.target.checked)}
+                />
+                چوڭقۇر مۇلاھىزە <span className="text-ink3">(سۈپەتلىك، ئاستىراق)</span>
+              </label>
+            ) : (
+              // Not a disabled checkbox: there is nothing to switch on, because
+              // this model already reasons at the deepest level Google offers.
+              <span className="text-[11.5px] text-ink3" data-testid="ai-deep-always">
+                بۇ مودېل ھەمىشە چوڭقۇر مۇلاھىزە قىلىدۇ ({DEFAULT_THINKING_LEVEL[model]})
+              </span>
+            )}
           </div>
 
           {/* ── status ─────────────────────────────────────────────────── */}

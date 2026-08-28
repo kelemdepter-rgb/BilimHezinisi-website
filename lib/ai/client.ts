@@ -65,14 +65,36 @@ const NO_STREAM = "no stream";
 const TIMED_OUT = `no response within ${REQUEST_TIMEOUT_MS}ms`;
 
 /**
- * Gemini 3.x thinking control. `thinkingBudget: 0` is rejected outright by
+ * Room for the answer, and for the thinking that is drawn from the same budget.
+ *
+ * Every model this library offers has an output limit of 65,536 tokens
+ * (Google's model pages, checked 2026-08-28). The old ceiling of 4,096 was
+ * reached far sooner than it looked — Uyghur in Arabic script is
+ * token-expensive, and thinking now runs at each model's own default rather
+ * than at "low", so it takes a larger share. A ceiling costs nothing until it
+ * is used: only the tokens actually generated are counted.
+ */
+export const DEFAULT_OUTPUT_TOKENS = 16_384;
+
+/**
+ * Gemini 3 thinking control.
+ *
+ * A NORMAL REQUEST SENDS NO `thinkingLevel` AT ALL, so each model applies its
+ * own documented default — which is what AI Studio does, and is half of why
+ * the same model answered better there. Google's defaults (docs/thinking,
+ * checked 2026-08-28): gemini-3.7-flash `medium`, gemini-3.5-flash-lite
+ * `minimal`, gemini-3.1-pro-preview `high`. Sending "low" the way this used to
+ * pushed two of the three BELOW their default.
+ *
+ * «چوڭقۇر مۇلاھىزە» asks for `high` explicitly. It is only offered for models
+ * whose default is lower — see deepThinkChangesAnything() in models.ts.
+ *
+ * `thinkingBudget: 0` stays out of this file: it is rejected outright by
  * gemini-3.5-flash-lite and gemini-3.1-pro-preview ("This model only works in
- * thinking mode"); `thinkingLevel` is accepted by all three models we offer.
- * Thinking tokens are billed as output AND drawn from maxOutputTokens, which
- * is why the budget below carries headroom.
+ * thinking mode").
  */
 function thinkingConfigFor(deep: boolean) {
-  return { thinkingLevel: deep ? "high" : "low" };
+  return deep ? { thinkingConfig: { thinkingLevel: "high" } } : {};
 }
 
 const SAFETY_SETTINGS = [
@@ -95,7 +117,6 @@ export type AskOptions = {
    * it to the desktop's twenty.
    */
   historyLimit?: number;
-  temperature?: number;
   maxOutputTokens?: number;
   /** Deep reasoning. Off by default so the budget goes to visible output. */
   deepThink?: boolean;
@@ -144,15 +165,30 @@ function buildContents(options: AskOptions) {
   return contents;
 }
 
+/**
+ * NOTHING HERE SETS `temperature` OR `topP`, AND THAT IS DELIBERATE.
+ *
+ * Google's Gemini 3 guide (re-read 2026-08-28) says: "For all Gemini 3 models,
+ * we strongly recommend keeping the temperature parameter at its default value
+ * of 1.0", and warns that going below 1.0 "may lead to unexpected behavior,
+ * such as looping or degraded performance". All three models this library
+ * offers are Gemini 3.
+ *
+ * This code used to send 0.2–0.7 on every path. Narrow sampling costs a
+ * low-resource language the most: the model is least confident in Uyghur to
+ * begin with, and clamping it to the safest token is what produced answers
+ * that read plausibly word by word and did not hold together across sentences.
+ * AI Studio sends the defaults, which is why the same model answered better
+ * there. If determinism is ever wanted again it comes from the instruction
+ * text, not from the sampler.
+ */
 function buildBody(options: AskOptions) {
   return {
     contents: buildContents(options),
     ...(options.system ? { systemInstruction: { parts: [{ text: options.system }] } } : {}),
     generationConfig: {
-      temperature: options.temperature ?? 0.4,
-      topP: 0.9,
-      thinkingConfig: thinkingConfigFor(!!options.deepThink),
-      maxOutputTokens: options.maxOutputTokens ?? 4096,
+      ...thinkingConfigFor(!!options.deepThink),
+      maxOutputTokens: options.maxOutputTokens ?? DEFAULT_OUTPUT_TOKENS,
     },
     safetySettings: SAFETY_SETTINGS,
   };
@@ -574,8 +610,6 @@ export function chatStream(
       system: CHAT_SYSTEM,
       history: turns.slice(0, -1),
       historyLimit: 20,
-      // A conversation is looser than a question about a passage.
-      temperature: 0.7,
     },
     onChunk,
     onDone,
@@ -624,13 +658,10 @@ export async function probeKey(slot: number, key: string): Promise<KeyProbe> {
   }
 
   const controller = new AbortController();
-  const body = buildBody({
-    prompt: "سالام دەپ بىر ئېغىز جاۋاب بەر.",
-    temperature: 0.2,
-    // Thinking tokens come out of this budget, so a probe sized for the
-    // one-word answer alone would come back empty on a thinking model.
-    maxOutputTokens: 1024,
-  });
+  // Built exactly like a real request — same sampling defaults, same thinking
+  // default, same budget. A probe configured differently from the thing it is
+  // testing would report a tick for a path the reader never takes.
+  const body = buildBody({ prompt: "سالام دەپ بىر ئېغىز جاۋاب بەر." });
 
   try {
     const json = await generateOnce(model, trimmed, body, controller.signal);

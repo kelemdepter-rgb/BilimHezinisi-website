@@ -52,8 +52,53 @@ export const URL_BILLING = "https://ai.google.dev/gemini-api/docs/billing";
 export const URL_TERMS = "https://ai.google.dev/gemini-api/terms";
 export const URL_GET_KEY = "https://aistudio.google.com/apikey";
 
+/**
+ * The thinking level each model applies WHEN WE SEND NONE, from Google's
+ * thinking guide (checked 2026-08-28).
+ *
+ * This is the table the client relies on to send nothing at all: the level a
+ * model picks for itself is the level AI Studio gets, and is better than any
+ * single number we could pick for all three. It is also what tells the reader
+ * panel whether «چوڭقۇر مۇلاھىزە» would change anything — for a model already
+ * at `high` it would not, and a control that pretends to do something is worse
+ * than no control.
+ */
+export const DEFAULT_THINKING_LEVEL: Record<ModelId, "minimal" | "low" | "medium" | "high"> = {
+  "gemini-3.7-flash": "medium",
+  "gemini-3.5-flash-lite": "minimal",
+  "gemini-3.1-pro-preview": "high",
+};
+
+/** Would asking for `high` actually raise this model above its own default? */
+export function deepThinkChangesAnything(model: ModelId): boolean {
+  return DEFAULT_THINKING_LEVEL[model] !== "high";
+}
+
 export function isPaidOnlyModel(model: string): boolean {
   return PAID_ONLY_MODELS.includes(model.trim() as ModelId);
+}
+
+/**
+ * Did the model that answered match the model that was asked for?
+ *
+ * Google reports the model it actually ran in `modelVersion`, and strict model
+ * selection is only a claim until something checks it. A dated or pinned
+ * variant of the SAME model counts as a match (`gemini-3.7-flash-001`), and so
+ * does the stable name behind a preview alias — but another model from our own
+ * picker never does, however the names happen to nest.
+ */
+export function modelVersionMatches(requested: string, reported?: string | null): boolean {
+  const got = (reported ?? "").trim().toLowerCase();
+  // Google said nothing, so there is nothing to disagree with.
+  if (!got) return true;
+  const asked = requested.trim().toLowerCase();
+  for (const other of SELECTABLE_MODELS) {
+    if (other !== asked && (got === other || got.startsWith(`${other}-`))) return false;
+  }
+  const base = asked.replace(/-(preview|exp|latest)$/, "");
+  return (
+    got === asked || got === base || got.startsWith(`${asked}-`) || got.startsWith(`${base}-`)
+  );
 }
 
 export function isSelectableModel(value: unknown): value is ModelId {

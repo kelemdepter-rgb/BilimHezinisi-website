@@ -14,10 +14,12 @@ import { describe, expect, it } from "vitest";
 import { buildContentSecurityPolicy, GEMINI_ORIGIN } from "@/lib/security/csp";
 import {
   DEFAULT_MODEL,
+  DEFAULT_THINKING_LEVEL,
   GEMINI_API_BASE,
   MODEL_INFO,
   PAID_ONLY_MODELS,
   SELECTABLE_MODELS,
+  deepThinkChangesAnything,
   feeBadge,
   isPaidOnlyModel,
   isSelectableModel,
@@ -213,5 +215,48 @@ describe("the model catalogue", () => {
     expect(isSelectableModel("gemini-3.7-flash")).toBe(true);
     expect(isSelectableModel("gemini-9.9-imaginary")).toBe(false);
     expect(isSelectableModel(null)).toBe(false);
+  });
+});
+
+/* ── What each model does when we send no thinking level ─────────────────── */
+
+describe("the thinking defaults", () => {
+  it("records Google's documented default for every model we offer", () => {
+    // From Google's thinking guide, checked 2026-08-28. The client sends no
+    // thinkingLevel at all, so these are the levels that actually run.
+    expect(DEFAULT_THINKING_LEVEL).toEqual({
+      "gemini-3.7-flash": "medium",
+      "gemini-3.5-flash-lite": "minimal",
+      "gemini-3.1-pro-preview": "high",
+    });
+    for (const model of SELECTABLE_MODELS) {
+      expect(DEFAULT_THINKING_LEVEL[model], `${model} needs a documented default`).toBeTruthy();
+    }
+  });
+
+  it("offers the deep-reasoning toggle only where it would change something", () => {
+    // The toggle asks for `high`. On a model already at `high` it is a control
+    // that does nothing, so the panel does not show it.
+    expect(deepThinkChangesAnything("gemini-3.7-flash")).toBe(true);
+    expect(deepThinkChangesAnything("gemini-3.5-flash-lite")).toBe(true);
+    expect(deepThinkChangesAnything("gemini-3.1-pro-preview")).toBe(false);
+  });
+
+  it("never asks for a level below a model's own default", () => {
+    // The whole bug: "low" was sent on every request, which is BELOW the
+    // default for two of the three models. Only "high" may be requested now.
+    const client = read(join(ROOT, "lib/ai/client.ts"));
+    expect(withoutComments(client)).not.toMatch(/thinkingLevel:\s*"(minimal|low|medium)"/);
+    expect(withoutComments(client)).not.toMatch(/thinkingBudget/);
+  });
+
+  it("sets no sampling parameters anywhere in the shipped code", () => {
+    // Google: "For all Gemini 3 models, we strongly recommend keeping the
+    // temperature parameter at its default value of 1.0." The only way to keep
+    // a default is to send nothing.
+    const offenders = SHIPPED.filter((file) =>
+      /(^|[^.\w])(temperature|topP|top_p)\s*:/.test(withoutComments(read(file))),
+    ).map(rel);
+    expect(offenders, "a clamped sampler is what broke the Uyghur").toEqual([]);
   });
 });

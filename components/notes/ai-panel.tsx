@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
-import { askStream, chatStream, type StreamHandle } from "@/lib/ai/client";
+import { DEFAULT_OUTPUT_TOKENS, askStream, chatStream, type StreamHandle } from "@/lib/ai/client";
 import type { AiFailure } from "@/lib/ai/errors";
 import { TRANSLATION_DIRECTIONS, buildPrompt, type LangCode } from "@/lib/ai/prompts";
 import {
@@ -65,8 +65,16 @@ function noticeAlreadySeen(): boolean {
  */
 const TRANSLATE_MAX_CHARS = BATCH_CHARS;
 
-/** Reconstruction tasks need room to return the whole text, as on the desktop. */
-const LONG_OUTPUT_TOKENS = 12288;
+/**
+ * Reconstruction tasks need room to return the whole text, as on the desktop.
+ *
+ * Three times the ordinary ceiling, because a translation and a proofread each
+ * return every word they were given — and thinking, which now runs at each
+ * model's own default rather than at "low", comes out of the same budget.
+ * Still comfortably under the 65,536-token output limit all three models
+ * carry.
+ */
+const LONG_OUTPUT_TOKENS = DEFAULT_OUTPUT_TOKENS * 3;
 
 type Mode = "chat" | "proofread" | "summary" | "translate";
 
@@ -243,7 +251,7 @@ export function NotesAiPanel({
             ? buildPrompt({ type: "translation", translateFrom: from, translateTo: to, context: target.text })
             : buildPrompt({ type: "summary", context: target.text }),
         // A translation must be able to return the whole text.
-        ...(kind === "translate" ? { maxOutputTokens: LONG_OUTPUT_TOKENS, temperature: 0.3 } : {}),
+        ...(kind === "translate" ? { maxOutputTokens: LONG_OUTPUT_TOKENS } : {}),
       },
       (delta) => setResult((current) => current + delta),
       (full) => {
@@ -351,8 +359,10 @@ export function NotesAiPanel({
         {
           prompt: buildPrompt({ type: "uy_proofread", context: segmented }),
           // The reply is as long as the input, so it needs the long budget.
+          // Determinism here comes from the ⟦N⟧ protocol and from checkBatch
+          // rejecting a malformed reply — never from narrowing the sampler,
+          // which Google's Gemini 3 guide tells us not to do.
           maxOutputTokens: LONG_OUTPUT_TOKENS,
-          temperature: 0.2,
         },
         // The reply is checked whole, so there is nothing useful to show
         // while it arrives — the batch counter is the progress.

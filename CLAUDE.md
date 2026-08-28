@@ -222,6 +222,21 @@ put a bill on the owner and make us the custodian of other people's secrets.
   and 5xx. **Failover changes the KEY, never the MODEL** — the model the reader picked
   is the model that is called, always.
 - Nothing logs a key, a prompt or an answer, on the client or the server.
+- **No `temperature`, no `topP`, and no `thinkingLevel` on an ordinary request.**
+  Google's Gemini 3 guide says to keep temperature at its default of 1.0 and warns
+  that lowering it degrades performance; each model has its own documented default
+  thinking level (`DEFAULT_THINKING_LEVEL` in `lib/ai/models.ts`). Overriding both —
+  0.2–0.7 and `thinkingLevel: "low"` — is what made the Uyghur read as disjointed,
+  and is why AI Studio answered better than this site. Sending nothing is how a
+  default is kept. «چوڭقۇر مۇلاھىزە» asks for `high` explicitly and is offered ONLY
+  for a model whose default is lower. Never re-add `thinkingBudget`.
+- **A truncated answer is never shown as a finished one.** `finishReason` travels
+  with the answer; anything but `STOP` gets a named Uyghur notice outside the answer
+  card, plus «داۋاملاشتۇرۇش» where carrying on is possible. `modelVersion` is shown
+  under every answer, and a model other than the one asked for is reported, not hidden.
+- **`docs/ai-manual-check.md` is run by hand, with a real key, after any change under
+  `lib/ai/`.** Every automated AI test mocks Google — they prove the plumbing, never
+  the quality of the Uyghur. CI must keep spending nobody's quota.
 - Exactly three models are offered (`lib/ai/models.ts`), each badged (ھەقسىز) or
   (پۇللۇق). A paid-only model on a key without billing gets its own named Uyghur
   message — never a generic error and never a silent downgrade.

@@ -140,7 +140,11 @@ export function AiPanel({
   const stream = useRef<StreamHandle | null>(null);
   const gather = useRef<AbortController | null>(null);
   /** What a stopped request falls back to — everything a continuation had. */
-  const resume = useRef<{ base: string; cut: AnswerCut | null }>({ base: "", cut: null });
+  const resume = useRef<{
+    base: string;
+    cut: AnswerCut | null;
+    answeredBy: { requested: string; reported: string } | null;
+  }>({ base: "", cut: null, answeredBy: null });
   const closeRef = useRef<HTMLButtonElement>(null);
   const answerRef = useRef<HTMLDivElement>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
@@ -288,7 +292,7 @@ export function AiPanel({
    */
   function run(request: Request, base = "", baseCut: AnswerCut | null = null) {
     stream.current?.abort();
-    resume.current = { base, cut: baseCut };
+    resume.current = { base, cut: baseCut, answeredBy: base ? answeredBy : null };
     setLastRequest(request);
     setAnswer(base);
     setCut(null);
@@ -411,6 +415,7 @@ export function AiPanel({
     // to give back, which is what leaves no half-written answer behind.
     setAnswer(resume.current.base);
     setCut(resume.current.cut);
+    setAnsweredBy(resume.current.answeredBy);
   }
 
   async function copyAnswer() {

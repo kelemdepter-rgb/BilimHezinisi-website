@@ -586,3 +586,157 @@ test.describe("telling the reader where their text goes", () => {
     await expect(page.getByTestId("ai-first-notice")).toHaveCount(0);
   });
 });
+
+/* ── The request itself ──────────────────────────────────────────────────── */
+
+test.describe("what actually goes to Google", () => {
+  test.beforeEach(async ({ page }) => {
+    await enableAi(page);
+    await page.goto(`/books/${seededBookId()}/read`);
+    await openPanel(page);
+    await setGeminiBehaviour(page, { [KEY_1]: { kind: "ok", chunks: ["جاۋاب"] } });
+  });
+
+  test("sets no temperature and no topP, and no thinking level", async ({ page }) => {
+    await page.getByTestId("ai-quick-summary").click();
+    await expect(page.getByTestId("ai-answer")).toContainText("جاۋاب");
+
+    const [call] = await geminiCalls(page);
+    const config = JSON.parse(call.body ?? "{}").generationConfig ?? {};
+    // Google's Gemini 3 guide asks for temperature 1.0; sending nothing is the
+    // only way to keep a default, and it is what AI Studio does.
+    expect(config).not.toHaveProperty("temperature");
+    expect(config).not.toHaveProperty("topP");
+    // An omitted thinkingLevel lets each model use its own default.
+    expect(config).not.toHaveProperty("thinkingConfig");
+  });
+
+  test("asks for high thinking only when «چوڭقۇر مۇلاھىزە» is ticked", async ({ page }) => {
+    await page.getByTestId("ai-deep").check();
+    await page.getByTestId("ai-quick-summary").click();
+    await expect(page.getByTestId("ai-answer")).toContainText("جاۋاب");
+
+    const [call] = await geminiCalls(page);
+    const config = JSON.parse(call.body ?? "{}").generationConfig ?? {};
+    expect(config.thinkingConfig).toEqual({ thinkingLevel: "high" });
+  });
+
+  test("offers the toggle at all on a model whose default is lower", async ({ page }) => {
+    // gemini-3.7-flash defaults to `medium`, so asking for `high` really does
+    // raise it — the control is honest here and is shown.
+    await expect(page.getByTestId("ai-deep")).toBeVisible();
+    await expect(page.getByTestId("ai-deep-always")).toHaveCount(0);
+  });
+});
+
+test("hides the deep-reasoning toggle for a model that already reasons deeply", async ({
+  page,
+}) => {
+  await enableAi(page);
+  /**
+   * The model has to be set by a LATER init script, not by reloading: enableAi
+   * clears every AI storage key on each navigation, so anything written in
+   * between is wiped on the way back. This is the order the paid-only test
+   * above uses too.
+   */
+  await page.addInitScript(() => localStorage.setItem("bh-ai-model", "gemini-3.1-pro-preview"));
+  await page.goto(`/books/${seededBookId()}/read`);
+  await openPanel(page);
+
+  // gemini-3.1-pro-preview defaults to `high`, so «چوڭقۇر مۇلاھىزە» would
+  // change precisely nothing. It is replaced by an honest line rather than
+  // shown as a control that does nothing.
+  await expect(page.getByTestId("ai-deep")).toHaveCount(0);
+  await expect(page.getByTestId("ai-deep-always")).toContainText("چوڭقۇر مۇلاھىزە");
+  await assertNoHorizontalOverflow(page);
+});
+
+/* ── An answer that stopped short ────────────────────────────────────────── */
+
+test.describe("an unfinished answer", () => {
+  test("is delivered with a notice and a way to carry on", async ({ page }) => {
+    await enableAi(page);
+    await page.goto(`/books/${seededBookId()}/read`);
+    await openPanel(page);
+    await setGeminiBehaviour(page, {
+      [KEY_1]: { kind: "ok", chunks: ["بىرىنچى جۈملە. ئىككىنچى جۈم"], finishReason: "MAX_TOKENS" },
+    });
+
+    await page.getByTestId("ai-quick-summary").click();
+    // The text that did arrive is kept…
+    await expect(page.getByTestId("ai-answer")).toContainText("بىرىنچى جۈملە");
+    // …and it is never passed off as the whole answer.
+    const notice = page.getByTestId("ai-answer-cut");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("تولۇق جاۋاب ئەمەس");
+
+    // Carrying on appends rather than starting over.
+    await setGeminiBehaviour(page, {
+      [KEY_1]: { kind: "ok", chunks: ["لىسى ئاخىرلاشتى."] },
+    });
+    await page.getByTestId("ai-continue").click();
+    await expect(page.getByTestId("ai-answer")).toContainText("ئاخىرلاشتى");
+    await expect(page.getByTestId("ai-answer")).toContainText("بىرىنچى جۈملە");
+    await expect(page.getByTestId("ai-answer-cut")).toHaveCount(0);
+
+    // And the continuation showed the model where it stopped.
+    const [call] = await geminiCalls(page);
+    expect(call.body).toContain("ئىككىنچى جۈم");
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("offers no continue when carrying on would stop in the same place", async ({ page }) => {
+    await enableAi(page);
+    await page.goto(`/books/${seededBookId()}/read`);
+    await openPanel(page);
+    await setGeminiBehaviour(page, {
+      [KEY_1]: { kind: "ok", chunks: ["يېرىم جاۋاب"], finishReason: "SAFETY" },
+    });
+
+    await page.getByTestId("ai-quick-summary").click();
+    await expect(page.getByTestId("ai-answer")).toContainText("يېرىم جاۋاب");
+    await expect(page.getByTestId("ai-answer-cut")).toContainText("بىخەتەرلىك سۈزگۈچى");
+    await expect(page.getByTestId("ai-continue")).toHaveCount(0);
+  });
+});
+
+/* ── Which model replied ─────────────────────────────────────────────────── */
+
+test.describe("the model behind the answer", () => {
+  test("is shown under it", async ({ page }) => {
+    await enableAi(page);
+    await page.goto(`/books/${seededBookId()}/read`);
+    await openPanel(page);
+    await setGeminiBehaviour(page, {
+      [KEY_1]: { kind: "ok", chunks: ["جاۋاب"], modelVersion: "gemini-3.7-flash" },
+    });
+
+    await page.getByTestId("ai-quick-summary").click();
+    await expect(page.getByTestId("ai-answer")).toContainText("جاۋاب");
+    await expect(page.getByTestId("ai-model-version")).toContainText("gemini-3.7-flash");
+    await expect(page.getByTestId("ai-model-mismatch")).toHaveCount(0);
+  });
+
+  test("is reported, not swallowed, when it is not the one that was asked for", async ({
+    page,
+  }) => {
+    await enableAi(page);
+    await page.goto(`/books/${seededBookId()}/read`);
+    await openPanel(page);
+    await setGeminiBehaviour(page, {
+      [KEY_1]: { kind: "ok", chunks: ["جاۋاب"], modelVersion: "gemini-3.5-flash-lite" },
+    });
+
+    await page.getByTestId("ai-quick-summary").click();
+    const alert = page.getByTestId("ai-model-mismatch");
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText("gemini-3.7-flash");
+    await expect(alert).toContainText("gemini-3.5-flash-lite");
+    await expect(alert).toContainText("بۇ سايت قىلمىدى");
+
+    // The request was still strict: the reader's model is what was called.
+    const [call] = await geminiCalls(page);
+    expect(call.model).toBe("gemini-3.7-flash");
+    await assertNoHorizontalOverflow(page);
+  });
+});

@@ -18,7 +18,20 @@ export const GEMINI_ORIGIN = "https://generativelanguage.googleapis.com";
 
 export type GeminiBehaviour =
   /** Answers, one SSE frame per chunk. */
-  | { kind: "ok"; chunks: string[]; delayMs?: number; tokensIn?: number; tokensOut?: number }
+  | {
+      kind: "ok";
+      chunks: string[];
+      delayMs?: number;
+      tokensIn?: number;
+      tokensOut?: number;
+      /**
+       * How the answer ends. "STOP" unless a test is about an answer that did
+       * NOT finish — MAX_TOKENS, SAFETY, RECITATION.
+       */
+      finishReason?: string;
+      /** What Google claims answered, for the strict-model-selection check. */
+      modelVersion?: string;
+    }
   /** 429 with RetryInfo — an exhausted free-tier quota. */
   | { kind: "quota"; retryDelay?: string }
   /**
@@ -131,8 +144,12 @@ export async function installGeminiMock(page: Page): Promise<void> {
         return new Response(
           JSON.stringify({
             candidates: [
-              { content: { parts: [{ text: behaviour.chunks.join("") }] }, finishReason: "STOP" },
+              {
+                content: { parts: [{ text: behaviour.chunks.join("") }] },
+                finishReason: behaviour.finishReason ?? "STOP",
+              },
             ],
+            ...(behaviour.modelVersion ? { modelVersion: behaviour.modelVersion } : {}),
             usageMetadata: usage,
           }),
           { status: 200, headers: { "content-type": "application/json" } },
@@ -154,9 +171,11 @@ export async function installGeminiMock(page: Page): Promise<void> {
             const frame: Record<string, unknown> = {
               candidates: [{ content: { parts: [{ text: chunks[index] }] } }],
             };
+            if (behaviour.modelVersion) frame.modelVersion = behaviour.modelVersion;
             if (index === chunks.length - 1) {
               frame.usageMetadata = usage;
-              (frame.candidates as { finishReason?: string }[])[0].finishReason = "STOP";
+              (frame.candidates as { finishReason?: string }[])[0].finishReason =
+                behaviour.finishReason ?? "STOP";
             }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
           }

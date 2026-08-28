@@ -140,6 +140,12 @@ export type AskDoneMeta = {
    * be told — see describeCutAnswer in errors.ts.
    */
   stopReason?: string;
+  /**
+   * The model Google says answered, verbatim. Shown under the answer, and
+   * checked against the model that was asked for — a disagreement is reported
+   * to the reader rather than swallowed.
+   */
+  modelVersion?: string;
 };
 
 export type StreamHandle = { abort: () => void };
@@ -153,6 +159,12 @@ type GeminiResponse = {
   candidates?: GeminiCandidate[];
   promptFeedback?: { blockReason?: string };
   usageMetadata?: GeminiUsage;
+  /**
+   * The model Google actually ran. Strict model selection is only a claim
+   * until something checks it, and this is the only evidence there is — so it
+   * is read, carried to the panel, and shown under the answer.
+   */
+  modelVersion?: string;
 };
 
 /* ── request building ─────────────────────────────────────────────────── */
@@ -427,7 +439,11 @@ export function askStream(
           // The finish reason travels with the answer even when there IS text:
           // an answer that ran into the ceiling stops mid-sentence, and
           // handing that over as finished is exactly the failure this carries.
-          onDone(streamed, model, result.usage, { slot, stopReason: result.stopReason });
+          onDone(streamed, model, result.usage, {
+            slot,
+            stopReason: result.stopReason,
+            modelVersion: result.modelVersion,
+          });
           return;
         } catch (error) {
           if (aborted) return;
@@ -499,6 +515,7 @@ export function askStream(
           onDone(text, model, json.usageMetadata ?? null, {
             slot: slots[0].slot,
             stopReason: stopReasonOf(json),
+            modelVersion: json.modelVersion,
           });
           return;
         }
@@ -527,12 +544,13 @@ async function readSseStream(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal,
   onDelta: (delta: string) => void,
-): Promise<{ usage: GeminiUsage | null; stopReason: string }> {
+): Promise<{ usage: GeminiUsage | null; stopReason: string; modelVersion: string }> {
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
   let usage: GeminiUsage | null = null;
   let stopReason = "";
+  let modelVersion = "";
 
   /**
     * A stream that has gone silent is as stuck as one that never opened.
@@ -556,7 +574,7 @@ async function readSseStream(
     for (;;) {
       if (signal.aborted) {
         await reader.cancel();
-        return { usage, stopReason };
+        return { usage, stopReason, modelVersion };
       }
       const { done, value } = await reader.read();
       if (done) break;
@@ -583,6 +601,7 @@ async function readSseStream(
         if (json.usageMetadata) usage = json.usageMetadata;
         const reason = stopReasonOf(json);
         if (reason) stopReason = reason;
+        if (json.modelVersion) modelVersion = json.modelVersion;
       }
     }
   } finally {
@@ -591,7 +610,7 @@ async function readSseStream(
   }
 
   if (timedOut) throw new GeminiError(TIMED_OUT);
-  return { usage, stopReason };
+  return { usage, stopReason, modelVersion };
 }
 
 /**

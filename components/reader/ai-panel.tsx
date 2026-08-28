@@ -6,6 +6,7 @@ import { askStream, type StreamHandle } from "@/lib/ai/client";
 import {
   CONTINUE_LABEL,
   describeCutAnswer,
+  modelMismatchMessage,
   type AiFailure,
   type AnswerCut,
 } from "@/lib/ai/errors";
@@ -29,7 +30,11 @@ import {
 } from "@/lib/ai/book-context";
 import { renderMarkdown } from "@/lib/books/render-markdown";
 import { saveAnswerToNotebook } from "@/lib/ai/save-answer";
-import { DEFAULT_THINKING_LEVEL, deepThinkChangesAnything } from "@/lib/ai/models";
+import {
+  DEFAULT_THINKING_LEVEL,
+  deepThinkChangesAnything,
+  modelVersionMatches,
+} from "@/lib/ai/models";
 import { useAiState } from "@/lib/ai/use-ai-state";
 import { useDockedLayout } from "@/lib/ai/use-docked-layout";
 import type { BookPage } from "@/lib/reader/pages";
@@ -104,6 +109,14 @@ export function AiPanel({
   const [answer, setAnswer] = useState("");
   /** Set when the answer on screen stopped short of finishing. */
   const [cut, setCut] = useState<AnswerCut | null>(null);
+  /**
+   * Which model was asked for, and which one Google says replied. Shown under
+   * every finished answer: strict model selection is a promise, and a promise
+   * nobody can check is worth less than one they can.
+   */
+  const [answeredBy, setAnsweredBy] = useState<{ requested: string; reported: string } | null>(
+    null,
+  );
   const [streaming, setStreaming] = useState(false);
   const [failure, setFailure] = useState<AiFailure | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
@@ -152,6 +165,7 @@ export function AiPanel({
     setMenu("none");
     setAnswer("");
     setCut(null);
+    setAnsweredBy(null);
     setFailure(null);
     setSlot(null);
     setLastRequest(null);
@@ -278,6 +292,7 @@ export function AiPanel({
     setLastRequest(request);
     setAnswer(base);
     setCut(null);
+    setAnsweredBy(null);
     setFailure(null);
     setSlot(null);
     setSaveState("idle");
@@ -299,10 +314,11 @@ export function AiPanel({
         deepThink: request.deepThink,
       },
       (delta) => setAnswer((current) => current + delta),
-      (full, _model, _usage, meta) => {
+      (full, requested, _usage, meta) => {
         setAnswer(base + full);
         // An answer that stopped short is never handed over as a finished one.
         setCut(describeCutAnswer(meta));
+        setAnsweredBy({ requested, reported: meta.modelVersion ?? "" });
         setSlot(meta.slot);
         setStreaming(false);
         stream.current = null;
@@ -803,6 +819,22 @@ export function AiPanel({
                 />
               </div>
 
+              {/* A model we did not ask for is a real problem, not a footnote.
+                  It should never happen — the ID is in the URL and failover
+                  only changes the key — so if it does, it is said out loud. */}
+              {answeredBy &&
+                !streaming &&
+                !modelVersionMatches(answeredBy.requested, answeredBy.reported) && (
+                  <p
+                    role="alert"
+                    data-testid="ai-model-mismatch"
+                    className="mt-2 flex items-start gap-2 rounded-[var(--radius)] border border-danger bg-ab2 px-3 py-2 text-[12px] leading-6 text-ink2"
+                  >
+                    <Icon name="info" className="mt-1 shrink-0 text-danger" />
+                    <span>{modelMismatchMessage(answeredBy.requested, answeredBy.reported)}</span>
+                  </p>
+                )}
+
               {/* An unfinished answer says so, in its own box outside the
                   answer card — never inside it, where it would read as part
                   of what the model said. */}
@@ -861,6 +893,13 @@ export function AiPanel({
                   {slot !== null && slot > 0 && (
                     <span className="text-[11px] text-ink3" data-testid="ai-slot">
                       <span dir="ltr">{slot + 1}</span>-ئاچقۇچ
+                    </span>
+                  )}
+                  {/* Quiet, and always there: the reader can see which model
+                      actually replied without having to take our word for it. */}
+                  {answeredBy?.reported && (
+                    <span className="text-[11px] text-ink3" data-testid="ai-model-version">
+                      مودېل: <span dir="ltr">{answeredBy.reported}</span>
                     </span>
                   )}
                 </div>

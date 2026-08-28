@@ -245,6 +245,22 @@ export function emptyAnswerMessage(reason?: string | null): string {
   return `جاۋاب چىقمىدى (سەۋەب: ${reason || "نامەلۇم"}). قايتا سىناڭ.`;
 }
 
+/**
+ * Google answered with a model other than the one that was asked for.
+ *
+ * This should never happen — the model ID is in the URL and failover only ever
+ * changes the key. If it does happen it is not ours to hide: the reader is
+ * told which model they picked, which one replied, and that the difference did
+ * not come from this site.
+ */
+export function modelMismatchMessage(requested: string, reported: string): string {
+  return (
+    `دىققەت: سىز «${requested}» نى تاللىغانىدىڭىز، ئەمما Google «${reported}» ` +
+    `بىلەن جاۋاب بەردى. بۇ ئالماشتۇرۇشنى بۇ سايت قىلمىدى — Google تەرەپتىن كەلدى. ` +
+    `جاۋابنى شۇ ئاساستا باھالاڭ.`
+  );
+}
+
 /* ── an answer that arrived, but not all of it ────────────────────────── */
 
 /**

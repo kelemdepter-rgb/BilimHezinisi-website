@@ -6,9 +6,11 @@ import { DEFAULT_OUTPUT_TOKENS, askStream, chatStream, type StreamHandle } from 
 import {
   CONTINUE_LABEL,
   describeCutAnswer,
+  modelMismatchMessage,
   type AiFailure,
   type AnswerCut,
 } from "@/lib/ai/errors";
+import { modelVersionMatches } from "@/lib/ai/models";
 import {
   TRANSLATION_DIRECTIONS,
   buildContinuePrompt,
@@ -147,6 +149,10 @@ export function NotesAiPanel({
   const [resultCut, setResultCut] = useState<AnswerCut | null>(null);
   /** What «داۋاملاشتۇرۇش» would repeat, for a summary or a translation. */
   const [lastRun, setLastRun] = useState<ScopeRun | null>(null);
+  /** Which model was asked for, and which one Google says answered. */
+  const [answeredBy, setAnsweredBy] = useState<{ requested: string; reported: string } | null>(
+    null,
+  );
 
   // proofread
   const [changes, setChanges] = useState<Change[] | null>(null);
@@ -184,6 +190,7 @@ export function NotesAiPanel({
     setChatCut(null);
     setResultCut(null);
     setLastRun(null);
+    setAnsweredBy(null);
   }
 
   useEffect(() => {
@@ -299,9 +306,10 @@ export function NotesAiPanel({
         ...(run.kind === "translate" ? { maxOutputTokens: LONG_OUTPUT_TOKENS } : {}),
       },
       (delta) => setResult((current) => current + delta),
-      (full, _model, _usage, meta) => {
+      (full, requested, _usage, meta) => {
         setResult(base + full);
         setResultCut(describeCutAnswer(meta));
+        setAnsweredBy({ requested, reported: meta.modelVersion ?? "" });
         setBusy(false);
         stream.current = null;
       },
@@ -346,10 +354,11 @@ export function NotesAiPanel({
     stream.current = chatStream(
       thread,
       (delta) => setStreamingText((current) => current + delta),
-      (full, _model, _usage, meta) => {
+      (full, requested, _usage, meta) => {
         setTurns([...thread, { role: "model", text: base + full }]);
         setStreamingText("");
         setChatCut(describeCutAnswer(meta));
+        setAnsweredBy({ requested, reported: meta.modelVersion ?? "" });
         setBusy(false);
         stream.current = null;
       },
@@ -703,6 +712,7 @@ export function NotesAiPanel({
                     onContinue={continueChat}
                   />
                 )}
+                {turns.length > 0 && !busy && <AnsweredBy by={answeredBy} />}
               </div>
 
               <label className="mt-3 block">
@@ -931,6 +941,7 @@ export function NotesAiPanel({
               {resultCut && !busy && (
                 <CutNotice cut={resultCut} testId="notes-ai-result-cut" onContinue={continueResult} />
               )}
+              {!busy && <AnsweredBy by={answeredBy} />}
               {canInsert && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
@@ -1018,5 +1029,33 @@ function CutNotice({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * Which model actually replied.
+ *
+ * Small and quiet when it agrees with what the writer picked; a stated problem
+ * when it does not. Strict model selection is a promise this project makes on
+ * every screen, and a promise nobody can check is worth less than one they can.
+ */
+function AnsweredBy({ by }: { by: { requested: string; reported: string } | null }) {
+  if (!by?.reported) return null;
+  if (!modelVersionMatches(by.requested, by.reported)) {
+    return (
+      <p
+        role="alert"
+        data-testid="notes-ai-model-mismatch"
+        className="mt-2 flex items-start gap-2 rounded-[var(--radius)] border border-danger bg-ab2 px-3 py-2 text-[12px] leading-6 text-ink2"
+      >
+        <Icon name="info" className="mt-1 shrink-0 text-danger" />
+        <span>{modelMismatchMessage(by.requested, by.reported)}</span>
+      </p>
+    );
+  }
+  return (
+    <p className="mt-2 text-[11px] text-ink3" data-testid="notes-ai-model-version">
+      مودېل: <span dir="ltr">{by.reported}</span>
+    </p>
   );
 }

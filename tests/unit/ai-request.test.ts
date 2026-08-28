@@ -106,10 +106,10 @@ function jsonOf(text: string, options: FrameOptions = {}): Response {
 }
 
 const { askStream, chatStream, probeKey, DEFAULT_OUTPUT_TOKENS } = await import("@/lib/ai/client");
-const { SELECTABLE_MODELS } = await import("@/lib/ai/models");
+const { SELECTABLE_MODELS, modelVersionMatches } = await import("@/lib/ai/models");
 const { obfuscateKey } = await import("@/lib/ai/storage");
 import type { ModelId } from "@/lib/ai/models";
-import { CONTINUE_LABEL, describeCutAnswer } from "@/lib/ai/errors";
+import { CONTINUE_LABEL, describeCutAnswer, modelMismatchMessage } from "@/lib/ai/errors";
 import { CONTINUE_TAIL_CHARS, buildContinuePrompt } from "@/lib/ai/prompts";
 import type { AiFailure } from "@/lib/ai/errors";
 import type { AskDoneMeta, AskOptions } from "@/lib/ai/client";
@@ -355,5 +355,63 @@ describe("continuing an answer", () => {
     // Still one transport: same system instruction, same everything else.
     expect(calls[0].body).toHaveProperty("systemInstruction");
     expect(calls[0].body.generationConfig).not.toHaveProperty("temperature");
+  });
+});
+
+/* ── which model actually answered ───────────────────────────────────────── */
+
+describe("the model that answered", () => {
+  it("is reported back from the stream, not discarded", async () => {
+    respond = () => streamOf(["جاۋاب"], { modelVersion: "gemini-3.7-flash" });
+    const result = await ask({ prompt: "سوئال" });
+    expect(result.ok && result.meta.modelVersion).toBe("gemini-3.7-flash");
+  });
+
+  it("is reported from a plain round trip too", async () => {
+    respond = () => jsonOf("سالام", { modelVersion: "gemini-3.7-flash-001" });
+    const probe = await probeKey(0, KEY);
+    expect(probe.status).toBe("valid");
+    // The probe's own path reads the same field; the value is what proves the
+    // URL and the answer agree.
+    expect(calls[0].url).toContain("/models/gemini-3.7-flash:");
+  });
+
+  it("counts a dated or pinned variant of the same model as a match", () => {
+    expect(modelVersionMatches("gemini-3.7-flash", "gemini-3.7-flash")).toBe(true);
+    expect(modelVersionMatches("gemini-3.7-flash", "gemini-3.7-flash-001")).toBe(true);
+    // A preview alias may report the stable name behind it.
+    expect(modelVersionMatches("gemini-3.1-pro-preview", "gemini-3.1-pro")).toBe(true);
+    expect(modelVersionMatches("gemini-3.1-pro-preview", "gemini-3.1-pro-11-2025")).toBe(true);
+    // Google said nothing: there is nothing to disagree with.
+    expect(modelVersionMatches("gemini-3.7-flash", "")).toBe(true);
+    expect(modelVersionMatches("gemini-3.7-flash", null)).toBe(true);
+  });
+
+  it("counts another model from our own picker as a MISMATCH, however names nest", () => {
+    expect(modelVersionMatches("gemini-3.7-flash", "gemini-3.5-flash-lite")).toBe(false);
+    expect(modelVersionMatches("gemini-3.1-pro-preview", "gemini-3.7-flash")).toBe(false);
+    // The trap: "gemini-3.5-flash" is a prefix of "gemini-3.5-flash-lite", and
+    // answering with the lite model when the reader picked another is exactly
+    // the substitution this check exists to catch.
+    expect(modelVersionMatches("gemini-3.5-flash-lite", "gemini-3.5-flash")).toBe(false);
+  });
+
+  it("surfaces a disagreement instead of swallowing it", async () => {
+    enableAi("gemini-3.7-flash");
+    respond = () => streamOf(["جاۋاب"], { modelVersion: "gemini-3.5-flash-lite" });
+    const result = await ask({ prompt: "سوئال" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The request itself was strict — the ID in the URL is the reader's choice.
+    expect(calls[0].url).toContain("/models/gemini-3.7-flash:");
+    // …and the panel is handed everything it needs to say so out loud.
+    expect(result.meta.modelVersion).toBe("gemini-3.5-flash-lite");
+    expect(modelVersionMatches("gemini-3.7-flash", result.meta.modelVersion)).toBe(false);
+    const message = modelMismatchMessage("gemini-3.7-flash", result.meta.modelVersion ?? "");
+    expect(message).toContain("gemini-3.7-flash");
+    expect(message).toContain("gemini-3.5-flash-lite");
+    // And it says plainly that the swap was not ours.
+    expect(message).toContain("بۇ سايت قىلمىدى");
   });
 });

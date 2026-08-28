@@ -340,7 +340,13 @@ export default defineConfig({
          * own anonymous context.
          */
         name: `ai-${viewport.name}`,
-        testMatch: /ai.spec.ts/,
+        /**
+         * Anchored to the filename on purpose. `/ai.spec.ts/` is a substring
+         * match, so it also picked up reader-ai.spec.ts AND notes-ai.spec.ts —
+         * 42 extra tests per viewport, every one of them already run by its
+         * own project. Keep the leading separator and the $.
+         */
+        testMatch: /[\\/]ai\.spec\.ts$/,
         dependencies: ["setup"],
         use: {
           browserName: "chromium" as const,

@@ -276,6 +276,16 @@ test.describe("asking a question", () => {
 
     await page.getByTestId("notes-ai-chat-insert").click();
     await expect(page.getByTestId("note-body")).toContainText("قىستۇرۇلىدىغان جاۋاب");
+    /**
+     * Wait for the save that belongs to THIS edit.
+     *
+     * The note was already saved once (the typing above), so "ساقلاندى" is
+     * still on screen the moment the answer is inserted — waiting for it
+     * alone matches the PREVIOUS save and reloads before the insert has been
+     * written. The insert marks the note dirty first, so that transition is
+     * what says a new save is really coming.
+     */
+    await expect(page.getByTestId("save-state")).toHaveText("ئۆزگەردى…");
     // And it reached the database, so the panel did not bypass autosave.
     await expect(page.getByTestId("save-state")).toHaveText("ساقلاندى", { timeout: 20_000 });
     await page.reload();

@@ -109,6 +109,8 @@ const { askStream, chatStream, probeKey, DEFAULT_OUTPUT_TOKENS } = await import(
 const { SELECTABLE_MODELS } = await import("@/lib/ai/models");
 const { obfuscateKey } = await import("@/lib/ai/storage");
 import type { ModelId } from "@/lib/ai/models";
+import { CONTINUE_LABEL, describeCutAnswer } from "@/lib/ai/errors";
+import { CONTINUE_TAIL_CHARS, buildContinuePrompt } from "@/lib/ai/prompts";
 import type { AiFailure } from "@/lib/ai/errors";
 import type { AskDoneMeta, AskOptions } from "@/lib/ai/client";
 
@@ -136,13 +138,18 @@ function ask(options: AskOptions): Promise<Outcome> {
   });
 }
 
-function chat(messages: { role: "user" | "model"; text: string }[]): Promise<Outcome> {
+function chat(
+  messages: { role: "user" | "model"; text: string }[],
+  continueFrom = "",
+): Promise<Outcome> {
   return new Promise((resolve) => {
     chatStream(
       messages,
       () => {},
       (text, _model, _usage, meta) => resolve({ ok: true, text, meta }),
       (failure) => resolve({ ok: false, failure }),
+      () => {},
+      continueFrom,
     );
   });
 }
@@ -265,5 +272,88 @@ describe("the model that is called", () => {
       expect(calls[0].url).toContain(`/models/${model}:`);
       expect(calls[0].key).toBe(KEY);
     }
+  });
+});
+
+/* ── an answer that stopped short is never called finished ───────────────── */
+
+describe("a cut-off answer", () => {
+  it("still delivers the text, and carries why it stopped", async () => {
+    respond = () => streamOf(["بىرىنچى جۈملە. ئىككىنچى جۈم"], { finishReason: "MAX_TOKENS" });
+    const result = await ask({ prompt: "ئۇزۇن خۇلاسە" });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // The half that arrived is real and is kept — throwing it away would be
+    // worse than showing it with a warning.
+    expect(result.text).toContain("بىرىنچى جۈملە");
+    expect(result.meta.stopReason).toBe("MAX_TOKENS");
+  });
+
+  it("is described to the reader, with a way forward", () => {
+    const cut = describeCutAnswer({ stopReason: "MAX_TOKENS" });
+    expect(cut).not.toBeNull();
+    expect(cut?.notice).toContain("تولۇق جاۋاب ئەمەس");
+    expect(cut?.canContinue, "the reader must not be left at a dead end").toBe(true);
+    expect(CONTINUE_LABEL).toBe("داۋاملاشتۇرۇش");
+  });
+
+  it("says so for every non-STOP ending, not only the length limit", () => {
+    // A safety or recitation stop cannot be continued past — it would stop at
+    // the same place — so it is named and the continue action is withheld.
+    for (const reason of ["SAFETY", "RECITATION", "PROHIBITED_CONTENT"]) {
+      const cut = describeCutAnswer({ stopReason: reason });
+      expect(cut, `${reason} must be surfaced`).not.toBeNull();
+      expect(cut?.notice).toContain("تولۇق جاۋاب ئەمەس");
+      expect(cut?.canContinue).toBe(false);
+    }
+    // An ending nobody has seen before is still an ending.
+    const unknown = describeCutAnswer({ stopReason: "SOMETHING_NEW" });
+    expect(unknown?.notice).toContain("SOMETHING_NEW");
+
+    // The last key dying mid-answer is the same problem by another route.
+    expect(describeCutAnswer({ partial: true })?.canContinue).toBe(true);
+  });
+
+  it("says nothing at all when the answer actually finished", () => {
+    expect(describeCutAnswer({ stopReason: "STOP" })).toBeNull();
+    // Google always sends a reason; inventing a warning out of its absence
+    // would cry wolf on every answer the day the field moves.
+    expect(describeCutAnswer({})).toBeNull();
+    expect(describeCutAnswer({ stopReason: "" })).toBeNull();
+  });
+
+  it("comes back with STOP on an ordinary answer", async () => {
+    const result = await ask({ prompt: "سوئال" });
+    expect(result.ok && result.meta.stopReason).toBe("STOP");
+  });
+});
+
+/* ── carrying on from where it stopped ───────────────────────────────────── */
+
+describe("continuing an answer", () => {
+  it("re-sends the task and shows the model exactly where it stopped", () => {
+    const original = "ۋەزىپە: بۇ بەتنى خۇلاسىلەڭ";
+    const soFar = `${"ئ".repeat(4000)}ئاخىرقى جۈملە`;
+    const prompt = buildContinuePrompt(original, soFar);
+
+    // The task, because the model has no memory of it.
+    expect(prompt).toContain(original);
+    // The TAIL, not the head: continuing from the wrong end of a long answer
+    // would repeat half of it.
+    expect(prompt).toContain("ئاخىرقى جۈملە");
+    expect(prompt.length).toBeLessThan(original.length + CONTINUE_TAIL_CHARS + 600);
+    // And the instruction that stops it starting over.
+    expect(prompt).toContain("قايتا يازماڭ");
+  });
+
+  it("is what the notebook's chat sends when it carries a reply on", async () => {
+    await chat([{ role: "user", text: "ئۇزۇن ھېكايە يېزىڭ" }], "يېزىلغان قىسمى");
+    const sent = (calls[0].body.contents as { parts: { text: string }[] }[]).at(-1);
+    expect(sent?.parts[0].text).toContain("يېزىلغان قىسمى");
+    expect(sent?.parts[0].text).toContain("ئۇزۇن ھېكايە يېزىڭ");
+    // Still one transport: same system instruction, same everything else.
+    expect(calls[0].body).toHaveProperty("systemInstruction");
+    expect(calls[0].body.generationConfig).not.toHaveProperty("temperature");
   });
 });

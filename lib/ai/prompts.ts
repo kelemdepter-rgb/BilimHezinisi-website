@@ -271,3 +271,38 @@ export function buildPrompt(options: PromptOptions): string {
 
   return sections.join("\n");
 }
+
+/* ── carrying on from where an answer stopped ─────────────────────────── */
+
+/**
+ * NOT a desktop port — the desktop has no equivalent, so nothing above
+ * constrains the wording here and it may be edited freely.
+ *
+ * How much of the unfinished answer to send back. Enough for the model to see
+ * the sentence it was in the middle of, and no more: the point of continuing
+ * is to save output tokens, not to spend them re-reading.
+ */
+export const CONTINUE_TAIL_CHARS = 1500;
+
+/**
+ * Ask for the rest of an answer that hit the output ceiling.
+ *
+ * The original prompt is re-sent whole rather than referred to, because the
+ * model has no memory of it — a continuation that has lost the passage would
+ * carry on about nothing. The tail then shows exactly where to resume.
+ */
+export function buildContinuePrompt(original: string, answerSoFar: string): string {
+  const tail = String(answerSoFar ?? "").slice(-CONTINUE_TAIL_CHARS);
+  return [
+    original,
+    "",
+    "--- تېخى تۈگىمىگەن جاۋاب ---",
+    tail,
+    "--- تۈگىمىگەن جاۋابنىڭ ئاخىرى ---",
+    "",
+    "يۇقىرىدىكى جاۋابنى سىز يازغانىدىڭىز، ئەمما ئۇزۇنلۇق چېكىگە يېتىپ",
+    "ئوتتۇرىدا ئۈزۈلۈپ قالدى. ئەمدى دەل شۇ ئۈزۈلگەن يەردىن باشلاپ",
+    "داۋاملاشتۇرۇڭ. يۇقىرىدا يېزىلغاننى قايتا يازماڭ، بېشىدىن باشلىماڭ،",
+    "«داۋامى» دېگەندەك كىرىش سۆز قوشماڭ — بىۋاسىتە داۋاملاشتۇرۇڭ.",
+  ].join("\n");
+}

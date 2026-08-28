@@ -245,6 +245,77 @@ export function emptyAnswerMessage(reason?: string | null): string {
   return `جاۋاب چىقمىدى (سەۋەب: ${reason || "نامەلۇم"}). قايتا سىناڭ.`;
 }
 
+/* ── an answer that arrived, but not all of it ────────────────────────── */
+
+/**
+ * A finished stream is not the same thing as a finished answer.
+ *
+ * Gemini reports why it stopped in `finishReason`, and only `STOP` means "I
+ * said everything I had to say". An answer that hit the output ceiling stops
+ * mid-sentence and used to be handed to the reader as though it were
+ * complete — which reads exactly like the "sentences that do not connect"
+ * this whole change is about. So every non-STOP ending is named, and the
+ * reader is told whether there is a way forward.
+ *
+ * An empty reason is treated as complete on purpose: Google always sends one
+ * on the last chunk, and inventing a warning out of its absence would cry
+ * wolf on every answer the day the field moves.
+ */
+export type AnswerCut = {
+  /** What the panel shows, under the answer and visibly apart from it. */
+  notice: string;
+  /** Would «داۋاملاشتۇرۇش» plausibly pick up where this stopped? */
+  canContinue: boolean;
+};
+
+export const CONTINUE_LABEL = "داۋاملاشتۇرۇش";
+
+export function describeCutAnswer(meta: {
+  stopReason?: string | null;
+  partial?: boolean;
+}): AnswerCut | null {
+  const code = String(meta.stopReason ?? "").toUpperCase();
+
+  // The last key died mid-answer with nothing left to fail over to. The text
+  // on screen is real, and it is not all of it.
+  if (meta.partial) {
+    return {
+      notice:
+        "باغلىنىش ئۈزۈلۈپ قېلىپ جاۋاب ئوتتۇرىدا توختاپ قالدى — بۇ تولۇق جاۋاب ئەمەس.",
+      canContinue: true,
+    };
+  }
+
+  if (!code || code === "STOP" || code === "FINISH_REASON_STOP") return null;
+
+  if (/MAX_TOKENS/.test(code)) {
+    return {
+      notice:
+        "جاۋاب ئۇزۇنلۇق چېكىگە يېتىپ ئوتتۇرىدا توختاپ قالدى — بۇ تولۇق جاۋاب ئەمەس. «داۋاملاشتۇرۇش» نى بېسىپ قالغىنىنى داۋاملاشتۇرالايسىز.",
+      canContinue: true,
+    };
+  }
+  if (/SAFETY|BLOCKLIST|PROHIBITED|BLOCKED|SPII|IMAGE_SAFETY/.test(code)) {
+    return {
+      notice:
+        "Google نىڭ بىخەتەرلىك سۈزگۈچى جاۋابنى ئوتتۇرىدا توختاتتى — بۇ تولۇق جاۋاب ئەمەس. سوئالنى باشقىچە يېزىپ سىناڭ.",
+      // Continuing would stop at the same place for the same reason.
+      canContinue: false,
+    };
+  }
+  if (/RECITATION/.test(code)) {
+    return {
+      notice:
+        "جاۋاب Google نىڭ نەقىل چەكلىمىسىگە ئۇچراپ ئوتتۇرىدا توختىدى — بۇ تولۇق جاۋاب ئەمەس. سوئالنى ئازراق ئۆزگەرتىپ قايتا سىناڭ.",
+      canContinue: false,
+    };
+  }
+  return {
+    notice: `جاۋاب ئوتتۇرىدا توختاپ قالدى (سەۋەب: ${meta.stopReason}) — بۇ تولۇق جاۋاب ئەمەس.`,
+    canContinue: true,
+  };
+}
+
 /** What a failed request hands back to the UI. */
 export type AiFailure = {
   ok: false;

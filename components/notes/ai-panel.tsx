@@ -3,8 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { DEFAULT_OUTPUT_TOKENS, askStream, chatStream, type StreamHandle } from "@/lib/ai/client";
-import type { AiFailure } from "@/lib/ai/errors";
-import { TRANSLATION_DIRECTIONS, buildPrompt, type LangCode } from "@/lib/ai/prompts";
+import {
+  CONTINUE_LABEL,
+  describeCutAnswer,
+  type AiFailure,
+  type AnswerCut,
+} from "@/lib/ai/errors";
+import {
+  TRANSLATION_DIRECTIONS,
+  buildContinuePrompt,
+  buildPrompt,
+  type LangCode,
+} from "@/lib/ai/prompts";
 import {
   BATCH_CHARS,
   buildBatches,
@@ -82,6 +92,9 @@ type ChatTurn = { role: "user" | "model"; text: string };
 
 type Scope = { text: string; fromSelection: boolean };
 
+/** One summary or translation, kept so it can be carried on from. */
+type ScopeRun = { kind: "summary" | "translate"; from?: LangCode; to?: LangCode; target: Scope };
+
 export function NotesAiPanel({
   open,
   openToken,
@@ -128,6 +141,12 @@ export function NotesAiPanel({
   // summary / translate
   const [result, setResult] = useState("");
   const [resultFromSelection, setResultFromSelection] = useState(false);
+  /** Set when the chat reply on screen stopped short of finishing. */
+  const [chatCut, setChatCut] = useState<AnswerCut | null>(null);
+  /** Set when the summary or translation on screen stopped short. */
+  const [resultCut, setResultCut] = useState<AnswerCut | null>(null);
+  /** What «داۋاملاشتۇرۇش» would repeat, for a summary or a translation. */
+  const [lastRun, setLastRun] = useState<ScopeRun | null>(null);
 
   // proofread
   const [changes, setChanges] = useState<Change[] | null>(null);
@@ -162,6 +181,9 @@ export function NotesAiPanel({
     setNotice(!noticeAlreadySeen());
     setSnapshot(null);
     setPending(null);
+    setChatCut(null);
+    setResultCut(null);
+    setLastRun(null);
   }
 
   useEffect(() => {
@@ -241,32 +263,61 @@ export function NotesAiPanel({
       return;
     }
 
+    // A fresh run drops the previous notice; a continuation keeps it, so
+    // stopping half way puts the reader back exactly where they were.
+    setResultCut(null);
+    startScopeRun({ kind, from, to, target }, "");
+  }
+
+  /**
+   * Run a summary or a translation, optionally carrying on from `base`.
+   *
+   * A continuation re-sends the original prompt with the tail of what came
+   * back, and appends what arrives — so a translation that ran into the output
+   * ceiling can be finished instead of silently ending mid-sentence.
+   */
+  function startScopeRun(run: ScopeRun, base: string) {
     begin();
-    setResult("");
-    setResultFromSelection(target.fromSelection);
+    setLastRun(run);
+    setResult(base);
+    setResultFromSelection(run.target.fromSelection);
+
+    const prompt =
+      run.kind === "translate"
+        ? buildPrompt({
+            type: "translation",
+            translateFrom: run.from,
+            translateTo: run.to,
+            context: run.target.text,
+          })
+        : buildPrompt({ type: "summary", context: run.target.text });
+
     stream.current = askStream(
       {
-        prompt:
-          kind === "translate"
-            ? buildPrompt({ type: "translation", translateFrom: from, translateTo: to, context: target.text })
-            : buildPrompt({ type: "summary", context: target.text }),
+        prompt: base ? buildContinuePrompt(prompt, base) : prompt,
         // A translation must be able to return the whole text.
-        ...(kind === "translate" ? { maxOutputTokens: LONG_OUTPUT_TOKENS } : {}),
+        ...(run.kind === "translate" ? { maxOutputTokens: LONG_OUTPUT_TOKENS } : {}),
       },
       (delta) => setResult((current) => current + delta),
-      (full) => {
-        setResult(full);
+      (full, _model, _usage, meta) => {
+        setResult(base + full);
+        setResultCut(describeCutAnswer(meta));
         setBusy(false);
         stream.current = null;
       },
       (error) => {
         setFailure(error);
-        setResult("");
+        setResult(base);
         setBusy(false);
         stream.current = null;
       },
-      () => setResult(""),
+      () => setResult(base),
     );
+  }
+
+  function continueResult() {
+    if (!lastRun || !result || busy) return;
+    startScopeRun(lastRun, result);
   }
 
   /* ── chat ──────────────────────────────────────────────────────────── */
@@ -277,15 +328,28 @@ export function NotesAiPanel({
     const next: ChatTurn[] = [...turns, { role: "user", text: question }];
     setTurns(next);
     setDraft("");
+    setChatCut(null);
+    runChat(next, "");
+  }
+
+  /**
+   * Send a thread that ends with the reader's question.
+   *
+   * `base` is a reply that stopped at the output ceiling: what comes back is
+   * appended to it, so the thread keeps ONE answer rather than growing a
+   * second half-turn beside the first.
+   */
+  function runChat(thread: ChatTurn[], base: string) {
     setStreamingText("");
     begin();
 
     stream.current = chatStream(
-      next,
+      thread,
       (delta) => setStreamingText((current) => current + delta),
-      (full) => {
-        setTurns([...next, { role: "model", text: full }]);
+      (full, _model, _usage, meta) => {
+        setTurns([...thread, { role: "model", text: base + full }]);
         setStreamingText("");
+        setChatCut(describeCutAnswer(meta));
         setBusy(false);
         stream.current = null;
       },
@@ -296,7 +360,17 @@ export function NotesAiPanel({
         stream.current = null;
       },
       () => setStreamingText(""),
+      base,
     );
+  }
+
+  /** Carry on a reply that stopped at the ceiling, in place. */
+  function continueChat() {
+    const last = turns[turns.length - 1];
+    if (busy || !last || last.role !== "model") return;
+    // The thread minus the unfinished reply: it ends with the question, which
+    // is what chatStream continues from.
+    runChat(turns.slice(0, -1), last.text);
   }
 
   /* ── proofreading ──────────────────────────────────────────────────── */
@@ -327,7 +401,18 @@ export function NotesAiPanel({
       if (cancelled.current) return;
       const reply = await streamOnce(formatBatch(batch));
       if (reply === null) return; // an error was already shown
-      const checked = checkBatch(batch, reply);
+      if (reply.cut) {
+        // A cut-off reply would fail the ⟦N⟧ check anyway — but "the format
+        // was wrong" sends the writer looking for the wrong problem.
+        setFailure({
+          ok: false,
+          error: `${reply.cut.notice} خاتىرىڭىزگە ھېچقانداق ئۆزگەرتىش قىلىنمىدى — كىچىكرەك بۆلەك تاللاپ سىناڭ.`,
+        });
+        setBusy(false);
+        setProgress(null);
+        return;
+      }
+      const checked = checkBatch(batch, reply.text);
       if (!checked.ok) {
         // Applied whole or not at all: a malformed reply changes nothing.
         setFailure({ ok: false, error: malformedMessage(checked.reason) });
@@ -353,7 +438,7 @@ export function NotesAiPanel({
   }
 
   /** One batch, as a promise, so the loop above reads in order. */
-  function streamOnce(segmented: string): Promise<string | null> {
+  function streamOnce(segmented: string): Promise<{ text: string; cut: AnswerCut | null } | null> {
     return new Promise((resolve) => {
       stream.current = askStream(
         {
@@ -367,9 +452,9 @@ export function NotesAiPanel({
         // The reply is checked whole, so there is nothing useful to show
         // while it arrives — the batch counter is the progress.
         () => {},
-        (full) => {
+        (full, _model, _usage, meta) => {
           stream.current = null;
-          resolve(full);
+          resolve({ text: full, cut: describeCutAnswer(meta) });
         },
         (error) => {
           stream.current = null;
@@ -611,6 +696,13 @@ export function NotesAiPanel({
                     dangerouslySetInnerHTML={{ __html: renderMarkdown(streamingText) }}
                   />
                 )}
+                {chatCut && !busy && (
+                  <CutNotice
+                    cut={chatCut}
+                    testId="notes-ai-chat-cut"
+                    onContinue={continueChat}
+                  />
+                )}
               </div>
 
               <label className="mt-3 block">
@@ -836,6 +928,9 @@ export function NotesAiPanel({
                 dir="rtl"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(result) }}
               />
+              {resultCut && !busy && (
+                <CutNotice cut={resultCut} testId="notes-ai-result-cut" onContinue={continueResult} />
+              )}
               {canInsert && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <button
@@ -881,5 +976,47 @@ export function NotesAiPanel({
         </div>
       </aside>
     </>
+  );
+}
+
+/**
+ * What an unfinished answer looks like: outside the answer, never inside it.
+ *
+ * A truncated reply used to be handed over as a finished one, which reads
+ * exactly like a model that lost the thread. The notice is bordered and
+ * carries its own icon so it cannot be mistaken for something the model said,
+ * and it comes with the way forward rather than leaving a dead end.
+ */
+function CutNotice({
+  cut,
+  testId,
+  onContinue,
+}: {
+  cut: AnswerCut;
+  testId: string;
+  onContinue: () => void;
+}) {
+  return (
+    <div className="mt-2">
+      <p
+        role="status"
+        data-testid={testId}
+        className="flex items-start gap-2 rounded-[var(--radius)] border border-danger bg-ab2 px-3 py-2 text-[12px] leading-6 text-ink2"
+      >
+        <Icon name="info" className="mt-1 shrink-0 text-danger" />
+        <span>{cut.notice}</span>
+      </p>
+      {cut.canContinue && (
+        <button
+          type="button"
+          className="btn-am mt-2"
+          data-testid={`${testId}-continue`}
+          onClick={onContinue}
+        >
+          <Icon name="redo" />
+          {CONTINUE_LABEL}
+        </button>
+      )}
+    </div>
   );
 }

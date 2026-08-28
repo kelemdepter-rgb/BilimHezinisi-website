@@ -3,11 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
 import { askStream, type StreamHandle } from "@/lib/ai/client";
-import type { AiFailure } from "@/lib/ai/errors";
+import {
+  CONTINUE_LABEL,
+  describeCutAnswer,
+  type AiFailure,
+  type AnswerCut,
+} from "@/lib/ai/errors";
 import {
   EXAMPLE_QUESTIONS,
   READER_TYPES,
   TRANSLATION_DIRECTIONS,
+  buildContinuePrompt,
   buildPrompt,
   type LangCode,
   type ReaderType,
@@ -96,6 +102,8 @@ export function AiPanel({
   const [deep, setDeep] = useState(false);
   const [menu, setMenu] = useState<"none" | "translate" | "term">("none");
   const [answer, setAnswer] = useState("");
+  /** Set when the answer on screen stopped short of finishing. */
+  const [cut, setCut] = useState<AnswerCut | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [failure, setFailure] = useState<AiFailure | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
@@ -118,6 +126,8 @@ export function AiPanel({
 
   const stream = useRef<StreamHandle | null>(null);
   const gather = useRef<AbortController | null>(null);
+  /** What a stopped request falls back to — everything a continuation had. */
+  const resume = useRef<{ base: string; cut: AnswerCut | null }>({ base: "", cut: null });
   const closeRef = useRef<HTMLButtonElement>(null);
   const answerRef = useRef<HTMLDivElement>(null);
   const questionRef = useRef<HTMLTextAreaElement>(null);
@@ -141,6 +151,7 @@ export function AiPanel({
     setProgress(null);
     setMenu("none");
     setAnswer("");
+    setCut(null);
     setFailure(null);
     setSlot(null);
     setLastRequest(null);
@@ -252,10 +263,21 @@ export function AiPanel({
     }
   }
 
-  function run(request: Request) {
+  /**
+   * Ask, and stream the answer in.
+   *
+   * `base` is the answer a CONTINUATION already has on screen. The model is
+   * sent the original prompt again plus the tail of what it wrote, and
+   * everything that comes back is appended rather than replacing it — so a
+   * failure part-way through a continuation hands the reader back the answer
+   * they already had, never a blank panel.
+   */
+  function run(request: Request, base = "", baseCut: AnswerCut | null = null) {
     stream.current?.abort();
+    resume.current = { base, cut: baseCut };
     setLastRequest(request);
-    setAnswer("");
+    setAnswer(base);
+    setCut(null);
     setFailure(null);
     setSlot(null);
     setSaveState("idle");
@@ -263,34 +285,45 @@ export function AiPanel({
     setCopied(false);
     setStreaming(true);
 
+    const prompt = buildPrompt({
+      type: request.type,
+      context: request.context,
+      question: request.question,
+      translateFrom: request.translateFrom,
+      translateTo: request.translateTo,
+    });
+
     stream.current = askStream(
       {
-        prompt: buildPrompt({
-          type: request.type,
-          context: request.context,
-          question: request.question,
-          translateFrom: request.translateFrom,
-          translateTo: request.translateTo,
-        }),
+        prompt: base ? buildContinuePrompt(prompt, base) : prompt,
         deepThink: request.deepThink,
       },
       (delta) => setAnswer((current) => current + delta),
       (full, _model, _usage, meta) => {
-        setAnswer(full);
+        setAnswer(base + full);
+        // An answer that stopped short is never handed over as a finished one.
+        setCut(describeCutAnswer(meta));
         setSlot(meta.slot);
         setStreaming(false);
         stream.current = null;
       },
       (error) => {
         setFailure(error);
-        setAnswer("");
+        setAnswer(base);
+        setCut(baseCut);
         setStreaming(false);
         stream.current = null;
       },
       // A mid-stream failover restarts on the next key; what is on screen
       // belongs to the attempt that just died.
-      () => setAnswer(""),
+      () => setAnswer(base),
     );
+  }
+
+  /** Carry on from where the output ceiling cut the answer off. */
+  function continueAnswer() {
+    if (!lastRequest || !answer || streaming) return;
+    run(lastRequest, answer, cut);
   }
 
   /** Refuse politely rather than send a request with nothing in it. */
@@ -357,7 +390,11 @@ export function AiPanel({
     stream.current?.abort();
     stream.current = null;
     setStreaming(false);
-    setAnswer("");
+    // A stopped continuation gives back the answer the reader already had,
+    // and the notice that came with it. A stopped first attempt has nothing
+    // to give back, which is what leaves no half-written answer behind.
+    setAnswer(resume.current.base);
+    setCut(resume.current.cut);
   }
 
   async function copyAnswer() {
@@ -766,8 +803,33 @@ export function AiPanel({
                 />
               </div>
 
+              {/* An unfinished answer says so, in its own box outside the
+                  answer card — never inside it, where it would read as part
+                  of what the model said. */}
+              {cut && !streaming && (
+                <p
+                  role="status"
+                  data-testid="ai-answer-cut"
+                  className="mt-2 flex items-start gap-2 rounded-[var(--radius)] border border-danger bg-ab2 px-3 py-2 text-[12px] leading-6 text-ink2"
+                >
+                  <Icon name="info" className="mt-1 shrink-0 text-danger" />
+                  <span>{cut.notice}</span>
+                </p>
+              )}
+
               {!streaming && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {cut?.canContinue && (
+                    <button
+                      type="button"
+                      className="btn-am"
+                      data-testid="ai-continue"
+                      onClick={continueAnswer}
+                    >
+                      <Icon name="redo" />
+                      {CONTINUE_LABEL}
+                    </button>
+                  )}
                   <button type="button" className="hbtn" data-testid="ai-copy" onClick={() => void copyAnswer()}>
                     <Icon name="copy" />
                     {copied ? "كۆچۈرۈلدى" : "كۆچۈرۈش"}

@@ -36,7 +36,7 @@ import {
   type AiFailure,
 } from "./errors";
 import { GEMINI_API_BASE, type ModelId } from "./models";
-import { CHAT_SYSTEM } from "./prompts";
+import { CHAT_SYSTEM, buildContinuePrompt } from "./prompts";
 import {
   bumpUsage,
   readEnabled,
@@ -134,6 +134,12 @@ export type AskDoneMeta = {
   slot: number;
   /** The last key died mid-answer with nothing left to fail over to. */
   partial?: boolean;
+  /**
+   * Gemini's finishReason for the answer as a whole. "STOP" means it finished;
+   * anything else means the text is real but incomplete, and the reader has to
+   * be told — see describeCutAnswer in errors.ts.
+   */
+  stopReason?: string;
 };
 
 export type StreamHandle = { abort: () => void };
@@ -418,7 +424,10 @@ export function askStream(
             in: result.usage?.promptTokenCount ?? null,
             out: result.usage?.candidatesTokenCount ?? null,
           });
-          onDone(streamed, model, result.usage, { slot });
+          // The finish reason travels with the answer even when there IS text:
+          // an answer that ran into the ceiling stops mid-sentence, and
+          // handing that over as finished is exactly the failure this carries.
+          onDone(streamed, model, result.usage, { slot, stopReason: result.stopReason });
           return;
         } catch (error) {
           if (aborted) return;
@@ -487,7 +496,10 @@ export function askStream(
             out: json.usageMetadata?.candidatesTokenCount ?? null,
           });
           onChunk(text);
-          onDone(text, model, json.usageMetadata ?? null, { slot: slots[0].slot });
+          onDone(text, model, json.usageMetadata ?? null, {
+            slot: slots[0].slot,
+            stopReason: stopReasonOf(json),
+          });
           return;
         }
       } catch (error) {
@@ -597,6 +609,14 @@ export function chatStream(
   onDone: (fullText: string, model: ModelId, usage: GeminiUsage | null, meta: AskDoneMeta) => void,
   onError: (failure: AiFailure) => void,
   onReset: (textSoFar: string) => void = () => {},
+  /**
+   * The unfinished answer to carry on from, when the last reply stopped at the
+   * output ceiling. `messages` then ends with the QUESTION it answered, and
+   * the whole tail is put in the prompt rather than in the history — a history
+   * turn is capped at 4,000 characters from its start, which would point the
+   * model at the wrong place in a long answer.
+   */
+  continueFrom = "",
 ): StreamHandle {
   const turns = messages.filter((turn) => turn?.text?.trim());
   const last = turns[turns.length - 1];
@@ -606,7 +626,7 @@ export function chatStream(
   }
   return askStream(
     {
-      prompt: last.text,
+      prompt: continueFrom ? buildContinuePrompt(last.text, continueFrom) : last.text,
       system: CHAT_SYSTEM,
       history: turns.slice(0, -1),
       historyLimit: 20,

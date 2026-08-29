@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
+import { CANONICAL_ORIGIN } from "@/lib/seo";
 import {
   buildBookDocx,
   buildBookText,
@@ -21,7 +22,13 @@ const MD: BookExportMeta = {
   title: "قۇتادغۇ بىلىك",
   author: "يۈسۈپ خاس ھاجىپ",
   contentFormat: "markdown",
-  sourceUrl: "https://bilim-hezinisi-website.vercel.app/books/7",
+  /**
+   * Whatever origin the reader downloaded from: components/books/download-book.tsx
+   * builds this from window.location.origin, so the export code never knows or
+   * cares which host it is. The library's own address is used here rather than a
+   * literal so the fixture cannot go stale the next time the site moves.
+   */
+  sourceUrl: `${CANONICAL_ORIGIN}/books/7`,
 };
 
 const TXT: BookExportMeta = { ...MD, contentFormat: "text" };

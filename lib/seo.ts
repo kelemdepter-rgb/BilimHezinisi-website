@@ -9,6 +9,28 @@
 
 const FALLBACK = "http://localhost:3000";
 
+/**
+ * The library's own address, written down rather than discovered.
+ *
+ * The site moved here from bilim-hezinisi-website.vercel.app on 2026-08-29.
+ * It is a constant, and not an environment lookup, because neither variable
+ * Vercel offers can be trusted to name it:
+ *
+ * - VERCEL_PROJECT_PRODUCTION_URL is documented as "the shortest production
+ *   custom domain, or vercel.app domain if no custom domain is available". It
+ *   answers bilimhezinisi.com today, but it would fall back to the old
+ *   vercel.app host the day the custom domain came off the project — an
+ *   expired registration, a DNS change — and it would change on its own the
+ *   day a shorter domain was added.
+ * - VERCEL_URL is always the deployment's own *.vercel.app host.
+ *
+ * Either one would put an address on this library that nobody chose, in the
+ * canonical tags Google reads and in the links Supabase mails to people. A
+ * constant in git is reviewable and testable; a fallback that guesses is
+ * neither.
+ */
+export const CANONICAL_ORIGIN = "https://bilimhezinisi.com";
+
 function trim(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
@@ -17,20 +39,28 @@ function isLocal(url: string): boolean {
   return /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(trim(url));
 }
 
+/** True on any Vercel deployment, whichever system variables are exposed. */
+function onVercel(): boolean {
+  return Boolean(process.env.VERCEL || process.env.VERCEL_ENV || process.env.VERCEL_URL);
+}
+
 /**
  * The site's public origin, without a trailing slash.
  *
  * SITE_URL wins, except when it still says localhost while running on Vercel —
- * a half-configured project would otherwise publish local URLs to the world,
- * so the deployment's own production domain takes over.
+ * a half-configured project would otherwise publish local URLs to the world.
+ * A deployment that has lost SITE_URL, or never had it, then answers with the
+ * canonical domain rather than with whichever host it happens to be reachable
+ * on; that is the whole reason CANONICAL_ORIGIN is written down above.
+ *
+ * It does not throw when SITE_URL is missing, deliberately. A variable going
+ * astray must never be able to take a free public library offline, and a
+ * canonical that is right anyway is a better failure than a 500 on every page.
  */
 export function siteUrl(): string {
   const explicit = process.env.SITE_URL;
   if (explicit && !isLocal(explicit)) return trim(explicit);
-
-  const vercel = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
-  if (vercel) return `https://${trim(vercel)}`;
-
+  if (onVercel()) return CANONICAL_ORIGIN;
   return explicit ? trim(explicit) : FALLBACK;
 }
 

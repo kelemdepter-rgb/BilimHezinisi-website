@@ -55,7 +55,7 @@ NEXT_PUBLIC_SUPABASE_URL=       # Supabase → Project Settings → API
 NEXT_PUBLIC_SUPABASE_ANON_KEY=  # public anon key
 SUPABASE_SERVICE_ROLE_KEY=      # server-only, never exposed to the client
 ADMIN_EMAIL=                    # this account is auto-promoted to admin
-SITE_URL=                       # e.g. https://your-app.vercel.app
+SITE_URL=                       # the public origin, e.g. https://bilimhezinisi.com
 ```
 
 The app renders without these (empty library, auth disabled) so the site can

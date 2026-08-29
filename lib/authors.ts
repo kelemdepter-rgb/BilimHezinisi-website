@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { BOOKS_TAG, CACHE_SECONDS, cachedClient } from "@/lib/cache";
@@ -83,6 +84,28 @@ export const authorStats = unstable_cache(
   ["author-stats"],
   { tags: [BOOKS_TAG], revalidate: CACHE_SECONDS },
 );
+
+/**
+ * Does this author exist at all?
+ *
+ * Its own question, and a cheap one — a counted head request, no rows. The
+ * segment layout asks it before the page renders, because a guessed URL has
+ * to come back as a 404 and not as a 200 carrying an empty shelf, and a
+ * layout is the last place in a route that can still set the status: once
+ * loading.tsx has flushed the shell, the status line has already gone.
+ *
+ * cache() keyed on the string, so asking twice in one request costs one query.
+ */
+export const authorHasBooks = cache(async (key: string): Promise<boolean> => {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase || !key) return false;
+  const { count } = await supabase
+    .from("books")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "published")
+    .eq("author_key", key);
+  return (count ?? 0) > 0;
+});
 
 /**
  * One author's published books.

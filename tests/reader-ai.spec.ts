@@ -498,6 +498,10 @@ test.describe("on a phone", () => {
   test("closing puts the reader back exactly where they were", async ({ page }) => {
     await enableAi(page);
     await page.goto(`/books/${seededBookId()}/read`);
+    // The reader arrives behind a loading skeleton now, and the skeleton is
+    // shorter than the book: scrolling before it is replaced scrolls a page
+    // that is about to be thrown away.
+    await expect(page.getByTestId("page-skeleton")).toHaveCount(0);
 
     await page.evaluate(() => window.scrollTo(0, 900));
     await page.waitForTimeout(200);

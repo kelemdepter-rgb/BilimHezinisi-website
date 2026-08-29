@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type NoteSummary = {
@@ -52,7 +53,13 @@ export async function listNotes(): Promise<NoteSummary[] | null> {
 }
 
 /** One note, or null when it does not exist or belongs to someone else. */
-export async function getNote(id: number): Promise<NoteDocument | null> {
+/**
+ * Deduplicated per request: the segment layout asks whether this note is
+ * this reader's before the page does — that is what keeps a stranger's note
+ * a 404 rather than a 200 with a not-found page in it — and both asks are one
+ * query.
+ */
+export const getNote = cache(async (id: number): Promise<NoteDocument | null> => {
   const owner = await ownerClient();
   if (!owner) return null;
 
@@ -64,4 +71,4 @@ export async function getNote(id: number): Promise<NoteDocument | null> {
     .maybeSingle();
 
   return (data as NoteDocument | null) ?? null;
-}
+});

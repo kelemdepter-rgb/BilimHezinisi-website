@@ -34,9 +34,15 @@ async function scrollDownAndBackUp(page: Page) {
  * would close what we came to use.
  */
 async function openAyaActions(page: Page, aya: number) {
-  const actions = page.locator(`[data-testid="aya"][data-aya="${aya}"] [data-testid="aya-actions"]`);
+  const row = page.locator(`[data-testid="aya"][data-aya="${aya}"]`);
+  // Wait for the verse itself first. The mushaf arrives behind a loading
+  // skeleton now, and asking about the action row before the verse is on
+  // screen answers "not visible" about the skeleton — so the tap below would
+  // CLOSE a row that a deep link had already opened.
+  await expect(row).toBeVisible();
+  const actions = row.getByTestId("aya-actions");
   if (!(await actions.isVisible())) {
-    await page.locator(`[data-testid="aya"][data-aya="${aya}"] [data-testid="aya-number"]`).click();
+    await row.getByTestId("aya-number").click();
   }
   await expect(actions).toBeVisible();
   return actions;

@@ -358,6 +358,35 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * What PROMPT-21 repaired: the loading skeletons, the pending dot on
+         * the control that was tapped, the streamed account controls, and the
+         * two things caching was not allowed to cost — a stale library after
+         * publishing, and one reader's page reaching another. Anonymous by
+         * default, because that is who most of it is for; the signed-in blocks
+         * open their own contexts, which is why setup runs first.
+         */
+        name: `navigation-${viewport.name}`,
+        testMatch: /navigation\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          /**
+           * Against the production build, like the offline specs, and for a
+           * related reason: `next dev` turns <Link> prefetching off, and half
+           * of what this spec is about — the loading boundary a prefetch
+           * delivers, and the prefetch itself — does not happen there. Testing
+           * it against the dev server would be testing something no reader
+           * ever meets.
+           */
+          baseURL: PROD_URL,
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,

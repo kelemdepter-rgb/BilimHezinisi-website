@@ -9,7 +9,7 @@
  */
 
 export const SW_URL = "/sw.js";
-export const SW_VERSION = "v1";
+export const SW_VERSION = "v2";
 
 /** Caches the worker owns; wiping these is what "clear offline data" means. */
 export const SW_CACHES = [

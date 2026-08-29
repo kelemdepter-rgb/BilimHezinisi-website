@@ -19,7 +19,7 @@
  */
 
 /* KEEP IN STEP: lib/pwa/constants.ts */
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL = `bh-sw-shell-${VERSION}`;
 const DOCS = `bh-sw-docs-${VERSION}`;
 const TEXT = `bh-sw-text-${VERSION}`;

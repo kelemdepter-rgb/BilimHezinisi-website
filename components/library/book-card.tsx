@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { BookCover } from "@/components/library/book-cover";
+import { LinkPending } from "@/components/nav-pending";
 import type { LibraryBook } from "@/lib/library-types";
 
 export function BookCard({
@@ -37,6 +38,7 @@ export function BookCard({
             {meta && <span className="mt-0.5 block truncate text-[12px] text-ink2">{meta}</span>}
           </span>
           <Icon name="book-open" className="shrink-0 text-am" />
+          <LinkPending />
         </Link>
       </li>
     );
@@ -63,6 +65,9 @@ export function BookCard({
             {book.author || "ئاپتور كۆرسىتىلمىگەن"}
           </span>
           {meta && <span className="mt-auto pt-2 truncate text-[12px] text-ink2">{meta}</span>}
+          {/* Sits in the card body, so a tapped cover answers before the
+              next page has arrived. */}
+          <LinkPending />
         </span>
       </Link>
     </li>

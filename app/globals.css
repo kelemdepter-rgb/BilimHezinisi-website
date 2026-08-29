@@ -708,6 +708,42 @@
   }
 }
 
+/* ── The dot that answers a tap ────────────────────────────────────────────
+   Rendered inside every link a reader is likely to click next. Always in the
+   DOM and always the same size, so it cannot shift the row it lives in; only
+   its opacity moves. The delay keeps it away from navigations that were
+   already prefetched and land at once.
+
+   Someone who asked for less movement still gets the acknowledgement — the
+   dot appears and stays, it simply does not pulse. */
+@layer components {
+  .link-hint {
+    display: inline-block;
+    flex-shrink: 0;
+    inline-size: 7px;
+    block-size: 7px;
+    margin-inline-start: auto;
+    border-radius: 9999px;
+    background: var(--am);
+    opacity: 0;
+  }
+  .link-hint.is-pending {
+    animation: link-hint-in 180ms ease 120ms forwards, link-hint-pulse 1s ease-in-out 120ms infinite;
+  }
+  @keyframes link-hint-in {
+    to { opacity: 1; }
+  }
+  @keyframes link-hint-pulse {
+    50% { opacity: 0.3; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .link-hint.is-pending {
+      animation: none;
+      opacity: 1;
+    }
+  }
+}
+
 /* ── Skeletons ────────────────────────────────────────────────────────────
    The shape a page holds while its content is still coming. Every one of them
    is a .skel of the same size as the thing it stands in for, so nothing moves

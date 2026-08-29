@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
 import { SearchField } from "@/components/search/search-field";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LinkPending } from "@/components/nav-pending";
 import { signOutAction } from "@/app/(auth)/actions";
 import type { Category, SessionInfo } from "@/lib/types";
 import type { Theme } from "@/lib/theme";
@@ -277,6 +278,7 @@ function SidebarContent({
         >
           <Icon name="mosque" className="text-am" />
           قۇرئان كەرىم
+          <LinkPending />
         </Link>
         <Link
           href="/new"
@@ -285,6 +287,7 @@ function SidebarContent({
         >
           <Icon name="sparkles" className="text-am" />
           يېڭى كىتابلار
+          <LinkPending />
         </Link>
         <Link
           href="/authors"
@@ -293,6 +296,7 @@ function SidebarContent({
         >
           <Icon name="feather" className="text-am" />
           ئاپتورلار
+          <LinkPending />
         </Link>
         {/* The personal rows — the notebook and the AI page — belong to
             whoever is signed in, so they arrive with the session rather than
@@ -316,6 +320,7 @@ function SidebarContent({
           >
             <Icon name="layers" className="text-am" />
             ھەممە كىتابلار
+            <LinkPending />
           </Link>
         )}
         {topLevel.length === 0 ? (
@@ -355,6 +360,7 @@ function CategoryRow({ category }: { category: Category }) {
     >
       <Icon name={(category.icon || "folder") as IconName} className="text-am" />
       <span className="min-w-0 truncate">{category.name}</span>
+      <LinkPending />
     </Link>
   );
 }
@@ -442,6 +448,7 @@ function PersonalLinks({ sessionPromise }: { sessionPromise: Promise<SessionInfo
       >
         <Icon name="notebook-pen" className="text-am" />
         خاتىرە دەپتىرىم
+        <LinkPending />
       </Link>
       <Link
         href="/my/ai"
@@ -450,6 +457,7 @@ function PersonalLinks({ sessionPromise }: { sessionPromise: Promise<SessionInfo
       >
         <Icon name="sparkles" className="text-am" />
         سۈنئىي ئىدراك
+        <LinkPending />
       </Link>
     </>
   );

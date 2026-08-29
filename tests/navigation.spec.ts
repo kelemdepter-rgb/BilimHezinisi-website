@@ -366,6 +366,26 @@ test.describe("a tap answers itself", () => {
     await expect(card.locator(".link-hint")).toHaveClass(/is-pending/, { timeout: 3000 });
   });
 
+  test("the drawer gets out of the way when a category is tapped", async ({ page }) => {
+    // A category is /?cat=N — the same PATH as /, which the drawer's
+    // close-on-navigation could not see. On a phone the category page loaded
+    // behind a drawer that stayed open over it, and the reader had to dismiss
+    // it by hand to see the books they had just asked for.
+    await page.goto("/");
+    const menu = page.getByTestId("menu-button");
+    test.skip(!(await menu.isVisible()), "phone widths only");
+    await menu.click();
+    await expect(page.getByTestId("drawer-close")).toBeVisible();
+    await visibleTestId(page, "category-link").click();
+    await page.waitForURL(/\?cat=/);
+    await expect(page.getByTestId("drawer-close")).toBeHidden();
+    // And the page behind it scrolls again.
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.style.overflow))
+      .toBe("");
+    await expect(page.getByTestId("library-count")).toBeVisible();
+  });
+
   test("the dot never moves the row it sits in", async ({ page }) => {
     await page.goto("/");
     await openDrawerIfPresent(page);

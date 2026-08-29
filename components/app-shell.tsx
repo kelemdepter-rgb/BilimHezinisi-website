@@ -243,7 +243,21 @@ export function AppShell({
             <Icon name="x" className="ic-lg" />
           </button>
         </div>
-        <div className="safe-bottom flex-1 overflow-y-auto overscroll-contain p-4">
+        {/*
+          Close on the way out, whatever was followed.
+          The pathname check above cannot see this one: a category is /?cat=N,
+          which is the SAME path as / with different search params, so tapping
+          one on a phone loaded the category behind a drawer that stayed open
+          over it — the reader had to dismiss it by hand to see the books they
+          had just asked for. Closing on the link itself covers every row in
+          here, including any added later.
+        */}
+        <div
+          className="safe-bottom flex-1 overflow-y-auto overscroll-contain p-4"
+          onClick={(event) => {
+            if ((event.target as HTMLElement).closest("a")) setDrawerOpen(false);
+          }}
+        >
           <SidebarContent
             categories={categories}
             sessionPromise={sessionPromise}

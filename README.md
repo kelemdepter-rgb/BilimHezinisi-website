@@ -97,6 +97,14 @@ Migrations live in `supabase/migrations/`. Apply `0001_init.sql` in the
 Supabase SQL Editor (or `npx supabase db push` when the project is linked).
 Never edit an applied migration — add a new file.
 
+### Where the functions run
+
+The Supabase project is in **eu-west-2 (London)**, so `vercel.json` pins the
+Vercel functions to **`lhr1`** — the same city. Without that key Vercel puts
+them in `iad1` (Washington D.C.) by default, and every one of the Supabase
+round trips a page makes crosses the Atlantic twice. Keep the two in the same
+region: if the Supabase project is ever moved, move `regions` with it.
+
 ## Free tier — كۇتۇپخانىنى ھەقسىز ساقلاش
 
 بۇ سايت Supabase ۋە Vercel نىڭ ھەقسىز نۇسخىسىدا ئىشلەيدۇ. چەكلىمە: ساندان

@@ -53,8 +53,18 @@ export function cachedClient(): SupabaseClient | null {
   return anonClient;
 }
 
-/** An hour. Long enough to matter, short enough to forgive a missed tag. */
-export const CACHE_SECONDS = 3600;
+/**
+ * Five minutes.
+ *
+ * Long enough that almost every request is answered from the cache, short
+ * enough to forgive a write that never reached a tag. The tags cover every
+ * way a book normally changes — the admin actions, the upload wizard and the
+ * batch importer all drop them — but a bulk load run straight against the
+ * database (scripts/migrate-from-desktop.mjs, or SQL typed into the Supabase
+ * editor) has nothing to drop them with. This is the longest the library can
+ * then look unchanged.
+ */
+export const CACHE_SECONDS = 300;
 
 /**
  * Drop the shared cache after a write.

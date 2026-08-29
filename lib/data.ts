@@ -5,24 +5,40 @@ import { CACHE_SECONDS, CATEGORIES_TAG, cachedClient } from "@/lib/cache";
 import { timed } from "@/lib/perf/timing";
 import type { Category, Role, SessionInfo } from "@/lib/types";
 
-export async function getSessionInfo(): Promise<SessionInfo | null> {
+/**
+ * Who is reading, for the header and the sidebar.
+ *
+ * The identity comes from the access token, verified here with WebCrypto
+ * against the project's published ES256 key — not from an unchecked cookie,
+ * and not from a round trip to the Auth server that the proxy has already
+ * made on this same request. The ROLE still comes from the profiles table on
+ * every call, exactly as before: the token says who you are, the database
+ * says what you may do. Nothing here decides an authorisation question —
+ * /admin and every mutating action re-ask lib/admin/guards.ts, which reads
+ * profiles for itself.
+ *
+ * cache() because the shell and the page both ask.
+ */
+export const getSessionInfo = cache(async (): Promise<SessionInfo | null> => {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
-  const {
-    data: { user },
-  } = await timed("layout.auth.getUser", () => supabase.auth.getUser());
-  if (!user) return null;
+  const { data: verified } = await timed("layout.auth.getClaims", () =>
+    supabase.auth.getClaims(),
+  );
+  const userId = typeof verified?.claims?.sub === "string" ? verified.claims.sub : null;
+  if (!userId) return null;
+  const email = typeof verified?.claims?.email === "string" ? verified.claims.email : "";
   const { data: profile } = await timed("layout.profiles", async () =>
-    supabase.from("profiles").select("role, display_name").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("role, display_name").eq("id", userId).maybeSingle(),
   );
   const role: Role =
     profile?.role === "admin" || profile?.role === "uploader" ? profile.role : "reader";
   return {
-    email: user.email ?? "",
-    displayName: (profile?.display_name as string | null) || user.email || "",
+    email,
+    displayName: (profile?.display_name as string | null) || email,
     role,
   };
-}
+});
 
 /**
  * The category tree, out of the shared cache.

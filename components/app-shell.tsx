@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Suspense, use, useEffect, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -14,12 +14,33 @@ import brandMark from "@/public/brand.png";
 
 type AppShellProps = {
   theme: Theme | null;
-  session: SessionInfo | null;
+  /**
+   * NOT awaited by the layout. Who is reading costs a look in the profiles
+   * table, and nothing in the header, the sidebar, the footer or the page
+   * itself needs to wait for it — so the shell paints first and the account
+   * controls stream into the gaps they already occupy.
+   */
+  sessionPromise: Promise<SessionInfo | null>;
+  /**
+   * Whether this browser is CARRYING an auth cookie — not whether it holds a
+   * valid one. It decides the shape of the placeholder and nothing else: how
+   * many grey boxes to draw while the real answer is on its way. Every
+   * control the placeholder stands in for is rendered from `sessionPromise`,
+   * whose identity was verified cryptographically. Do not ever let this value
+   * decide what a reader may see or do.
+   */
+  looksSignedIn: boolean;
   categories: Category[];
   children: ReactNode;
 };
 
-export function AppShell({ theme, session, categories, children }: AppShellProps) {
+export function AppShell({
+  theme,
+  sessionPromise,
+  looksSignedIn,
+  categories,
+  children,
+}: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -126,46 +147,9 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
               <Icon name="search" className="ic-lg" />
             </button>
             <ThemeToggle initial={theme} />
-            {session ? (
-              <>
-                {/* Personal writing: offered only to someone who has an
-                    account to keep it in. Below sm the header is already at
-                    its limit for 360 px, so the phone reaches it through the
-                    drawer instead. */}
-                <Link
-                  href="/notes"
-                  className="hbtn hidden sm:flex"
-                  data-testid="notes-link"
-                  title="خاتىرە دەپتىرىم"
-                  aria-label="خاتىرە دەپتىرىم"
-                >
-                  <Icon name="notebook-pen" />
-                  <span className="hidden sm:inline">خاتىرە</span>
-                </Link>
-                {(session.role === "admin" || session.role === "uploader") && (
-                  <Link href="/admin" className="hbtn" title="باشقۇرۇش سۇپىسى" aria-label="باشقۇرۇش سۇپىسى">
-                    <Icon name="settings" />
-                    <span className="hidden sm:inline">باشقۇرۇش</span>
-                  </Link>
-                )}
-                <span
-                  className="hidden max-w-36 truncate text-[13px] font-semibold text-ink2 md:inline"
-                  title={session.email}
-                >
-                  {session.displayName}
-                </span>
-                <form action={signOutAction}>
-                  <button type="submit" className="ibtn" title="چىقىش" aria-label="ھېساباتتىن چىقىش">
-                    <Icon name="log-out" className="ic-lg" />
-                  </button>
-                </form>
-              </>
-            ) : (
-              <Link href="/login" className="hbtn" data-testid="login-link" aria-label="ھېساباتقا كىرىش">
-                <Icon name="log-in" />
-                <span className="hidden sm:inline">كىرىش</span>
-              </Link>
-            )}
+            <Suspense fallback={<AccountControlsSkeleton signedIn={looksSignedIn} />}>
+              <AccountControls sessionPromise={sessionPromise} />
+            </Suspense>
           </div>
         </div>
 
@@ -190,7 +174,11 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
           data-testid="sidebar-desktop"
           className="sticky top-16 hidden max-h-[calc(100dvh-4rem)] w-72 shrink-0 overflow-y-auto overscroll-contain border-e border-bd p-4 lg:block"
         >
-          <SidebarContent categories={categories} session={session} />
+          <SidebarContent
+            categories={categories}
+            sessionPromise={sessionPromise}
+            looksSignedIn={looksSignedIn}
+          />
         </aside>
         <main className="w-full min-w-0 flex-1">{children}</main>
       </div>
@@ -211,11 +199,9 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
             <Link href="/request" data-testid="request-link" className="hover:text-am hover:underline">
               كىتاب تەلەپ قىلىش
             </Link>
-            {session && (
-              <Link href="/my/account" data-testid="account-link" className="hover:text-am hover:underline">
-                ھېساباتىم
-              </Link>
-            )}
+            <Suspense fallback={<AccountLinkSkeleton signedIn={looksSignedIn} />}>
+              <AccountLink sessionPromise={sessionPromise} />
+            </Suspense>
             <span dir="ltr">© {new Date().getFullYear()}</span>
           </nav>
         </div>
@@ -257,7 +243,11 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
           </button>
         </div>
         <div className="safe-bottom flex-1 overflow-y-auto overscroll-contain p-4">
-          <SidebarContent categories={categories} session={session} />
+          <SidebarContent
+            categories={categories}
+            sessionPromise={sessionPromise}
+            looksSignedIn={looksSignedIn}
+          />
         </div>
       </aside>
     </div>
@@ -266,10 +256,12 @@ export function AppShell({ theme, session, categories, children }: AppShellProps
 
 function SidebarContent({
   categories,
-  session,
+  sessionPromise,
+  looksSignedIn,
 }: {
   categories: Category[];
-  session: SessionInfo | null;
+  sessionPromise: Promise<SessionInfo | null>;
+  looksSignedIn: boolean;
 }) {
   const topLevel = categories.filter((category) => category.parent_id === null);
   const childrenOf = (parentId: number) =>
@@ -302,28 +294,13 @@ function SidebarContent({
           <Icon name="feather" className="text-am" />
           ئاپتورلار
         </Link>
-        {session && (
-          <Link
-            href="/notes"
-            data-testid="notes-sidebar-link"
-            className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
-          >
-            <Icon name="notebook-pen" className="text-am" />
-            خاتىرە دەپتىرىم
-          </Link>
-        )}
-        {/* AI is optional and off by default, so it is a place to go and never
-            a prompt: one quiet row beside the other personal pages. */}
-        {session && (
-          <Link
-            href="/my/ai"
-            data-testid="ai-sidebar-link"
-            className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
-          >
-            <Icon name="sparkles" className="text-am" />
-            سۈنئىي ئىدراك
-          </Link>
-        )}
+        {/* The personal rows — the notebook and the AI page — belong to
+            whoever is signed in, so they arrive with the session rather than
+            holding the whole sidebar back. AI is optional and off by default,
+            so it stays a place to go and never a prompt. */}
+        <Suspense fallback={<PersonalLinksSkeleton signedIn={looksSignedIn} />}>
+          <PersonalLinks sessionPromise={sessionPromise} />
+        </Suspense>
       </nav>
 
       <nav aria-label="كىتاب تۈرلىرى">
@@ -380,4 +357,127 @@ function CategoryRow({ category }: { category: Category }) {
       <span className="min-w-0 truncate">{category.name}</span>
     </Link>
   );
+}
+
+/**
+ * The header's account cluster, once the session has arrived.
+ *
+ * `use` unwraps the promise the layout handed down without awaiting it, so
+ * this is the only part of the header that waits.
+ */
+function AccountControls({ sessionPromise }: { sessionPromise: Promise<SessionInfo | null> }) {
+  const session = use(sessionPromise);
+  if (!session) {
+    return (
+      <Link href="/login" className="hbtn" data-testid="login-link" aria-label="ھېساباتقا كىرىش">
+        <Icon name="log-in" />
+        <span className="hidden sm:inline">كىرىش</span>
+      </Link>
+    );
+  }
+  return (
+    <>
+      {/* Personal writing: offered only to someone who has an account to keep
+          it in. Below sm the header is already at its limit for 360 px, so the
+          phone reaches it through the drawer instead. */}
+      <Link
+        href="/notes"
+        className="hbtn hidden sm:flex"
+        data-testid="notes-link"
+        title="خاتىرە دەپتىرىم"
+        aria-label="خاتىرە دەپتىرىم"
+      >
+        <Icon name="notebook-pen" />
+        <span className="hidden sm:inline">خاتىرە</span>
+      </Link>
+      {(session.role === "admin" || session.role === "uploader") && (
+        <Link href="/admin" className="hbtn" title="باشقۇرۇش سۇپىسى" aria-label="باشقۇرۇش سۇپىسى">
+          <Icon name="settings" />
+          <span className="hidden sm:inline">باشقۇرۇش</span>
+        </Link>
+      )}
+      <span
+        className="hidden max-w-36 truncate text-[13px] font-semibold text-ink2 md:inline"
+        title={session.email}
+      >
+        {session.displayName}
+      </span>
+      <form action={signOutAction}>
+        <button type="submit" className="ibtn" title="چىقىش" aria-label="ھېساباتتىن چىقىش">
+          <Icon name="log-out" className="ic-lg" />
+        </button>
+      </form>
+    </>
+  );
+}
+
+/**
+ * What stands in the header while the session is on its way.
+ *
+ * Sized from the auth cookie's mere presence, so a visitor with no account —
+ * which is most of them — sees exactly one placeholder the size of the
+ * «كىرىش» button and nothing moves when it is replaced. Someone carrying a
+ * cookie gets the wider shape their controls will need instead.
+ */
+function AccountControlsSkeleton({ signedIn }: { signedIn: boolean }) {
+  if (!signedIn) return <span aria-hidden className="skel h-11 w-11 sm:w-[92px]" />;
+  return (
+    <>
+      <span aria-hidden className="skel hidden h-11 w-[92px] sm:block" />
+      <span aria-hidden className="skel h-11 w-11" />
+    </>
+  );
+}
+
+/** The sidebar's personal rows, once the session has arrived. */
+function PersonalLinks({ sessionPromise }: { sessionPromise: Promise<SessionInfo | null> }) {
+  const session = use(sessionPromise);
+  if (!session) return null;
+  return (
+    <>
+      <Link
+        href="/notes"
+        data-testid="notes-sidebar-link"
+        className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+      >
+        <Icon name="notebook-pen" className="text-am" />
+        خاتىرە دەپتىرىم
+      </Link>
+      <Link
+        href="/my/ai"
+        data-testid="ai-sidebar-link"
+        className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] font-semibold text-ink2 hover:bg-bg2 hover:text-ink"
+      >
+        <Icon name="sparkles" className="text-am" />
+        سۈنئىي ئىدراك
+      </Link>
+    </>
+  );
+}
+
+/** Two rows' worth of space, held only for a browser that carries a cookie. */
+function PersonalLinksSkeleton({ signedIn }: { signedIn: boolean }) {
+  if (!signedIn) return null;
+  return (
+    <>
+      <span aria-hidden className="skel my-0.5 block h-11 w-full" />
+      <span aria-hidden className="skel my-0.5 block h-11 w-full" />
+    </>
+  );
+}
+
+/** The footer's «ھېساباتىم» link, once the session has arrived. */
+function AccountLink({ sessionPromise }: { sessionPromise: Promise<SessionInfo | null> }) {
+  const session = use(sessionPromise);
+  if (!session) return null;
+  return (
+    <Link href="/my/account" data-testid="account-link" className="hover:text-am hover:underline">
+      ھېساباتىم
+    </Link>
+  );
+}
+
+function AccountLinkSkeleton({ signedIn }: { signedIn: boolean }) {
+  if (!signedIn) return null;
+  return <span aria-hidden className="skel skel-line inline-block w-16 align-middle" />;
 }

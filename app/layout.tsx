@@ -81,7 +81,23 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const cookieStore = await cookies();
   const rawTheme = cookieStore.get(THEME_COOKIE)?.value;
   const theme = isTheme(rawTheme) ? rawTheme : null;
-  const [session, categories] = await Promise.all([getSessionInfo(), getCategories()]);
+  /**
+   * The shell awaits the category tree — which is cached, and which the
+   * sidebar cannot be drawn without — and nothing else. Who is reading is
+   * handed down as a promise: it costs a look in the profiles table, and
+   * every navigation used to wait for it before a single pixel could change.
+   *
+   * `looksSignedIn` is the mere presence of an auth cookie, not a claim about
+   * it. It only decides how large a placeholder to hold open while the real
+   * answer streams in, so that nothing shifts when it arrives. It is never an
+   * authorisation decision, and the controls themselves come from the
+   * verified session.
+   */
+  const categories = await getCategories();
+  const sessionPromise = getSessionInfo();
+  const looksSignedIn = cookieStore
+    .getAll()
+    .some((cookie) => /^sb-.+-auth-token(\.\d+)?$/.test(cookie.name));
 
   return (
     <html lang="ug" dir="rtl" suppressHydrationWarning {...(theme ? { "data-theme": theme } : {})}>
@@ -128,7 +144,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-dvh">
         <IconSprite />
-        <AppShell theme={theme} session={session} categories={categories}>
+        <AppShell
+          theme={theme}
+          sessionPromise={sessionPromise}
+          looksSignedIn={looksSignedIn}
+          categories={categories}
+        >
           {children}
         </AppShell>
         {/* Registers the service worker and carries the update toast. Renders

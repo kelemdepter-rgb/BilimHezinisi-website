@@ -708,6 +708,41 @@
   }
 }
 
+/* ── Skeletons ────────────────────────────────────────────────────────────
+   The shape a page holds while its content is still coming. Every one of them
+   is a .skel of the same size as the thing it stands in for, so nothing moves
+   when the real content lands.
+
+   The shimmer is a courtesy, not the message: a reader who asked their system
+   for less movement gets the same grey block, standing still. */
+@layer components {
+  .skel {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .skel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, var(--ab), transparent);
+    animation: skel-sweep 1.4s ease-in-out infinite;
+  }
+  .skel-line {
+    height: 12px;
+    border-radius: 6px;
+  }
+  @keyframes skel-sweep {
+    100% { transform: translateX(100%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skel::after { animation: none; opacity: 0; }
+  }
+}
+
 /* ── Print / save-as-PDF: just the book, correct RTL, one page per book page ── */
 @media print {
   :root {

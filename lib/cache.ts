@@ -6,9 +6,15 @@ import { hasSupabaseEnv } from "@/lib/env";
 /**
  * What may be cached here, and what may never be.
  *
- * ONLY data that is the same for every visitor on earth. The category tree,
- * the list of published books, the author index, the list of suras. Nothing
- * else. If the answer depends on WHO is asking, it does not belong in this
+ * ONLY data that is the same for every visitor on earth AND that nobody is
+ * waiting to see change: the category tree, the author index, the list of
+ * suras, and the cheap "does this exist" checks the segment layouts make.
+ *
+ * The book listings themselves are NOT here, though they would fit the first
+ * half of that rule. They fail the second: the owner adds a book and looks for
+ * it, and a write that reached the database by some other road than this site
+ * — the migration script, the SQL editor — has no tag to drop. See the note on
+ * listBooks in lib/library.ts. Nothing If the answer depends on WHO is asking, it does not belong in this
  * file: bookmarks, notes, reading progress, the notebook, AI state and every
  * /admin view are per-reader, and a cache entry is shared by everyone, so
  * caching one of them would hand one reader another reader's page.

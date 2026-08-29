@@ -8,6 +8,14 @@ add or edit books. The UI must visually and structurally mirror the existing des
 (Electron) app — same warm manuscript design language, same layout concepts — adapted
 responsively for phones.
 
+**Address (since 2026-08-29): `https://bilimhezinisi.com`.** `www.bilimhezinisi.com`
+308-redirects to that apex, and the old address
+`bilim-hezinisi-website.vercel.app` is **kept, never deleted**, permanently
+308-redirecting to the new one (`lib/legacy-host.ts`, applied in `proxy.ts`) —
+except `/api/health` and `/auth/`, which must keep answering on the old host
+itself. PROMPT-1 … PROMPT-22 name the old address because that is where the site
+lived when they were written; they are history and are not rewritten.
+
 The desktop app source is the READ-ONLY reference at
 `../bilim hezinisi/bilim hezinisi pc` (port logic and design tokens from it; NEVER
 modify anything there from this project).
@@ -178,7 +186,8 @@ verify the preview URL on a real phone.
 ## Environment Variables
 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY` (server-only), `ADMIN_EMAIL` (admin bootstrap),
-`SITE_URL`. **There is deliberately no `GEMINI_API_KEY`** — see AI Layer below.
+`SITE_URL` (`https://bilimhezinisi.com` in production — see Project Overview).
+**There is deliberately no `GEMINI_API_KEY`** — see AI Layer below.
 
 ## Phases (build in order; each phase ships deployable)
 1. **Foundation**: scaffold, design-token theme system ported from desktop, RTL app

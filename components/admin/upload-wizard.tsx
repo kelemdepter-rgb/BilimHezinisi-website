@@ -25,6 +25,7 @@ import {
 import type { BookStatus, ExtractedBook } from "@/lib/books/types";
 import { flattenCategories } from "@/lib/categories";
 import type { Category } from "@/lib/types";
+import { revalidateLibraryAction } from "@/app/admin/books/actions";
 
 const STEPS = ["مەنبە", "ئوقۇش", "بەتلەر", "ئۇچۇرلار", "مۇقاۋا", "ساقلاش"] as const;
 type StepIndex = 0 | 1 | 2 | 3 | 4 | 5;
@@ -231,6 +232,10 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
       if (Object.keys(paths).length > 0) await setBookPaths(bookId, paths);
 
       setSavedBookId(bookId);
+      // The book was written from this browser, so no Server Action has run and
+      // nothing has told the cached library that it exists. Without this the
+      // owner publishes a book and does not find it on the home page.
+      await revalidateLibraryAction().catch(() => undefined);
       router.refresh();
     } catch (caught) {
       setError(

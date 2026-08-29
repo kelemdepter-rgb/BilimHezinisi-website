@@ -1,4 +1,6 @@
+import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { BOOKS_TAG, CACHE_SECONDS, cachedClient } from "@/lib/cache";
 import type { LibraryBook } from "@/lib/library-types";
 
 /**
@@ -33,41 +35,54 @@ type AuthorRow = {
   total_authors: number;
 };
 
-export async function listAuthors(options: { limit?: number; offset?: number } = {}): Promise<{
-  authors: AuthorSummary[];
-  total: number;
-}> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return { authors: [], total: 0 };
+/**
+ * The author index is built out of the published books, so it is the same for
+ * every visitor and changes only when a book does — which is exactly what
+ * BOOKS_TAG is dropped for.
+ */
+export const listAuthors = unstable_cache(
+  async (options: { limit?: number; offset?: number } = {}): Promise<{
+    authors: AuthorSummary[];
+    total: number;
+  }> => {
+    const supabase = cachedClient();
+    if (!supabase) return { authors: [], total: 0 };
 
-  const limit = Math.min(Math.max(1, Math.floor(options.limit ?? AUTHORS_PAGE_SIZE)), 100);
-  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const limit = Math.min(Math.max(1, Math.floor(options.limit ?? AUTHORS_PAGE_SIZE)), 100);
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
 
-  const { data, error } = await supabase.rpc("list_authors", { lim: limit, off: offset });
-  if (error || !data) return { authors: [], total: 0 };
+    const { data, error } = await supabase.rpc("list_authors", { lim: limit, off: offset });
+    if (error || !data) return { authors: [], total: 0 };
 
-  const rows = data as AuthorRow[];
-  return {
-    authors: rows.map((row) => ({
-      key: row.author_key,
-      name: row.author,
-      bookCount: Number(row.book_count) || 0,
-    })),
-    total: Number(rows[0]?.total_authors) || 0,
-  };
-}
+    const rows = data as AuthorRow[];
+    return {
+      authors: rows.map((row) => ({
+        key: row.author_key,
+        name: row.author,
+        bookCount: Number(row.book_count) || 0,
+      })),
+      total: Number(rows[0]?.total_authors) || 0,
+    };
+  },
+  ["authors-list"],
+  { tags: [BOOKS_TAG], revalidate: CACHE_SECONDS },
+);
 
-export async function authorStats(): Promise<{ authors: number; unattributed: number }> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return { authors: 0, unattributed: 0 };
-  const { data, error } = await supabase.rpc("author_stats");
-  if (error || !data) return { authors: 0, unattributed: 0 };
-  const row = (data as { authors: number; unattributed: number }[])[0];
-  return {
-    authors: Number(row?.authors) || 0,
-    unattributed: Number(row?.unattributed) || 0,
-  };
-}
+export const authorStats = unstable_cache(
+  async (): Promise<{ authors: number; unattributed: number }> => {
+    const supabase = cachedClient();
+    if (!supabase) return { authors: 0, unattributed: 0 };
+    const { data, error } = await supabase.rpc("author_stats");
+    if (error || !data) return { authors: 0, unattributed: 0 };
+    const row = (data as { authors: number; unattributed: number }[])[0];
+    return {
+      authors: Number(row?.authors) || 0,
+      unattributed: Number(row?.unattributed) || 0,
+    };
+  },
+  ["author-stats"],
+  { tags: [BOOKS_TAG], revalidate: CACHE_SECONDS },
+);
 
 /**
  * One author's published books.

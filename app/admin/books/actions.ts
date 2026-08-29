@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateBooks } from "@/lib/cache";
 import { requireStaff } from "@/lib/admin/guards";
 import { MSG, failureMessage, type ActionResult } from "@/lib/admin/messages";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -45,6 +46,7 @@ export async function updateBookAction(formData: FormData): Promise<ActionResult
       .eq("id", id);
     if (error) return { ok: false, error: failureMessage(new Error(error.message)) };
 
+    revalidateBooks();
     revalidatePath("/admin/books");
     revalidatePath("/");
     return { ok: true, message: MSG.saved };
@@ -77,6 +79,7 @@ export async function deleteBooksAction(formData: FormData): Promise<ActionResul
     const { error } = await supabase.from("books").delete().in("id", ids);
     if (error) return { ok: false, error: failureMessage(new Error(error.message)) };
 
+    revalidateBooks();
     revalidatePath("/admin/books");
     revalidatePath("/");
     return { ok: true, message: MSG.deleted };
@@ -96,6 +99,7 @@ export async function bulkStatusAction(formData: FormData): Promise<ActionResult
     const { error } = await supabase.from("books").update({ status }).in("id", ids);
     if (error) return { ok: false, error: failureMessage(new Error(error.message)) };
 
+    revalidateBooks();
     revalidatePath("/admin/books");
     revalidatePath("/");
     return { ok: true, message: MSG.saved };
@@ -118,10 +122,35 @@ export async function bulkMoveCategoryAction(formData: FormData): Promise<Action
       .in("id", ids);
     if (error) return { ok: false, error: failureMessage(new Error(error.message)) };
 
+    revalidateBooks();
     revalidatePath("/admin/books");
     revalidatePath("/");
     return { ok: true, message: MSG.saved };
   } catch (error) {
     return { ok: false, error: failureMessage(error) };
   }
+}
+
+/**
+ * Drop the cached library after a write that did NOT happen here.
+ *
+ * The upload wizard and the batch importer write books straight from the
+ * admin's browser to Supabase — that is deliberate, because Vercel caps a
+ * request body at 4.5 MB and a book is bigger than that. No Server Action
+ * runs on that path, so nothing would tell the cache that the library has
+ * changed and a newly published book would sit invisible until the hour ran
+ * out. lib/books/save.ts calls this at the one point every such write passes
+ * through.
+ *
+ * Staff only, checked against the database like every other action here: a
+ * cache is worth nothing if a passer-by can empty it on a loop.
+ */
+export async function revalidateLibraryAction(): Promise<void> {
+  try {
+    await requireStaff();
+  } catch {
+    return;
+  }
+  revalidateBooks();
+  revalidatePath("/");
 }

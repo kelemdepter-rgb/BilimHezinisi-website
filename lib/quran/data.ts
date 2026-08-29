@@ -1,30 +1,52 @@
+import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { QURAN_TAG, cachedClient } from "@/lib/cache";
 import type { Aya, QuranHit, Sura } from "@/lib/quran/types";
 
 const SURA_COLUMNS = "number, name_ar, name_ug, name_translit, revelation, aya_count";
 
+/**
+ * The Qur'an is the same for everybody and does not change between one
+ * request and the next — the tables are written only by the seed script — so
+ * the sura index and the ayas of a sura are the safest thing on the site to
+ * cache, and the sura index is read by /quran, by every mushaf page and by
+ * their metadata.
+ *
+ * A month, because a decade would only look like a mistake. If the seed is
+ * ever re-run, the tag is there to drop it at once.
+ */
+const QURAN_CACHE_SECONDS = 60 * 60 * 24 * 30;
+
 /** All 114 suras, in mushaf order. */
-export async function getSuras(): Promise<Sura[]> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return [];
-  const { data } = await supabase
-    .from("quran_suras")
-    .select(SURA_COLUMNS)
-    .order("number", { ascending: true });
-  return (data as Sura[] | null) ?? [];
-}
+export const getSuras = unstable_cache(
+  async (): Promise<Sura[]> => {
+    const supabase = cachedClient();
+    if (!supabase) return [];
+    const { data } = await supabase
+      .from("quran_suras")
+      .select(SURA_COLUMNS)
+      .order("number", { ascending: true });
+    return (data as Sura[] | null) ?? [];
+  },
+  ["quran-suras"],
+  { tags: [QURAN_TAG], revalidate: QURAN_CACHE_SECONDS },
+);
 
 /** Every aya of one sura, in order. A sura is one page — no lazy loading. */
-export async function getAyas(suraNumber: number): Promise<Aya[]> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return [];
-  const { data } = await supabase
-    .from("quran_ayas")
-    .select("sura, aya, text_ar, text_ug")
-    .eq("sura", suraNumber)
-    .order("aya", { ascending: true });
-  return (data as Aya[] | null) ?? [];
-}
+export const getAyas = unstable_cache(
+  async (suraNumber: number): Promise<Aya[]> => {
+    const supabase = cachedClient();
+    if (!supabase) return [];
+    const { data } = await supabase
+      .from("quran_ayas")
+      .select("sura, aya, text_ar, text_ug")
+      .eq("sura", suraNumber)
+      .order("aya", { ascending: true });
+    return (data as Aya[] | null) ?? [];
+  },
+  ["quran-ayas"],
+  { tags: [QURAN_TAG], revalidate: QURAN_CACHE_SECONDS },
+);
 
 /** The ayas of one sura the signed-in user has bookmarked. */
 export async function getSuraBookmarks(suraNumber: number): Promise<number[]> {

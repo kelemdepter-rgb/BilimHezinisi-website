@@ -1,4 +1,7 @@
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { BOOKS_TAG, CACHE_SECONDS, cachedClient } from "@/lib/cache";
 import { getCategories } from "@/lib/data";
 import { getPublicUrl } from "@/lib/storage";
 import {
@@ -35,37 +38,63 @@ const MAX_OFFSET = 5000;
 /**
  * One query for the page of books plus an exact count — no per-book follow-up
  * requests. Category names are resolved from the already-loaded tree.
+ *
+ * Cached, and safe to cache: the query filters on status itself and the client
+ * carries no session, so what comes back is what an anonymous visitor may see
+ * and nothing more. It is the same answer for everybody, which is what makes
+ * it shareable.
+ *
+ * The category tree is resolved OUTSIDE the cached function and the resulting
+ * ids are passed in. Two reasons: one cached read must not be nested inside
+ * another, and the ids belong in the cache key — a category that gains a child
+ * is a different question, and would otherwise keep the old answer.
  */
+const loadBooks = unstable_cache(
+  async (options: {
+    categoryIds: number[] | null;
+    sort: BookSort;
+    limit: number;
+    offset: number;
+  }): Promise<{ books: LibraryBook[]; total: number }> => {
+    const supabase = cachedClient();
+    if (!supabase) return { books: [], total: 0 };
+    const order = ORDER[options.sort] ?? ORDER.new;
+
+    let request = supabase
+      .from("books")
+      .select("id, title, author, category_id, page_count, date, cover_path, status", {
+        count: "exact",
+      })
+      .eq("status", "published")
+      .order(order.column, { ascending: order.ascending })
+      .order("id", { ascending: true })
+      .range(options.offset, options.offset + options.limit - 1);
+
+    if (options.categoryIds) request = request.in("category_id", options.categoryIds);
+
+    const { data, count } = await request;
+    return { books: (data as LibraryBook[] | null) ?? [], total: count ?? 0 };
+  },
+  ["books-list"],
+  { tags: [BOOKS_TAG], revalidate: CACHE_SECONDS },
+);
+
 export async function listBooks(options: {
   categoryId?: number | null;
   sort?: BookSort;
   limit?: number;
   offset?: number;
 }): Promise<{ books: LibraryBook[]; total: number }> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return { books: [], total: 0 };
-
-  const limit = Math.min(Math.max(1, Math.floor(options.limit ?? LIBRARY_PAGE_SIZE)), LIBRARY_PAGE_SIZE);
+  const limit = Math.min(
+    Math.max(1, Math.floor(options.limit ?? LIBRARY_PAGE_SIZE)),
+    LIBRARY_PAGE_SIZE,
+  );
   const offset = Math.min(Math.max(0, Math.floor(options.offset ?? 0)), MAX_OFFSET);
-  const order = ORDER[options.sort ?? "new"] ?? ORDER.new;
-
-  let request = supabase
-    .from("books")
-    .select("id, title, author, category_id, page_count, date, cover_path, status", {
-      count: "exact",
-    })
-    .eq("status", "published")
-    .order(order.column, { ascending: order.ascending })
-    .order("id", { ascending: true })
-    .range(offset, offset + limit - 1);
-
-  if (options.categoryId != null) {
-    const categories = await getCategories();
-    request = request.in("category_id", categoryWithDescendants(categories, options.categoryId));
-  }
-
-  const { data, count } = await request;
-  return { books: (data as LibraryBook[] | null) ?? [], total: count ?? 0 };
+  const categoryIds =
+    options.categoryId != null
+      ? categoryWithDescendants(await getCategories(), options.categoryId)
+      : null;
+  return loadBooks({ categoryIds, sort: options.sort ?? "new", limit, offset });
 }
 
 /**
@@ -81,36 +110,49 @@ export async function listBooks(options: {
  * it the home page simply shows no "new books" strip, which is a great deal
  * better than showing an error.
  */
-export async function listNewBooks(options: { limit?: number; offset?: number } = {}): Promise<{
-  books: LibraryBook[];
-  total: number;
-}> {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) return { books: [], total: 0 };
+export const listNewBooks = unstable_cache(
+  async (options: { limit?: number; offset?: number } = {}): Promise<{
+    books: LibraryBook[];
+    total: number;
+  }> => {
+    const supabase = cachedClient();
+    if (!supabase) return { books: [], total: 0 };
 
-  const limit = Math.min(Math.max(1, Math.floor(options.limit ?? LIBRARY_PAGE_SIZE)), LIBRARY_PAGE_SIZE);
-  const offset = Math.min(Math.max(0, Math.floor(options.offset ?? 0)), MAX_OFFSET);
+    const limit = Math.min(Math.max(1, Math.floor(options.limit ?? LIBRARY_PAGE_SIZE)), LIBRARY_PAGE_SIZE);
+    const offset = Math.min(Math.max(0, Math.floor(options.offset ?? 0)), MAX_OFFSET);
 
-  const { data, count, error } = await supabase
-    .from("books")
-    .select("id, title, author, category_id, page_count, date, cover_path, status", {
-      count: "exact",
-    })
-    .eq("status", "published")
-    .not("published_at", "is", null)
-    .order("published_at", { ascending: false })
-    .order("id", { ascending: false })
-    .range(offset, offset + limit - 1);
+    const { data, count, error } = await supabase
+      .from("books")
+      .select("id, title, author, category_id, page_count, date, cover_path, status", {
+        count: "exact",
+      })
+      .eq("status", "published")
+      .not("published_at", "is", null)
+      .order("published_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(offset, offset + limit - 1);
 
-  if (error) return { books: [], total: 0 };
-  return { books: (data as LibraryBook[] | null) ?? [], total: count ?? 0 };
-}
+    if (error) return { books: [], total: 0 };
+    return { books: (data as LibraryBook[] | null) ?? [], total: count ?? 0 };
+  },
+  ["books-new"],
+  { tags: [BOOKS_TAG], revalidate: CACHE_SECONDS },
+);
 
 /**
  * Book detail. Drafts resolve only for staff — RLS already enforces this, so
  * a reader simply gets nothing back.
  */
-export async function getBookDetail(bookId: number): Promise<BookDetail | null> {
+/**
+ * Deduplicated per request but deliberately NOT put in the shared cache.
+ *
+ * A book page asks for this twice — once for the share card and title, once
+ * for the page itself — and cache() collapses that into one query. The shared
+ * cache is a different matter: a draft is visible here to staff, through their
+ * own session and RLS, and a cache entry is handed to everybody. Nothing that
+ * can differ by who is asking goes in there.
+ */
+export const getBookDetail = cache(async (bookId: number): Promise<BookDetail | null> => {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
   const { data } = await supabase
@@ -121,7 +163,7 @@ export async function getBookDetail(bookId: number): Promise<BookDetail | null> 
     .eq("id", bookId)
     .maybeSingle();
   return (data as BookDetail | null) ?? null;
-}
+});
 
 export async function getReadingProgress(
   bookId: number,

@@ -41,7 +41,7 @@ import {
   type ImportHeadroom,
   type IncompleteBook,
 } from "@/app/admin/books/batch/actions";
-import { deleteBooksAction } from "@/app/admin/books/actions";
+import { deleteBooksAction, revalidateLibraryAction } from "@/app/admin/books/actions";
 import type { BookStatus } from "@/lib/books/types";
 import type { Category } from "@/lib/types";
 
@@ -421,6 +421,9 @@ export function BatchImport({ categories }: { categories: Category[] }) {
     );
 
     setProgress(null);
+    // One tell for the whole run, not one per book: the cached listings only
+    // have to be right once the import has finished.
+    if (landed.length > 0) await revalidateLibraryAction().catch(() => undefined);
     const after = await refreshHeadroom();
     setGrowth({
       estimated: budget.estimatedBytes,

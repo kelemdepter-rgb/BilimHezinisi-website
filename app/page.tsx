@@ -8,6 +8,7 @@ import { getCategories, getSessionInfo } from "@/lib/data";
 import { coverUrlMap, getRecentReads, listBooks, listNewBooks } from "@/lib/library";
 import { LIBRARY_PAGE_SIZE, VIEW_COOKIE, type BookSort } from "@/lib/library-types";
 import { SITE_DESCRIPTION, SITE_NAME, absoluteUrl, jsonLd } from "@/lib/seo";
+import { timed } from "@/lib/perf/timing";
 
 /** Enough to be worth a look, few enough to stay one screen. */
 const NEW_STRIP_SIZE = 12;
@@ -48,7 +49,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
   // Inline <script>, so the CSP nonce the proxy minted has to travel with it.
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
-  const [{ books, total }, categories, session, recent, newest] = await Promise.all([
+  const [{ books, total }, categories, session, recent, newest] = await timed("page.queries", () => Promise.all([
     listBooks({
       categoryId: Number.isFinite(categoryId) ? categoryId : null,
       sort,
@@ -61,9 +62,9 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
     // Only on the unfiltered home page: inside a category, "new" would mean
     // something the strip is not showing.
     categoryId ? Promise.resolve({ books: [], total: 0 }) : listNewBooks({ limit: NEW_STRIP_SIZE }),
-  ]);
+  ] as const));
 
-  const covers = await coverUrlMap([...books, ...recent, ...newest.books]);
+  const covers = await timed("page.covers", () => coverUrlMap([...books, ...recent, ...newest.books]));
   const withCovers = books.map((book) => ({
     ...book,
     coverUrl: book.cover_path ? (covers.get(book.cover_path) ?? null) : null,

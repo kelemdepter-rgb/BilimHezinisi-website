@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { CACHEABLE_HEADER } from "@/lib/pwa/constants";
 import { buildContentSecurityPolicy } from "@/lib/security/csp";
+import { markRequest, timed } from "@/lib/perf/timing";
 
 /**
  * Runs on every page and API request: refreshes the Supabase session and
@@ -13,6 +14,7 @@ import { buildContentSecurityPolicy } from "@/lib/security/csp";
  * the copy our own JSON-LD blocks read through `headers()`.
  */
 export default async function proxy(request: NextRequest) {
+  markRequest(request.nextUrl.pathname + request.nextUrl.search);
   const nonce = crypto.randomUUID().replace(/-/g, "");
   const csp = buildContentSecurityPolicy(nonce, process.env.NODE_ENV === "development");
 
@@ -20,7 +22,9 @@ export default async function proxy(request: NextRequest) {
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
 
-  const { response, signedIn } = await updateSession(request, requestHeaders);
+  const { response, signedIn } = await timed("proxy.updateSession", () =>
+    updateSession(request, requestHeaders),
+  );
   response.headers.set("Content-Security-Policy", csp);
   /**
    * Tells the service worker whether this response is safe to keep offline.

@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { timed } from "@/lib/perf/timing";
 import type { Category, Role, SessionInfo } from "@/lib/types";
 
 export async function getSessionInfo(): Promise<SessionInfo | null> {
@@ -6,13 +7,11 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
   if (!supabase) return null;
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await timed("layout.auth.getUser", () => supabase.auth.getUser());
   if (!user) return null;
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, display_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { data: profile } = await timed("layout.profiles", async () =>
+    supabase.from("profiles").select("role, display_name").eq("id", user.id).maybeSingle(),
+  );
   const role: Role =
     profile?.role === "admin" || profile?.role === "uploader" ? profile.role : "reader";
   return {
@@ -25,11 +24,13 @@ export async function getSessionInfo(): Promise<SessionInfo | null> {
 export async function getCategories(): Promise<Category[]> {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return [];
-  const { data } = await supabase
-    .from("categories")
-    .select("id, parent_id, name, icon, sort_order")
-    .order("sort_order", { ascending: true })
-    .order("id", { ascending: true });
+  const { data } = await timed("categories", async () =>
+    supabase
+      .from("categories")
+      .select("id, parent_id, name, icon, sort_order")
+      .order("sort_order", { ascending: true })
+      .order("id", { ascending: true }),
+  );
   return (data as Category[] | null) ?? [];
 }
 

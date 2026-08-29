@@ -1,0 +1,79 @@
+import "server-only";
+import { updateTag } from "next/cache";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { hasSupabaseEnv } from "@/lib/env";
+
+/**
+ * What may be cached here, and what may never be.
+ *
+ * ONLY data that is the same for every visitor on earth. The category tree,
+ * the list of published books, the author index, the list of suras. Nothing
+ * else. If the answer depends on WHO is asking, it does not belong in this
+ * file: bookmarks, notes, reading progress, the notebook, AI state and every
+ * /admin view are per-reader, and a cache entry is shared by everyone, so
+ * caching one of them would hand one reader another reader's page.
+ *
+ * The safety net is `cachedClient()` below: it carries the anon key and no
+ * session at all, so RLS answers it as an anonymous visitor. A draft book, a
+ * private setting or somebody's notes cannot come back through it even by
+ * mistake — the database itself refuses. Never swap it for a client built
+ * from `cookies()`; `unstable_cache` cannot read request state anyway, and
+ * the point of using this client is that it has no reader to leak.
+ *
+ * Everything cached is tagged, and every write that could change it calls
+ * `revalidateTag` with the matching tag (see `revalidateLibrary`). The
+ * `revalidate` seconds on each entry are only a backstop for a tag that was
+ * somehow missed — publishing a book must never wait on a timer.
+ */
+
+/** The category tree: name, icon, parent, order. */
+export const CATEGORIES_TAG = "categories";
+/** Anything that changes when a book is added, edited, published or removed. */
+export const BOOKS_TAG = "books";
+/** The Qur'an tables, which change only when the seed script is re-run. */
+export const QURAN_TAG = "quran";
+
+let anonClient: SupabaseClient | null = null;
+
+/**
+ * The client every cached read uses: anon key, no cookies, no session.
+ *
+ * A cache entry is shared by everyone, so it must be built from a request
+ * that has no reader behind it. Reused across calls because a cached read is
+ * meant to be cheap.
+ */
+export function cachedClient(): SupabaseClient | null {
+  if (!hasSupabaseEnv()) return null;
+  if (anonClient) return anonClient;
+  anonClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
+  );
+  return anonClient;
+}
+
+/** An hour. Long enough to matter, short enough to forgive a missed tag. */
+export const CACHE_SECONDS = 3600;
+
+/**
+ * Drop the shared cache after a write.
+ *
+ * `updateTag` and not `revalidateTag`: revalidateTag's recommended "max"
+ * profile serves the STALE entry to the next visitor and refreshes behind
+ * them, so the owner would publish a book and still not see it. updateTag
+ * expires the entry there and then, and the next request waits for the real
+ * answer. It may only be called from a Server Action, which is where every
+ * one of these calls sits.
+ *
+ * Categories drop the book tag as well: moving or deleting a category moves
+ * the books inside it, so the cached listings are no longer true either.
+ */
+export function revalidateBooks(): void {
+  updateTag(BOOKS_TAG);
+}
+
+export function revalidateCategories(): void {
+  updateTag(CATEGORIES_TAG);
+  updateTag(BOOKS_TAG);
+}

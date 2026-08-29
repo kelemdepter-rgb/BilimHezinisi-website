@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { revalidateCategories } from "@/lib/cache";
 import { requireStaff } from "@/lib/admin/guards";
 import { MSG, failureMessage, type ActionResult } from "@/lib/admin/messages";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -58,6 +59,7 @@ export async function createCategoryAction(formData: FormData): Promise<ActionRe
     });
     if (error) return { ok: false, error: failureMessage(new Error(error.message)) };
 
+    revalidateCategories();
     revalidatePath("/admin/categories");
     revalidatePath("/", "layout");
     return { ok: true, message: MSG.saved };
@@ -79,6 +81,7 @@ export async function updateCategoryAction(formData: FormData): Promise<ActionRe
     const { error } = await supabase.from("categories").update({ name, icon }).eq("id", id);
     if (error) return { ok: false, error: failureMessage(new Error(error.message)) };
 
+    revalidateCategories();
     revalidatePath("/admin/categories");
     revalidatePath("/", "layout");
     return { ok: true, message: MSG.saved };
@@ -106,6 +109,7 @@ export async function deleteCategoryAction(formData: FormData): Promise<ActionRe
     const { error } = await supabase.from("categories").delete().eq("id", id);
     if (error) return { ok: false, error: failureMessage(new Error(error.message)) };
 
+    revalidateCategories();
     revalidatePath("/admin/categories");
     revalidatePath("/", "layout");
     return { ok: true, message: MSG.deleted };
@@ -146,6 +150,7 @@ export async function reorderCategoriesAction(
       if (error) return { ok: false, error: failureMessage(new Error(error.message)) };
     }
 
+    revalidateCategories();
     revalidatePath("/admin/categories");
     revalidatePath("/", "layout");
     return { ok: true, message: MSG.saved };

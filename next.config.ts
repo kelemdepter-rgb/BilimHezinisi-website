@@ -85,6 +85,17 @@ const nextConfig: NextConfig = {
       },
       {
         /**
+         * A tab icon that never changes, revalidated on every visit: Vercel's
+         * default for it is `max-age=0, must-revalidate`, which costs a round
+         * trip per cold page load for a file nobody edits. A day is long
+         * enough to be worth having and short enough that a new icon is never
+         * stranded — it is served from a path with no hash in it.
+         */
+        source: "/favicon.ico",
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400" }],
+      },
+      {
+        /**
          * Fonts are content-stable: a new cut means a new filename, because
          * scripts/build-fonts.mjs writes one file per face. Without this they
          * inherit public/'s `max-age=0, must-revalidate` and every visitor

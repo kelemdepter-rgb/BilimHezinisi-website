@@ -140,3 +140,12 @@ export function readSeed(): { bookId: number } | null {
     return null;
   }
 }
+
+/**
+ * The cron token the Playwright servers run with when .env.local has none.
+ *
+ * /api/health is what stops the free Supabase project pausing after ~7 idle
+ * days; it only authenticates when CRON_SECRET is set, so the suite sets one
+ * in order to prove both halves — 200 with the token, 401 without it.
+ */
+export const CRON_TEST_SECRET = "bh-e2e-cron-4471";

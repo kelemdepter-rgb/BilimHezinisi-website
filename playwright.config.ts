@@ -1,7 +1,19 @@
 import { defineConfig, type Project } from "@playwright/test";
-import { STAFF_STATE_PATH, loadEnvLocal } from "./tests/env";
+import { CRON_TEST_SECRET, STAFF_STATE_PATH, loadEnvLocal } from "./tests/env";
 
 loadEnvLocal();
+
+/**
+ * The cron token the servers this suite starts run with.
+ *
+ * /api/health only checks a Bearer token when CRON_SECRET is set, and without
+ * one there is no way to prove that check survived the domain move — the
+ * route would simply answer everybody. A real secret out of .env.local wins;
+ * otherwise the suite supplies its own, and both servers below inherit it
+ * through process.env. domain.spec.ts says so out loud if it finds a reused
+ * server that predates this.
+ */
+process.env.CRON_SECRET ||= CRON_TEST_SECRET;
 
 /**
  * Where the dev server runs.
@@ -132,6 +144,24 @@ export default defineConfig({
           hasTouch: viewport.mobile,
           deviceScaleFactor: viewport.scale,
           storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
+        /**
+         * The domain move: the old address redirecting, the hosts that must
+         * NOT be redirected, and the daily cron's route still answering.
+         * Which host a request arrives on has nothing to do with how wide the
+         * screen is, so — like the security project below — this runs once at
+         * the desktop size; the one block that does care about width sets its
+         * own 360 px viewport.
+         */
+        name: `domain-${viewport.name}`,
+        testMatch: /domain.spec.ts/,
+        testIgnore: viewport.mobile ? /./ : undefined,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
         },
       },
       {

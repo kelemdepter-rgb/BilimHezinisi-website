@@ -1,5 +1,6 @@
-import type { NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
+import { legacyHostRedirect } from "@/lib/legacy-host";
 import { CACHEABLE_HEADER } from "@/lib/pwa/constants";
 import { buildContentSecurityPolicy } from "@/lib/security/csp";
 import { markRequest, timed } from "@/lib/perf/timing";
@@ -14,6 +15,19 @@ import { markRequest, timed } from "@/lib/perf/timing";
  * the copy our own JSON-LD blocks read through `headers()`.
  */
 export default async function proxy(request: NextRequest) {
+  /**
+   * The old address, answered permanently at the new one.
+   *
+   * First, and before anything else: a redirect needs no Supabase round trip,
+   * no CSP nonce and no session cookie written on a host the reader is about
+   * to leave. What is and is not redirected lives in lib/legacy-host.ts,
+   * where it is unit tested — the previews and the localhost this suite runs
+   * on must never be caught by it, and /api/health and /auth/ must keep
+   * answering on the old host itself.
+   */
+  const moved = legacyHostRedirect(request.headers, request.nextUrl);
+  if (moved) return NextResponse.redirect(moved, 308);
+
   markRequest(request.nextUrl.pathname + request.nextUrl.search);
   const nonce = crypto.randomUUID().replace(/-/g, "");
   const csp = buildContentSecurityPolicy(nonce, process.env.NODE_ENV === "development");

@@ -1,4 +1,3 @@
-import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { BOOKS_TAG, CACHE_SECONDS, cachedClient } from "@/lib/cache";
@@ -94,18 +93,23 @@ export const authorStats = unstable_cache(
  * layout is the last place in a route that can still set the status: once
  * loading.tsx has flushed the shell, the status line has already gone.
  *
- * cache() keyed on the string, so asking twice in one request costs one query.
+ * Out of the shared cache, so it answers in about a millisecond and the
+ * skeleton behind it still flushes at once.
  */
-export const authorHasBooks = cache(async (key: string): Promise<boolean> => {
-  const supabase = await createSupabaseServerClient();
-  if (!supabase || !key) return false;
-  const { count } = await supabase
-    .from("books")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "published")
-    .eq("author_key", key);
-  return (count ?? 0) > 0;
-});
+export const authorHasBooks = unstable_cache(
+  async (key: string): Promise<boolean> => {
+    const supabase = cachedClient();
+    if (!supabase || !key) return false;
+    const { count } = await supabase
+      .from("books")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .eq("author_key", key);
+    return (count ?? 0) > 0;
+  },
+  ["author-exists"],
+  { tags: [BOOKS_TAG], revalidate: CACHE_SECONDS },
+);
 
 /**
  * One author's published books.

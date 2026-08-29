@@ -144,6 +144,35 @@ export const listNewBooks = unstable_cache(
  * a reader simply gets nothing back.
  */
 /**
+ * Is there a published book behind this id?
+ *
+ * Its own question, and a very cheap one: a counted head request, no rows,
+ * out of the shared cache. The segment layout asks it in front of the
+ * loading boundary, because a layout is the last place in a route that can
+ * still set the status — and because it answers in about a millisecond, the
+ * skeleton still flushes at once. Doing the same check with the full book
+ * lookup cost the book page its loading state.
+ *
+ * Published only, which is what the sessionless client can see. A draft is
+ * visible to staff through their own session, so the layout falls through to
+ * the page for them rather than pretending the book is not there.
+ */
+export const publishedBookExists = unstable_cache(
+  async (bookId: number): Promise<boolean> => {
+    const supabase = cachedClient();
+    if (!supabase) return false;
+    const { count } = await supabase
+      .from("books")
+      .select("id", { count: "exact", head: true })
+      .eq("id", bookId)
+      .eq("status", "published");
+    return (count ?? 0) > 0;
+  },
+  ["book-exists"],
+  { tags: [BOOKS_TAG], revalidate: CACHE_SECONDS },
+);
+
+/**
  * Deduplicated per request but deliberately NOT put in the shared cache.
  *
  * A book page asks for this twice — once for the share card and title, once

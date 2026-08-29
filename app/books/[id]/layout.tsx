@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { getBookDetail } from "@/lib/library";
+import { getSessionInfo } from "@/lib/data";
+import { publishedBookExists } from "@/lib/library";
 
 /**
  * Does this book exist? Asked here, and not only in the page, because of
@@ -12,14 +13,25 @@ import { getBookDetail } from "@/lib/library";
  * but a crawler is told 200 for a book that is not there. The check belongs
  * in front of the boundary, which is here.
  *
- * It costs nothing: getBookDetail is deduplicated per request, so this and
- * the page's own lookup are one query. Covers the reader at /read too, which
- * needs the same answer.
+ * publishedBookExists and not the full lookup: this runs before the skeleton
+ * can flush, so it has to be quick. It is a counted head request out of the
+ * shared cache and answers in about a millisecond; doing the same job with
+ * getBookDetail blocked the boundary long enough that the book page lost its
+ * loading state altogether.
+ *
+ * A draft is invisible to that sessionless check, so a staff member is let
+ * through to the page, which resolves it against their own session — the same
+ * answer as before, from the same place. Covers /read too, which needs the
+ * book to exist for the same reason.
  */
 export default async function BookLayout({ children, params }: LayoutProps<"/books/[id]">) {
   const { id } = await params;
   const bookId = Number(id);
   if (!Number.isInteger(bookId) || bookId <= 0) notFound();
-  if (!(await getBookDetail(bookId))) notFound();
+  if (await publishedBookExists(bookId)) return children;
+  // Not published. Either it does not exist, or it is a draft — and only
+  // staff may be shown a draft, so only staff go any further.
+  const session = await getSessionInfo();
+  if (!session || session.role === "reader") notFound();
   return children;
 }

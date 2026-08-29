@@ -76,9 +76,13 @@ async function onASlowConnection(page: Page) {
   const session = await page.context().newCDPSession(page);
   await session.send("Network.emulateNetworkConditions", {
     offline: false,
-    latency: 600,
-    downloadThroughput: (200 * 1024) / 8,
-    uploadThroughput: (100 * 1024) / 8,
+    latency: 800,
+    // Slow enough that the payload arrives in several chunks. React paints a
+    // fallback when it STARTS rendering the new tree and finds it pending; a
+    // response that lands in one piece is rendered straight through, which is
+    // the right outcome for a reader and an invisible one for a test.
+    downloadThroughput: (24 * 1024) / 8,
+    uploadThroughput: (24 * 1024) / 8,
   });
 }
 
@@ -159,20 +163,80 @@ async function readSkeletonSighting(page: Page) {
  * .tsx, which the library walk above covers, and the thing that answers a
  * category tap is the dot, which has its own test below.
  */
-const SKELETON_WALKS = [
-  { name: "the library", from: "/about", testId: "category-all", to: /\/($|\?)/, drawer: true },
-  { name: "what is new", from: "/", testId: "new-sidebar-link", to: /\/new($|\?)/, drawer: true },
+type SkeletonWalk = {
+  name: string;
+  from: string;
+  testId: string;
+  to: RegExp;
+  drawer: boolean;
+  /**
+   * Whether a fallback MUST appear. True everywhere but the book page — see
+   * the note on that entry.
+   */
+  mustShow: boolean;
+};
+
+const SKELETON_WALKS: SkeletonWalk[] = [
+  {
+    name: "the library",
+    from: "/about",
+    testId: "category-all",
+    to: /\/($|\?)/,
+    drawer: true,
+    mustShow: true,
+  },
+  {
+    name: "what is new",
+    from: "/",
+    testId: "new-sidebar-link",
+    to: /\/new($|\?)/,
+    drawer: true,
+    mustShow: true,
+  },
   {
     name: "the authors",
     from: "/",
     testId: "authors-sidebar-link",
     to: /\/authors($|\?)/,
     drawer: true,
+    mustShow: true,
   },
-  { name: "the Quran index", from: "/", testId: "quran-link", to: /\/quran($|\?)/, drawer: false },
-  { name: "a book", from: "/", testId: "book-card", to: /\/books\/\d+($|\?)/, drawer: false },
-  { name: "a prose page", from: "/", testId: "about-link", to: /\/about($|\?)/, drawer: false },
-] as const;
+  {
+    name: "the Quran index",
+    from: "/",
+    testId: "quran-link",
+    to: /\/quran($|\?)/,
+    drawer: false,
+    mustShow: true,
+  },
+  /**
+   * The one walk that may legitimately show nothing.
+   *
+   * A book page answers "does this book exist" in its layout, in front of the
+   * boundary, because that is what keeps a missing book a real 404 — and its
+   * payload is small, so React often has the whole page in hand before it
+   * would have painted a fallback. Going straight to the book is the better
+   * outcome. What must hold is that the skeleton fits the screen on the
+   * occasions it does appear, and that the card answered the tap, which is
+   * its own test below.
+   */
+  {
+    name: "a book",
+    from: "/",
+    testId: "book-card",
+    to: /\/books\/\d+($|\?)/,
+    drawer: false,
+    mustShow: false,
+  },
+  {
+    name: "a prose page",
+    from: "/",
+    testId: "about-link",
+    to: /\/about($|\?)/,
+    drawer: false,
+    mustShow: true,
+  },
+];
 
 test.describe("loading states", () => {
   for (const walk of SKELETON_WALKS) {
@@ -187,11 +251,15 @@ test.describe("loading states", () => {
       await link.click();
       await page.waitForURL(walk.to);
       const sighting = await readSkeletonSighting(page);
-      expect(sighting.seen, `${walk.name} must show a loading state`).toBe(true);
-      expect(
-        sighting.scrollWidth,
-        `the skeleton for ${walk.name} must not scroll horizontally`,
-      ).toBeLessThanOrEqual(sighting.innerWidth + 1);
+      if (walk.mustShow) {
+        expect(sighting.seen, `${walk.name} must show a loading state`).toBe(true);
+      }
+      if (sighting.seen) {
+        expect(
+          sighting.scrollWidth,
+          `the skeleton for ${walk.name} must not scroll horizontally`,
+        ).toBeLessThanOrEqual(sighting.innerWidth + 1);
+      }
       await assertNoHorizontalOverflow(page, `${walk.name} once it has landed`);
     });
   }

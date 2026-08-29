@@ -8,13 +8,6 @@ import {
   requestDownload,
   type DownloadManifest,
 } from "@/lib/books/download";
-import {
-  buildBookDocx,
-  buildBookText,
-  exportFileName,
-  saveBlob,
-  textFileExtension,
-} from "@/lib/books/export-book";
 
 /**
  * "Keep a copy of this book."
@@ -95,6 +88,18 @@ export function DownloadBook({
         contentFormat: manifest.contentFormat,
         sourceUrl: `${window.location.origin}/books/${bookId}`,
       };
+
+      /**
+       * The writers arrive only when somebody actually asks for a file.
+       *
+       * lib/books/export-book pulls in the whole docx package (which bundles
+       * JSZip) and markdown-it — together about 550 KB of JavaScript that a
+       * static import put into the first load of EVERY book page, for a
+       * button most readers never press. Imported here it is fetched during
+       * the download the reader has already chosen to wait for.
+       */
+      const { buildBookDocx, buildBookText, exportFileName, saveBlob, textFileExtension } =
+        await import("@/lib/books/export-book");
 
       const fileName =
         format === "docx"

@@ -365,19 +365,6 @@ export async function buildBookDocx(
 /* ── handing the file to the browser ─────────────────────────────────────── */
 
 /** A filename Windows, macOS and Android will all accept. */
-export function exportFileName(title: string, extension: string): string {
-  const safe = title.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, " ").trim().slice(0, 80);
-  return `${safe || "كىتاب"}.${extension}`;
-}
-
-export function saveBlob(blob: Blob, fileName: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  // Revoke on the next tick — Safari needs the URL alive when the click lands.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+// Moved to lib/books/save-file.ts, which carries no heavy imports; re-exported
+// here so the download button can keep taking everything from one module.
+export { exportFileName, saveBlob } from "@/lib/books/save-file";

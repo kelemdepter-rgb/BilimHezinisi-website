@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Icon, type IconName } from "@/components/icons";
 import { saveNoteAction } from "@/app/notes/actions";
 import { MAX_NOTE_CHARS } from "@/lib/notes/limits";
-import { downloadDocx } from "@/lib/notes/export-docx";
 import { sanitizeNoteHtml } from "@/lib/notes/sanitize";
 import {
   MAX_NOTE_LEADING,
@@ -573,9 +572,13 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 className="hbtn"
                 data-testid="export-docx"
                 onClick={() =>
-                  void downloadDocx(title, editorRef.current?.innerHTML ?? "").catch(() =>
-                    setNotice("ھۆججەتنى چىقارغىلى بولمىدى."),
-                  )
+                  // The DOCX writer (docx + JSZip, ~340 KB) is fetched when a
+                  // note is actually exported, not on every visit to the editor.
+                  void import("@/lib/notes/export-docx")
+                    .then(({ downloadDocx }) =>
+                      downloadDocx(title, editorRef.current?.innerHTML ?? ""),
+                    )
+                    .catch(() => setNotice("ھۆججەتنى چىقارغىلى بولمىدى."))
                 }
               >
                 <Icon name="download" />

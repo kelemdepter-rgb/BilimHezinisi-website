@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
-import { exportFileName, saveBlob } from "@/lib/books/export-book";
+import { exportFileName, saveBlob } from "@/lib/books/save-file";
 import { checkQuote, renderQuoteCard } from "@/lib/share/quote-card";
 
 /**

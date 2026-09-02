@@ -29,8 +29,10 @@ export function BookStrip({
   moreHref?: string;
   moreLabel?: string;
   /** An optional line centred in the heading row. Only the new-books strip
-      passes one — the recent-reads strip has nothing to invite anyone to. */
-  note?: { text: string; href: string };
+      passes one — the recent-reads strip has nothing to say. Deliberately
+      plain text, not a link: the books it talks about are in the row right
+      underneath, so there is nowhere worth sending anyone. */
+  note?: string;
   testId: string;
 }) {
   if (books.length === 0) return null;
@@ -49,13 +51,12 @@ export function BookStrip({
              it drops to a centred line of its own — `order-last` puts it under
              the row rather than between the two, which would strand «ھەممىسى»
              on a third line. */
-          <Link
-            href={note.href}
+          <p
             data-testid={`${testId}-hint`}
-            className="order-last flex min-h-11 w-full items-center justify-center text-center text-[15.5px] leading-7 text-am hover:underline sm:order-none sm:w-auto sm:flex-1"
+            className="order-last w-full text-center text-[15.5px] leading-7 text-am sm:order-none sm:w-auto sm:flex-1"
           >
-            {note.text}
-          </Link>
+            {note}
+          </p>
         )}
         {moreHref && (
           <Link

@@ -141,14 +141,20 @@ test.describe("the invitation above the shelf", () => {
   /** Tailwind's `sm` breakpoint, where the line moves into the row. */
   const SM = 640;
 
-  test("says the library is growing, in the site's own type, and leads to /new", async ({
+  test("says the library is growing, in the site's own type, and says only that", async ({
     page,
   }) => {
     await page.goto("/");
     const hint = page.getByTestId("new-strip-hint");
 
     await expect(hint).toHaveText("يېڭى كىتابلار قوشۇلۇۋاتىدۇ، زىيارەت قىلىپ تۇرۇڭ…");
-    await expect(hint).toHaveAttribute("href", "/new");
+
+    // Plain text on purpose. The books it announces are in the row directly
+    // below, so there is nowhere worth sending anyone — and a line that looks
+    // tappable but is not would be worse than either.
+    await expect(hint).toHaveJSProperty("tagName", "P");
+    await expect(page.locator("a[data-testid=new-strip-hint]")).toHaveCount(0);
+    await expect(hint.locator("a")).toHaveCount(0);
 
     const style = await hint.evaluate((node) => {
       const own = getComputedStyle(node);
@@ -182,9 +188,10 @@ test.describe("the invitation above the shelf", () => {
     expect(style.family, "the line must inherit the site font").toBe(bodyFamily);
     expect(style.color, "the line must use the --am token, not a new colour").toBe(style.token);
 
+    // Tapping it must do nothing at all — no navigation, no route change.
     await hint.click();
-    await expect(page).toHaveURL(/\/new$/);
-    await expect(page.getByRole("heading", { name: "يېڭى كىتابلار" })).toBeVisible();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByTestId("new-strip")).toBeVisible();
   });
 
   test("sits centred in the row, and drops to its own line on a phone", async ({ page }) => {
@@ -242,7 +249,6 @@ test.describe("the invitation above the shelf", () => {
         Math.abs(hint.x + hint.width / 2 - width / 2),
         "the line must be centred on the row",
       ).toBeLessThanOrEqual(2);
-      expect(hint.height, "a line you can tap needs 44 px").toBeGreaterThanOrEqual(44);
     }
 
     await assertNoHorizontalOverflow(page);

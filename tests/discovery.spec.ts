@@ -131,30 +131,31 @@ test.describe("what is new", () => {
 });
 
 /**
- * The line in the library toolbar saying the shelf is still growing.
+ * The centred line in the new-books heading row saying the shelf is growing.
  *
- * It is aimed at a visitor arriving for the first time, so every check here
- * runs signed out — and it sits in the one row that already carries the count,
- * the sort select and both view buttons, which is why so much of this block is
- * about what the row must NOT do.
+ * It is aimed at a visitor arriving for the first time, so every check runs
+ * signed out. It shares its row with the heading and «ھەممىسى», and on a phone
+ * that row has no space to spare — which is what most of this block is about.
  */
-test.describe("the toolbar's invitation", () => {
+test.describe("the invitation above the shelf", () => {
+  /** Tailwind's `sm` breakpoint, where the line moves into the row. */
+  const SM = 640;
+
   test("says the library is growing, in the site's own type, and leads to /new", async ({
     page,
   }) => {
     await page.goto("/");
-    const hint = page.getByTestId("library-new-hint");
+    const hint = page.getByTestId("new-strip-hint");
 
     await expect(hint).toHaveText("يېڭى كىتابلار قوشۇلۇۋاتىدۇ، زىيارەت قىلىپ تۇرۇڭ…");
     await expect(hint).toHaveAttribute("href", "/new");
 
     const style = await hint.evaluate((node) => {
       const own = getComputedStyle(node);
-      const root = getComputedStyle(document.documentElement);
       // A probe painted with the token proves the link's colour IS the token,
       // whichever theme is on — comparing to a hex would only pin today's one.
       const probe = document.createElement("span");
-      probe.style.color = root.getPropertyValue("--am");
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--am");
       document.body.append(probe);
       const token = getComputedStyle(probe).color;
       probe.remove();
@@ -162,17 +163,21 @@ test.describe("the toolbar's invitation", () => {
         size: parseFloat(own.fontSize),
         family: own.fontFamily,
         color: own.color,
+        align: own.textAlign,
         token,
       };
     });
-    const countSize = await page
-      .getByTestId("library-count")
+    const moreSize = await page
+      .getByTestId("new-strip-more")
       .evaluate((node) => parseFloat(getComputedStyle(node).fontSize));
     const bodyFamily = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
 
-    // Noticeably larger than the count it sits beside, but no page heading.
-    expect(style.size, "the invitation must outsize the book count").toBeGreaterThan(countSize);
+    // Bigger than the «ھەممىسى» link it shares the row with, but no heading.
+    expect(style.size, "the invitation must outsize the row's other link").toBeGreaterThan(
+      moreSize,
+    );
     expect(style.size, "…without competing with a heading").toBeLessThanOrEqual(16);
+    expect(style.align, "the line is centred").toBe("center");
     // Inherited, not declared: no @font-face and no font-family of its own.
     expect(style.family, "the line must inherit the site font").toBe(bodyFamily);
     expect(style.color, "the line must use the --am token, not a new colour").toBe(style.token);
@@ -182,23 +187,83 @@ test.describe("the toolbar's invitation", () => {
     await expect(page.getByRole("heading", { name: "يېڭى كىتابلار" })).toBeVisible();
   });
 
-  test("never costs the toolbar a control, before or after a scroll", async ({ page }) => {
+  test("sits centred in the row, and drops to its own line on a phone", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByTestId("library-new-hint")).toBeVisible();
+    const width = page.viewportSize()!.width;
+
+    // The strip arrives behind Suspense, so under load `boundingBox()` can be
+    // read before the row exists and hands back null. Wait for all three, and
+    // re-read them together — a box measured across a re-render is worse than
+    // no box at all.
+    const parts = {
+      heading: page.locator("#new-strip-heading"),
+      hint: page.getByTestId("new-strip-hint"),
+      more: page.getByTestId("new-strip-more"),
+    };
+    for (const [name, locator] of Object.entries(parts)) {
+      await expect(locator, `${name} must render`).toBeVisible();
+    }
+    let heading!: NonNullable<Awaited<ReturnType<typeof parts.heading.boundingBox>>>;
+    let hint!: typeof heading;
+    let more!: typeof heading;
+    await expect(async () => {
+      const boxes = await Promise.all([
+        parts.heading.boundingBox(),
+        parts.hint.boundingBox(),
+        parts.more.boundingBox(),
+      ]);
+      expect(boxes.every(Boolean), "every part of the row must have a box").toBe(true);
+      [heading, hint, more] = boxes as [typeof heading, typeof heading, typeof heading];
+    }).toPass({ timeout: 5000 });
+
+    if (width >= SM) {
+      // RTL: the heading is furthest right, then the line, then «ھەممىسى».
+      expect(hint.x + hint.width, "the line must sit start-ward of the heading").toBeLessThanOrEqual(
+        heading.x + 1,
+      );
+      expect(more.x + more.width, "«ھەممىسى» must stay at the far end").toBeLessThanOrEqual(
+        hint.x + 1,
+      );
+      // Centred in the gap the two of them leave, give or take a pixel.
+      const gapMiddle = (more.x + more.width + heading.x) / 2;
+      expect(
+        Math.abs(hint.x + hint.width / 2 - gapMiddle),
+        "the line must be centred between them",
+      ).toBeLessThanOrEqual(2);
+    } else {
+      // No room beside them: its own line, under both, centred on the row.
+      expect(hint.y, "the line must drop below the heading").toBeGreaterThanOrEqual(
+        heading.y + heading.height - 1,
+      );
+      expect(hint.y, "…and below «ھەممىسى» too").toBeGreaterThanOrEqual(
+        more.y + more.height - 1,
+      );
+      expect(
+        Math.abs(hint.x + hint.width / 2 - width / 2),
+        "the line must be centred on the row",
+      ).toBeLessThanOrEqual(2);
+      expect(hint.height, "a line you can tap needs 44 px").toBeGreaterThanOrEqual(44);
+    }
+
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test("never costs the page a control, before or after a scroll", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("new-strip-hint")).toBeVisible();
 
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await page.evaluate(() => window.scrollTo(0, 0));
 
-    for (const testId of ["library-sort", "view-grid", "view-list"]) {
+    // The row's own link, and the library's controls under it.
+    for (const testId of ["new-strip-more", "library-sort", "view-grid", "view-list"]) {
       const control = page.getByTestId(testId);
       await expect(control, `${testId} must still be on screen`).toBeVisible();
       const box = (await control.boundingBox())!;
-      expect(box.height, `${testId} must keep a 44 px touch target`).toBeGreaterThanOrEqual(44);
       expect(box.x, `${testId} must not hang off the start edge`).toBeGreaterThanOrEqual(0);
-      expect(
-        box.x + box.width,
-        `${testId} must not hang off the end edge`,
-      ).toBeLessThanOrEqual(page.viewportSize()!.width);
+      expect(box.x + box.width, `${testId} must not hang off the end edge`).toBeLessThanOrEqual(
+        page.viewportSize()!.width,
+      );
     }
 
     // Visible is not enough — something could be sitting on top of them.
@@ -215,39 +280,36 @@ test.describe("the toolbar's invitation", () => {
   /**
    * 360 px is the floor CLAUDE.md names and the suite's own projects start at
    * 375, so — like domain.spec.ts — this sets its own viewport and runs once
-   * rather than adding a fourth project. The filtered view is here too: it
-   * carries the longest count text there is («<category>: N كىتاب»), which is
-   * the case most likely to crowd the row.
+   * rather than adding a fourth project.
+   *
+   * The filtered view is checked too, but for overflow only: the home page
+   * asks for the new books with no category, so a filtered view has no strip
+   * (app/(library)/page.tsx skips listNewBooks when `cat` is set) and
+   * therefore no line either.
    */
-  test("holds at 360 px, on the shelf and on a filtered view", async ({ page, isMobile }) => {
+  test("holds at 360 px, and a filtered view stays whole without it", async ({
+    page,
+    isMobile,
+  }) => {
     test.skip(!!isMobile, "sets its own viewport; runs once, from the desktop project");
     await page.setViewportSize({ width: 360, height: 640 });
 
     await page.goto("/");
+    await expect(page.getByTestId("new-strip-hint")).toBeVisible();
+    await assertNoHorizontalOverflow(page);
+
+    for (const testId of ["new-strip-more", "library-sort", "view-grid", "view-list"]) {
+      const box = (await page.getByTestId(testId).boundingBox())!;
+      expect(box.x, `${testId} must not hang off the start edge`).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width, `${testId} must fit the screen`).toBeLessThanOrEqual(360);
+    }
+
     const category = page.locator('a[href*="cat="]').first();
-    const filtered = (await category.count()) ? await category.getAttribute("href") : null;
-
-    for (const path of ["/", filtered].filter((value): value is string => value !== null)) {
-      await page.goto(path);
-      await expect(page.getByTestId("library-new-hint"), `${path}: the line must show`).toBeVisible();
+    if (await category.count()) {
+      await page.goto((await category.getAttribute("href"))!);
+      await expect(page.getByTestId("new-strip-hint")).toHaveCount(0);
+      await expect(page.getByTestId("library-sort")).toBeVisible();
       await assertNoHorizontalOverflow(page);
-
-      for (const testId of ["library-sort", "view-grid", "view-list"]) {
-        const box = (await page.getByTestId(testId).boundingBox())!;
-        expect(box, `${path}: ${testId} must have a box`).not.toBeNull();
-        expect(box.x, `${path}: ${testId} must not hang off the start edge`).toBeGreaterThanOrEqual(
-          0,
-        );
-        expect(box.x + box.width, `${path}: ${testId} must fit the screen`).toBeLessThanOrEqual(360);
-        expect(box.height, `${path}: ${testId} must keep 44 px`).toBeGreaterThanOrEqual(44);
-      }
-
-      // The row may wrap onto more lines at 360 px — it must not wrap the
-      // controls off the first screen while doing it.
-      const sort = (await page.getByTestId("library-sort").boundingBox())!;
-      expect(sort.y + sort.height, `${path}: the controls must stay above the fold`).toBeLessThanOrEqual(
-        640,
-      );
     }
   });
 });

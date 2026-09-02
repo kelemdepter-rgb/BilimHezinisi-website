@@ -18,6 +18,7 @@ export function BookStrip({
   hrefFor,
   moreHref,
   moreLabel,
+  note,
   testId,
 }: {
   heading: string;
@@ -27,6 +28,9 @@ export function BookStrip({
   hrefFor: (book: LibraryBook) => string;
   moreHref?: string;
   moreLabel?: string;
+  /** An optional line centred in the heading row. Only the new-books strip
+      passes one — the recent-reads strip has nothing to invite anyone to. */
+  note?: { text: string; href: string };
   testId: string;
 }) {
   if (books.length === 0) return null;
@@ -34,11 +38,25 @@ export function BookStrip({
 
   return (
     <section aria-labelledby={headingId} className="mb-6">
-      <div className="mb-3 flex items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
         <h2 id={headingId} className="flex items-center gap-2 text-[15px] font-bold">
           <Icon name={icon} className="text-am" />
           {heading}
         </h2>
+        {note && (
+          /* Centred in the gap between the heading and «ھەممىسى» on a wide
+             screen. On a phone that gap is far too narrow for a sentence, so
+             it drops to a centred line of its own — `order-last` puts it under
+             the row rather than between the two, which would strand «ھەممىسى»
+             on a third line. */
+          <Link
+            href={note.href}
+            data-testid={`${testId}-hint`}
+            className="order-last flex min-h-11 w-full items-center justify-center text-center text-[15.5px] leading-7 text-am hover:underline sm:order-none sm:w-auto sm:flex-1"
+          >
+            {note.text}
+          </Link>
+        )}
         {moreHref && (
           <Link
             href={moreHref}

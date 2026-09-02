@@ -141,6 +141,10 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
         covers={covers}
         hrefFor={(book) => `/books/${book.id}`}
         moreHref="/new"
+        /* The library grows every week, and a first-time visitor has no way to
+           know that from a page of covers. Saying so is only half of it — the
+           line is a link, so the invitation lands somewhere. */
+        note={{ text: "يېڭى كىتابلار قوشۇلۇۋاتىدۇ، زىيارەت قىلىپ تۇرۇڭ…", href: "/new" }}
       />
 
       <LibraryBrowser

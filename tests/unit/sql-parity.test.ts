@@ -68,6 +68,11 @@ beforeAll(async () => {
   await db.exec(`create role anon; create role authenticated;`);
 
   await db.exec(`
+    create table public.categories (
+      id bigserial primary key,
+      parent_id bigint references public.categories (id) on delete cascade,
+      name text not null
+    );
     create table public.books (
       id bigserial primary key,
       title text not null default '',
@@ -96,6 +101,11 @@ beforeAll(async () => {
   // still agrees with the client after the speed work.
   await db.exec(readFileSync(join(MIGRATIONS, "0019_one_matcher.sql"), "utf8"));
   await db.exec(readFileSync(join(MIGRATIONS, "0020_faster_one_matcher.sql"), "utf8"));
+  // 0023 rewrites search_books once more — this time so a category means the
+  // category and everything beneath it. It must change WHICH books are looked
+  // at and nothing whatever about what matches inside them, which is exactly
+  // what the assertions below still check, now against the shipped function.
+  await db.exec(readFileSync(join(MIGRATIONS, "0023_search_category_tree.sql"), "utf8"));
 
   await db.exec(`
     insert into public.books (id, title, author, status)

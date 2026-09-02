@@ -293,6 +293,23 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Choosing which part of the library to search, from inside the box.
+         * Anonymous — the reader it was built for usually has no account — and
+         * checked at every width, because the control has to fit a 360 px
+         * header as well as a 1280 px one.
+         */
+        name: `scope-${viewport.name}`,
+        testMatch: /search-scope\.spec\.ts/,
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // The on-screen Uyghur keyboard and recent searches: both exist for a
         // phone, so both are checked at every width.
         name: `keyboard-${viewport.name}`,

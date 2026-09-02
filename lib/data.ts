@@ -1,7 +1,8 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { CACHE_SECONDS, CATEGORIES_TAG, cachedClient } from "@/lib/cache";
+import { BOOKS_TAG, CACHE_SECONDS, CATEGORIES_TAG, cachedClient } from "@/lib/cache";
+import { rollUpCategoryCounts } from "@/lib/library-types";
 import { timed } from "@/lib/perf/timing";
 import type { Category, Role, SessionInfo } from "@/lib/types";
 
@@ -82,3 +83,45 @@ export async function getAdminCounts(): Promise<{ books: number; categories: num
   ]);
   return { books: books.count ?? 0, categories: categories.count ?? 0 };
 }
+
+/**
+ * How many published books sit in each category, before the tree is walked.
+ *
+ * One round trip for the whole library — a page of category_id values, tallied
+ * here — rather than a counted query per category. At 42 books it is a few
+ * kilobytes; at a few hundred it still is, and PostgREST's own row ceiling is
+ * far above either.
+ *
+ * Tagged BOOKS_TAG, so every write the site itself makes drops it. A book
+ * written STRAIGHT into Postgres — the migration script, a row typed into the
+ * SQL editor — has no tag to drop, so a count can be up to CACHE_SECONDS out
+ * of date. For a number beside a category name that is a fair trade; the shelf
+ * it points at is uncached and always current.
+ */
+const loadDirectBookCounts = unstable_cache(
+  async (): Promise<Record<number, number>> => {
+    const supabase = cachedClient();
+    if (!supabase) return {};
+    const { data } = await supabase.from("books").select("category_id").eq("status", "published");
+    const direct: Record<number, number> = {};
+    for (const row of (data as { category_id: number | null }[] | null) ?? []) {
+      if (row.category_id == null) continue;
+      direct[row.category_id] = (direct[row.category_id] ?? 0) + 1;
+    }
+    return direct;
+  },
+  ["category-book-counts"],
+  { tags: [BOOKS_TAG], revalidate: CACHE_SECONDS },
+);
+
+/**
+ * The number shown beside every category, in the sidebar, the drawer and the
+ * search box's scope picker. cache() so those three ask once between them.
+ */
+export const getCategoryCounts = cache(async (): Promise<Record<number, number>> => {
+  const [categories, direct] = await Promise.all([
+    getCategories(),
+    timed("category-counts", () => loadDirectBookCounts()),
+  ]);
+  return rollUpCategoryCounts(categories, direct);
+});

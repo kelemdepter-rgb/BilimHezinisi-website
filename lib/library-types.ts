@@ -82,3 +82,27 @@ export function categoryTrail(categories: Category[], categoryId: number | null)
   }
   return trail;
 }
+
+/**
+ * Published-book counts per category, rolled up the tree.
+ *
+ * A parent's number includes everything nested beneath it, because that is
+ * what opening the parent actually shows — listBooks resolves a category
+ * through categoryWithDescendants, and after migration 0023 so does
+ * search_books. A number that disagreed with the shelf behind it would be
+ * worse than no number at all.
+ *
+ * `direct` holds only the books whose own category_id is that category.
+ */
+export function rollUpCategoryCounts(
+  categories: Category[],
+  direct: Record<number, number>,
+): Record<number, number> {
+  const totals: Record<number, number> = {};
+  for (const category of categories) {
+    let sum = 0;
+    for (const id of categoryWithDescendants(categories, category.id)) sum += direct[id] ?? 0;
+    totals[category.id] = sum;
+  }
+  return totals;
+}

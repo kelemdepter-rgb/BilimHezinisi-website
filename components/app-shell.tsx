@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
+import { CategoryScope } from "@/components/search/category-scope";
 import { SearchField } from "@/components/search/search-field";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LinkPending } from "@/components/nav-pending";
@@ -32,6 +33,12 @@ type AppShellProps = {
    */
   looksSignedIn: boolean;
   categories: Category[];
+  /**
+   * Published books per category, rolled up the tree. The sidebar, the drawer
+   * and the search box's scope picker all show the same number, and it is the
+   * number the shelf behind the category actually holds.
+   */
+  categoryCounts: Record<number, number>;
   children: ReactNode;
 };
 
@@ -40,6 +47,7 @@ export function AppShell({
   sessionPromise,
   looksSignedIn,
   categories,
+  categoryCounts,
   children,
 }: AppShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -131,6 +139,16 @@ export function AppShell({
               variant="sbox"
               testId="header-search"
             />
+            {/* The label collapses to the icon below lg. Between md and lg this
+                row still carries the menu button as well as the brand and four
+                end controls, which leaves the pill about 300 px — enough for
+                the input OR a full scope label, not both. */}
+            <CategoryScope
+              categories={categories}
+              counts={categoryCounts}
+              collapseLabel
+              testId="header-scope"
+            />
           </form>
 
           <div className="ms-auto flex shrink-0 items-center gap-0.5 sm:gap-1">
@@ -165,6 +183,12 @@ export function AppShell({
                 testId="header-search-mobile"
                 autoFocus
               />
+              {/* Full width here, so the label fits even at 360 px. */}
+              <CategoryScope
+                categories={categories}
+                counts={categoryCounts}
+                testId="header-scope-mobile"
+              />
             </form>
           </div>
         )}
@@ -177,6 +201,7 @@ export function AppShell({
         >
           <SidebarContent
             categories={categories}
+            categoryCounts={categoryCounts}
             sessionPromise={sessionPromise}
             looksSignedIn={looksSignedIn}
           />
@@ -260,6 +285,7 @@ export function AppShell({
         >
           <SidebarContent
             categories={categories}
+            categoryCounts={categoryCounts}
             sessionPromise={sessionPromise}
             looksSignedIn={looksSignedIn}
           />
@@ -271,16 +297,26 @@ export function AppShell({
 
 function SidebarContent({
   categories,
+  categoryCounts,
   sessionPromise,
   looksSignedIn,
 }: {
   categories: Category[];
+  categoryCounts: Record<number, number>;
   sessionPromise: Promise<SessionInfo | null>;
   looksSignedIn: boolean;
 }) {
   const topLevel = categories.filter((category) => category.parent_id === null);
   const childrenOf = (parentId: number) =>
     categories.filter((category) => category.parent_id === parentId);
+
+  /**
+   * Nothing at all came back means the counts are UNKNOWN, not zero — a read
+   * that failed must never turn every category in the sidebar into a dead row.
+   * Then no numbers are shown and every category stays a link.
+   */
+  const countOf = (categoryId: number): number | null =>
+    Object.keys(categoryCounts).length === 0 ? null : (categoryCounts[categoryId] ?? 0);
 
   return (
     <>
@@ -345,12 +381,12 @@ function SidebarContent({
           <ul className="space-y-0.5">
             {topLevel.map((category) => (
               <li key={category.id}>
-                <CategoryRow category={category} />
+                <CategoryRow category={category} count={countOf(category.id)} />
                 {childrenOf(category.id).length > 0 && (
                   <ul className="ms-4 mt-0.5 space-y-0.5 border-s border-bd ps-2">
                     {childrenOf(category.id).map((child) => (
                       <li key={child.id}>
-                        <CategoryRow category={child} />
+                        <CategoryRow category={child} count={countOf(child.id)} />
                       </li>
                     ))}
                   </ul>
@@ -364,16 +400,45 @@ function SidebarContent({
   );
 }
 
-function CategoryRow({ category }: { category: Category }) {
+/**
+ * A category, its published-book count, and — when that count is zero — no
+ * way in. An empty category stays on the list rather than disappearing: the
+ * owner asked to see that it exists and is waiting for books.
+ */
+function CategoryRow({ category, count }: { category: Category; count: number | null }) {
+  const icon = <Icon name={(category.icon || "folder") as IconName} className="text-am" />;
+  const name = <span className="min-w-0 flex-1 truncate">{category.name}</span>;
+  const tally =
+    count === null ? null : (
+      <span className="shrink-0 text-[12px] tabular-nums text-ink3">{count}</span>
+    );
+  const shape = "flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px]";
+
+  if (count === 0) {
+    return (
+      <span
+        data-testid="category-empty"
+        data-category-id={category.id}
+        aria-disabled="true"
+        className={`${shape} text-ink2 opacity-50`}
+      >
+        {icon}
+        {name}
+        {tally}
+      </span>
+    );
+  }
+
   return (
     <Link
       href={`/?cat=${category.id}`}
       data-testid="category-link"
       data-category-id={category.id}
-      className="flex min-h-11 items-center gap-2.5 rounded-[var(--radius)] px-3 py-2 text-[14px] text-ink2 hover:bg-bg2 hover:text-ink"
+      className={`${shape} text-ink2 hover:bg-bg2 hover:text-ink`}
     >
-      <Icon name={(category.icon || "folder") as IconName} className="text-am" />
-      <span className="min-w-0 truncate">{category.name}</span>
+      {icon}
+      {name}
+      {tally}
       <LinkPending />
     </Link>
   );

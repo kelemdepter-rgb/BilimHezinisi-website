@@ -98,7 +98,13 @@ export function SearchField({
     input.form?.requestSubmit();
   }
 
-  const inputClass = variant === "sbox" ? "sinput" : "field min-w-48 flex-1";
+  /**
+   * The floor on the header box's input is what keeps the scope picker beside
+   * it honest: a long category name truncates its own label rather than eating
+   * the space someone is typing in. 6rem is about eight Uyghur characters,
+   * which is the least this box can be and still be a search box.
+   */
+  const inputClass = variant === "sbox" ? "sinput min-w-24" : "field min-w-48 flex-1";
 
   return (
     <div ref={wrapperRef} className={variant === "sbox" ? "contents" : "relative min-w-48 flex-1"}>

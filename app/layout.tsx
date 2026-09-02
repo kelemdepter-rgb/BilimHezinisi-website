@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import "./globals.css";
 import { IconSprite } from "@/components/icons";
 import { AppShell } from "@/components/app-shell";
-import { getCategories, getSessionInfo } from "@/lib/data";
+import { getCategories, getCategoryCounts, getSessionInfo } from "@/lib/data";
 import { THEME_COLOR } from "./manifest";
 import { OfflineBridge } from "@/components/pwa/offline-bridge";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/seo";
@@ -93,7 +93,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
    * authorisation decision, and the controls themselves come from the
    * verified session.
    */
-  const categories = await getCategories();
+  // The book counts shown beside each category come out of the same shared
+  // cache and are asked for alongside the tree rather than after it.
+  const [categories, categoryCounts] = await Promise.all([getCategories(), getCategoryCounts()]);
   const sessionPromise = getSessionInfo();
   const looksSignedIn = cookieStore
     .getAll()
@@ -149,6 +151,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           sessionPromise={sessionPromise}
           looksSignedIn={looksSignedIn}
           categories={categories}
+          categoryCounts={categoryCounts}
         >
           {children}
         </AppShell>

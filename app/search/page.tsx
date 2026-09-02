@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { CategoryScope } from "@/components/search/category-scope";
 import { SearchField } from "@/components/search/search-field";
 import { BookResults, type BookGroup } from "@/components/search/book-results";
-import { getCategories } from "@/lib/data";
+import { getCategories, getCategoryCounts } from "@/lib/data";
 import { runBookSearch, type SearchHit } from "@/lib/search/books";
 
 /**
@@ -57,7 +58,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   const pageNo = Math.min(MAX_PAGE, Math.max(1, Number(params.p ?? 1) || 1));
   const offset = (pageNo - 1) * PAGE_SIZE;
 
-  const categories = await getCategories();
+  const [categories, categoryCounts] = await Promise.all([getCategories(), getCategoryCounts()]);
 
   const { hits, elapsedMs, failed, moreAvailable, tooCommon } = await runBookSearch({
     query,
@@ -91,14 +92,16 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
           ariaLabel="كۇتۇپخانىدىن ئىزدەش"
           testId="search-input"
         />
-        <select className="field w-auto" name="cat" defaultValue={categoryId ? String(categoryId) : ""} aria-label="تۈر">
-          <option value="">ھەممە تۈرلەر</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
+        {/* The same control as the header's, so there is one design and not
+            two. This is the ONE place it reflects the URL: the reader can see
+            and change what is filtering the results in front of them. */}
+        <CategoryScope
+          categories={categories}
+          counts={categoryCounts}
+          value={categoryId && Number.isFinite(categoryId) ? categoryId : null}
+          variant="field"
+          testId="search-scope"
+        />
         <button type="submit" className="btn-am" data-testid="search-submit">
           <Icon name="search" />
           ئىزدەش

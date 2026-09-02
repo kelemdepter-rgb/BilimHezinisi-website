@@ -8,7 +8,6 @@ import {
   MODEL_INFO,
   SELECTABLE_MODELS,
   URL_PRICING,
-  URL_TERMS,
   isSelectableModel,
   modelOptionLabel,
 } from "@/lib/ai/models";
@@ -18,10 +17,9 @@ import { useAiState } from "@/lib/ai/use-ai-state";
 /**
  * The AI settings screen.
  *
- * Order on this page is not decoration. The honest explanation of what Google
- * does with free-tier data comes FIRST, in full, and not behind a link — and
- * only after it does the switch appear that turns any of this on. A reader who
- * never touches the switch never sees a key field and is never asked again.
+ * The switch gates everything: until a reader turns it on there is no key
+ * field, no model picker and no way to send anything anywhere. A reader who
+ * never touches the switch is never asked again.
  */
 export function AiSettings() {
   const { enabled, model, usage, hasKey } = useAiState();
@@ -53,53 +51,6 @@ export function AiSettings() {
         توركۆرگۈڭىزدىن بىۋاسىتە Google غا بارىدۇ — بۇ كۇتۇپخانىنىڭ مۇلازىمېتىرىغا
         كەلمەيدۇ.
       </p>
-
-      {/* ── The warning, before anything that could turn this on ─────────── */}
-      <section
-        className="mt-5 rounded-[var(--radius-lg)] border border-bd2 bg-ab2 p-5 sm:p-6"
-        aria-labelledby="ai-privacy"
-        data-testid="ai-privacy-notice"
-      >
-        <h2 id="ai-privacy" className="flex items-center gap-2 text-[15px] font-bold">
-          <Icon name="shield" className="text-am" />
-          ئېچىشتىن بۇرۇن بۇنى بىلىۋېلىڭ
-        </h2>
-        <ul className="mt-3 space-y-2.5 text-[13px] leading-7 text-ink2">
-          <li>
-            سىز يازغان سوئال ۋە ئۇنىڭ بىلەن بىللە ئەۋەتىلگەن كىتاب تېكىستى{" "}
-            <b>Google غا بارىدۇ</b>.
-          </li>
-          <li>
-            Google نىڭ شەرتلىرىدە ئېيتىلىشىچە، <b>ھەقسىز</b> دەرىجىدە Google سىز ئەۋەتكەن
-            مەزمۇن ۋە قايتۇرۇلغان جاۋابنى ئۆز مەھسۇلاتلىرىنى ياخشىلاش ۋە تەرەققىي
-            قىلدۇرۇشقا ئىشلىتىدۇ، ھەمدە <b>ئادەم</b> بۇ مەزمۇننى ئوقۇشى، بەلگە قويۇشى ۋە
-            بىر تەرەپ قىلىشى مۇمكىن. (Google بۇنداق چاغدا ئۇچۇرنى Google ھېساباتىڭىز، API
-            ئاچقۇچىڭىز ۋە Cloud تۈرىڭىزدىن ئايرىۋېتىدىغانلىقىنى ئېيتىدۇ.)
-          </li>
-          <li>
-            <b>پۇللۇق</b> دەرىجىدە Google بۇ مەزمۇننى مەھسۇلات ياخشىلاشقا ئىشلەتمەيدۇ.
-          </li>
-          <li>
-            بۇ كۇتۇپخانا سوئالىڭىزنى ۋە جاۋابنى{" "}
-            <b>كۆرمەيدۇ، ساقلىمايدۇ، خاتىرىلىمەيدۇ</b> — ئۇلار بىزنىڭ مۇلازىمېتىرىمىزدىن
-            ئۆتمەيدۇ.
-          </li>
-          <li>
-            سۈنئىي ئىدراكنى ھېچقاچان ئاچمىسىڭىزمۇ كىتاب ئوقۇش، ئىزدەش، خەتكۈچ، خاتىرە ۋە
-            قۇرئان بۆلىكى تولۇق ئىشلەيدۇ.
-          </li>
-        </ul>
-        <a
-          href={URL_TERMS}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-am underline underline-offset-4"
-          data-testid="ai-terms-link"
-        >
-          <Icon name="link" />
-          Google نىڭ Gemini API شەرتلىرى
-        </a>
-      </section>
 
       {/* ── The explicit action ──────────────────────────────────────────── */}
       <section className="paper grain mt-4 p-5 sm:p-6" aria-labelledby="ai-switch">
@@ -190,12 +141,6 @@ export function AiSettings() {
               <Icon name="chart" className="text-am" />
               بۈگۈنكى ئىشلىتىش
             </h2>
-            <p className="mt-2 text-[13px] leading-7 text-ink2">
-              بۇ سانلار پەقەت مۇشۇ توركۆرگۈدە ھېسابلىنىدۇ. Google نىڭ ھەقسىز چېكى ئاچقۇچقا
-              قاراپ ۋە ۋاقىت ئۆتۈشى بىلەن ئۆزگىرىدۇ — شۇڭا بىز ئويدۇرما بىر ساننى
-              كۆرسەتمەيمىز؛ ھەققىڭىز توشسا Google نىڭ ئۆزى ئېيتقان ئۇچۇرنى ئۇيغۇرچە قىلىپ
-              كۆرسىتىمىز.
-            </p>
             <dl className="mt-3 grid grid-cols-3 gap-2.5 text-center" data-testid="ai-usage">
               <div className="rounded-[var(--radius)] bg-ab px-2 py-3">
                 <dt className="text-[11.5px] text-ink3">سوئال</dt>

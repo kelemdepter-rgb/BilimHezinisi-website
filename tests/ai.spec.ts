@@ -40,10 +40,27 @@ async function assertNoHorizontalOverflow(page: Page) {
   );
 }
 
+/**
+ * Tick the switch, and keep at it until it stays ticked.
+ *
+ * The box is a controlled input fed from localStorage, so a click that lands
+ * before React has hydrated flips the DOM and is then rendered straight back —
+ * Playwright calls that "clicking the checkbox did not change its state". The
+ * notice that used to stand above the switch gave hydration a head start this
+ * now has to ask for outright.
+ */
+async function tickTheSwitch(page: Page) {
+  const toggle = page.getByTestId("ai-enable");
+  await expect(async () => {
+    await toggle.check();
+    await expect(toggle).toBeChecked();
+  }).toPass({ timeout: 15_000 });
+}
+
 /** Turn AI on and save the given keys, the way a reader would. */
 async function enableWithKeys(page: Page, keys: readonly string[]) {
   await page.goto("/my/ai");
-  await page.getByTestId("ai-enable").check();
+  await tickTheSwitch(page);
   for (const [slot, key] of keys.entries()) {
     await page.getByTestId(`ai-key-${slot}`).fill(key);
   }
@@ -112,32 +129,6 @@ test.describe("a reader who has not set anything up", () => {
     // And the library never asks: the home page says nothing about it.
     await page.goto("/");
     await expect(page.getByText("ئاچقۇچ")).toHaveCount(0);
-    await assertNoHorizontalOverflow(page);
-  });
-
-  test("is told what Google does with free-tier data, before the key field", async ({ page }) => {
-    await page.goto("/my/ai");
-
-    const notice = page.getByTestId("ai-privacy-notice");
-    await expect(notice).toBeVisible();
-    await expect(notice).toContainText("Google غا بارىدۇ");
-    await expect(notice).toContainText("ئادەم");
-    await expect(notice).toContainText("كۆرمەيدۇ، ساقلىمايدۇ، خاتىرىلىمەيدۇ");
-    await expect(page.getByTestId("ai-terms-link")).toHaveAttribute(
-      "href",
-      "https://ai.google.dev/gemini-api/terms",
-    );
-
-    // Not behind a link, not below the fold of a disclosure: it is above the
-    // switch in the document, and the key field does not exist until after the
-    // switch has been used.
-    const noticeBox = await notice.boundingBox();
-    const switchBox = await page.getByTestId("ai-enable").boundingBox();
-    expect(noticeBox!.y).toBeLessThan(switchBox!.y);
-
-    await page.getByTestId("ai-enable").check();
-    const keyBox = await page.getByTestId("ai-key-0").boundingBox();
-    expect(noticeBox!.y).toBeLessThan(keyBox!.y);
     await assertNoHorizontalOverflow(page);
   });
 });
@@ -354,7 +345,7 @@ test.describe("automatic failover", () => {
 test.describe("choosing a model", () => {
   test("every model is offered with its price badge, closed and open", async ({ page }) => {
     await page.goto("/my/ai");
-    await page.getByTestId("ai-enable").check();
+    await tickTheSwitch(page);
 
     const picker = page.getByTestId("ai-model");
     // The closed control shows the selected option's own text, badge included.

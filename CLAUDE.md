@@ -249,8 +249,11 @@ put a bill on the owner and make us the custodian of other people's secrets.
 - Exactly three models are offered (`lib/ai/models.ts`), each badged (ھەقسىز) or
   (پۇللۇق). A paid-only model on a key without billing gets its own named Uyghur
   message — never a generic error and never a silent downgrade.
-- Before a reader can enable AI they are shown, in Uyghur, what Google does with
-  free-tier data. That notice is not optional and is not behind a link.
+- On 2026-08-31 the owner decided the on-page notices were too long for readers
+  and had them removed: the privacy notice above the switch on `/my/ai`, the
+  browser-storage note in the key slots, and the usage-counter caveat. The AI
+  layer itself is unchanged — still bring-your-own-key and browser-only. A
+  reader obtains their own key from Google and accepts Google's terms there.
 - Three surfaces use it, all through the SAME transport: `/my/ai` (the switch,
   the four key slots, the model), the reader's panel
   (`components/reader/ai-panel.tsx`) and the notebook's workspace

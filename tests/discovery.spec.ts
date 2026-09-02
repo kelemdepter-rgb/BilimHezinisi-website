@@ -130,6 +130,128 @@ test.describe("what is new", () => {
   });
 });
 
+/**
+ * The line in the library toolbar saying the shelf is still growing.
+ *
+ * It is aimed at a visitor arriving for the first time, so every check here
+ * runs signed out — and it sits in the one row that already carries the count,
+ * the sort select and both view buttons, which is why so much of this block is
+ * about what the row must NOT do.
+ */
+test.describe("the toolbar's invitation", () => {
+  test("says the library is growing, in the site's own type, and leads to /new", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const hint = page.getByTestId("library-new-hint");
+
+    await expect(hint).toHaveText("يېڭى كىتابلار قوشۇلۇۋاتىدۇ، زىيارەت قىلىپ تۇرۇڭ…");
+    await expect(hint).toHaveAttribute("href", "/new");
+
+    const style = await hint.evaluate((node) => {
+      const own = getComputedStyle(node);
+      const root = getComputedStyle(document.documentElement);
+      // A probe painted with the token proves the link's colour IS the token,
+      // whichever theme is on — comparing to a hex would only pin today's one.
+      const probe = document.createElement("span");
+      probe.style.color = root.getPropertyValue("--am");
+      document.body.append(probe);
+      const token = getComputedStyle(probe).color;
+      probe.remove();
+      return {
+        size: parseFloat(own.fontSize),
+        family: own.fontFamily,
+        color: own.color,
+        token,
+      };
+    });
+    const countSize = await page
+      .getByTestId("library-count")
+      .evaluate((node) => parseFloat(getComputedStyle(node).fontSize));
+    const bodyFamily = await page.evaluate(() => getComputedStyle(document.body).fontFamily);
+
+    // Noticeably larger than the count it sits beside, but no page heading.
+    expect(style.size, "the invitation must outsize the book count").toBeGreaterThan(countSize);
+    expect(style.size, "…without competing with a heading").toBeLessThanOrEqual(16);
+    // Inherited, not declared: no @font-face and no font-family of its own.
+    expect(style.family, "the line must inherit the site font").toBe(bodyFamily);
+    expect(style.color, "the line must use the --am token, not a new colour").toBe(style.token);
+
+    await hint.click();
+    await expect(page).toHaveURL(/\/new$/);
+    await expect(page.getByRole("heading", { name: "يېڭى كىتابلار" })).toBeVisible();
+  });
+
+  test("never costs the toolbar a control, before or after a scroll", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("library-new-hint")).toBeVisible();
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.evaluate(() => window.scrollTo(0, 0));
+
+    for (const testId of ["library-sort", "view-grid", "view-list"]) {
+      const control = page.getByTestId(testId);
+      await expect(control, `${testId} must still be on screen`).toBeVisible();
+      const box = (await control.boundingBox())!;
+      expect(box.height, `${testId} must keep a 44 px touch target`).toBeGreaterThanOrEqual(44);
+      expect(box.x, `${testId} must not hang off the start edge`).toBeGreaterThanOrEqual(0);
+      expect(
+        box.x + box.width,
+        `${testId} must not hang off the end edge`,
+      ).toBeLessThanOrEqual(page.viewportSize()!.width);
+    }
+
+    // Visible is not enough — something could be sitting on top of them.
+    await page.getByTestId("view-list").click();
+    await expect(page.getByTestId("book-list")).toHaveAttribute("data-view", "list");
+    await page.getByTestId("view-grid").click();
+    await expect(page.getByTestId("book-list")).toHaveAttribute("data-view", "grid");
+    await page.getByTestId("library-sort").selectOption("title");
+    await expect(page).toHaveURL(/sort=title/);
+
+    await assertNoHorizontalOverflow(page);
+  });
+
+  /**
+   * 360 px is the floor CLAUDE.md names and the suite's own projects start at
+   * 375, so — like domain.spec.ts — this sets its own viewport and runs once
+   * rather than adding a fourth project. The filtered view is here too: it
+   * carries the longest count text there is («<category>: N كىتاب»), which is
+   * the case most likely to crowd the row.
+   */
+  test("holds at 360 px, on the shelf and on a filtered view", async ({ page, isMobile }) => {
+    test.skip(!!isMobile, "sets its own viewport; runs once, from the desktop project");
+    await page.setViewportSize({ width: 360, height: 640 });
+
+    await page.goto("/");
+    const category = page.locator('a[href*="cat="]').first();
+    const filtered = (await category.count()) ? await category.getAttribute("href") : null;
+
+    for (const path of ["/", filtered].filter((value): value is string => value !== null)) {
+      await page.goto(path);
+      await expect(page.getByTestId("library-new-hint"), `${path}: the line must show`).toBeVisible();
+      await assertNoHorizontalOverflow(page);
+
+      for (const testId of ["library-sort", "view-grid", "view-list"]) {
+        const box = (await page.getByTestId(testId).boundingBox())!;
+        expect(box, `${path}: ${testId} must have a box`).not.toBeNull();
+        expect(box.x, `${path}: ${testId} must not hang off the start edge`).toBeGreaterThanOrEqual(
+          0,
+        );
+        expect(box.x + box.width, `${path}: ${testId} must fit the screen`).toBeLessThanOrEqual(360);
+        expect(box.height, `${path}: ${testId} must keep 44 px`).toBeGreaterThanOrEqual(44);
+      }
+
+      // The row may wrap onto more lines at 360 px — it must not wrap the
+      // controls off the first screen while doing it.
+      const sort = (await page.getByTestId("library-sort").boundingBox())!;
+      expect(sort.y + sort.height, `${path}: the controls must stay above the fold`).toBeLessThanOrEqual(
+        640,
+      );
+    }
+  });
+});
+
 test.describe("the feed", () => {
   test("is valid Atom, served as Atom", async ({ request, page }) => {
     const response = await request.get("/feed.xml");

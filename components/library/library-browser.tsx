@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { BookCard } from "@/components/library/book-card";
@@ -84,12 +85,26 @@ export function LibraryBrowser({
   return (
     <section aria-label="كىتابلار">
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <p className="me-auto text-[13px] text-ink3" data-testid="library-count">
+        <p className="text-[13px] text-ink3" data-testid="library-count">
           {categoryId ? `${categoryName(categoryId) ?? "تۈر"}: ` : ""}
           {total} كىتاب
         </p>
 
-        <label className="flex items-center gap-2">
+        {/* The library grows every week, and a first-time visitor has no way to
+            know that from a page of covers. Saying so is only half of it — the
+            line is a link, so the invitation lands somewhere. It stays on the
+            category views too: it describes the library, not the filter. */}
+        <Link
+          href="/new"
+          className="flex min-h-11 items-center text-[15.5px] text-am hover:underline"
+          data-testid="library-new-hint"
+        >
+          يېڭى كىتابلار قوشۇلۇۋاتىدۇ، زىيارەت قىلىپ تۇرۇڭ…
+        </Link>
+
+        {/* The auto margin lives here rather than on the count, so the sort and
+            view controls stay at the far end of whichever line they wrap onto. */}
+        <label className="ms-auto flex items-center gap-2">
           <span className="sr-only">تەرتىپلەش</span>
           <select
             className="field w-auto"

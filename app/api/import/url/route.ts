@@ -3,6 +3,7 @@ import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import { requireStaff } from "@/lib/admin/guards";
 import { MSG } from "@/lib/admin/messages";
+import { normalizeImportedText } from "@/lib/books/presentation-forms";
 import { sanitizeHtml } from "@/lib/sanitize";
 import { reportServerError } from "@/lib/server-log";
 
@@ -101,13 +102,15 @@ export async function POST(request: Request) {
     // Sanitize the extracted article before it becomes book content.
     const clean = sanitizeHtml(rawContent, dom.window);
     const turndown = new TurndownService({ headingStyle: "atx" });
-    const text = turndown.turndown(clean);
+    // Letters, not glyph codepoints: a page served in a legacy Uyghur encoding
+    // is stored the same way every other import is.
+    const text = normalizeImportedText(turndown.turndown(clean));
 
     return NextResponse.json({
       ok: true,
       text,
-      title: (article?.title ?? "").trim() || parsed.host,
-      author: (article?.byline ?? "").trim(),
+      title: normalizeImportedText(article?.title).trim() || parsed.host,
+      author: normalizeImportedText(article?.byline).trim(),
     });
   } catch (error) {
     reportServerError("import/url:readability", error);

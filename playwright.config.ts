@@ -330,6 +330,22 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * The book that was stored as glyph codepoints and could not be found
+         * (PROMPT-27). Anonymous, and at every width: a reader searching for
+         * it on a phone is exactly who the fault was hidden from.
+         */
+        name: `forms-${viewport.name}`,
+        testMatch: /presentation-forms\.spec\.ts/,
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // The on-screen Uyghur keyboard and recent searches: both exist for a
         // phone, so both are checked at every width.
         name: `keyboard-${viewport.name}`,

@@ -1,5 +1,6 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { compressCover, uploadFile, type Bucket } from "@/lib/storage";
+import { normalizeImportedText } from "@/lib/books/presentation-forms";
 import type { BookMetadataInput } from "@/lib/books/types";
 
 export { storagePath } from "@/lib/storage";
@@ -37,12 +38,15 @@ export async function createBookRow(
   const { data, error } = await supabase
     .from("books")
     .insert({
-      title: metadata.title,
-      author: metadata.author,
+      // The wizard pre-fills these from the file's own properties and the
+      // admin edits them by hand, so both routes in are folded here — a title
+      // in glyph codepoints is a book no search can find (PROMPT-27).
+      title: normalizeImportedText(metadata.title),
+      author: normalizeImportedText(metadata.author),
       category_id: metadata.categoryId,
       format: extras.format,
       date: metadata.date,
-      description: metadata.description,
+      description: normalizeImportedText(metadata.description),
       language: metadata.language,
       status: metadata.status,
       file_hash: extras.fileHash,

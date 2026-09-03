@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import WordExtractor from "word-extractor";
 import { requireStaff } from "@/lib/admin/guards";
 import { MSG } from "@/lib/admin/messages";
+import { normalizeImportedText } from "@/lib/books/presentation-forms";
 
 /** word-extractor is Node-only. */
 export const runtime = "nodejs";
@@ -57,7 +58,9 @@ export async function POST(request: Request) {
   try {
     const extractor = new WordExtractor();
     const document = await extractor.extract(Buffer.from(await file.arrayBuffer()));
-    const text = document.getBody() ?? "";
+    // A .doc old enough to need this route is old enough to hold Uyghur as
+    // Arabic presentation forms, so it leaves here as letters either way.
+    const text = normalizeImportedText(document.getBody());
     if (!text.trim()) {
       return NextResponse.json(
         { ok: false, error: "بۇ ھۆججەتتىن تېكىست چىقمىدى." },

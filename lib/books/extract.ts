@@ -10,6 +10,7 @@
 import { sha256Hex } from "@/lib/books/hash";
 import { normalizeText } from "@/lib/books/chunk";
 import { formatFromFileName, guessTitle, todayIso } from "@/lib/books/metadata";
+import { normalizeImportedText } from "@/lib/books/presentation-forms";
 import { NO_PROPERTIES, readDocxProperties, type DocxProperties } from "@/lib/books/docx-props";
 import type { BookFormat, ContentFormat, ExtractedBook } from "@/lib/books/types";
 
@@ -128,10 +129,19 @@ export async function extractFromFile(
   }
 
   onProgress?.(1);
-  const normalized = normalizeText(text);
+  // Letters, not glyph codepoints, and in canonical form — before anything
+  // hashes it, chunks it or indexes it. A Word file that saved Uyghur as
+  // Arabic presentation forms is repaired here, at the door, rather than in
+  // the database months later (lib/books/presentation-forms.ts).
+  const normalized = normalizeText(normalizeImportedText(text));
   if (!normalized) {
     throw new ExtractionError("بۇ ھۆججەتتىن تېكىست چىقمىدى. ھۆججەتنى تەكشۈرۈپ قايتا سىناڭ.");
   }
+
+  // Word writes the title and author into the file's own properties, and a
+  // file whose body is glyph codepoints has them there too.
+  const embeddedTitle = normalizeImportedText(properties.title);
+  const embeddedAuthor = normalizeImportedText(properties.author);
 
   return {
     fileName: file.name,
@@ -142,13 +152,13 @@ export async function extractFromFile(
     fileHash: await sha256Hex(normalized),
     title: guessTitle({
       fileName: file.name,
-      embeddedTitle: properties.title,
+      embeddedTitle,
       text: normalized,
     }),
     // Only what the file itself states — an author is never guessed.
-    author: properties.author,
-    embeddedTitle: properties.title,
-    embeddedAuthor: properties.author,
+    author: embeddedAuthor,
+    embeddedTitle,
+    embeddedAuthor,
     date: todayIso(),
     file,
   };
@@ -171,17 +181,19 @@ export async function extractFromUrl(url: string): Promise<ExtractedBook> {
   if (!response.ok || !payload.ok) {
     throw new ExtractionError(payload.error ?? "تور بەتنى ئوقۇغىلى بولمىدى.");
   }
-  const normalized = normalizeText(payload.text ?? "");
+  const normalized = normalizeText(normalizeImportedText(payload.text ?? ""));
   if (!normalized) throw new ExtractionError("بۇ تور بەتتىن تېكىست چىقمىدى.");
 
+  const title = normalizeImportedText(payload.title) || url;
+
   return {
-    fileName: payload.title || url,
+    fileName: title,
     format: "URL",
     text: normalized,
     contentFormat: "markdown",
     fileHash: await sha256Hex(normalized),
-    title: payload.title || url,
-    author: payload.author ?? "",
+    title,
+    author: normalizeImportedText(payload.author),
     date: todayIso(),
   };
 }

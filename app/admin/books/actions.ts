@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { revalidateBooks } from "@/lib/cache";
 import { requireStaff } from "@/lib/admin/guards";
 import { MSG, failureMessage, type ActionResult } from "@/lib/admin/messages";
+import { normalizeImportedText } from "@/lib/books/presentation-forms";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { removeFiles } from "@/lib/storage";
 
@@ -24,7 +25,10 @@ export async function updateBookAction(formData: FormData): Promise<ActionResult
   try {
     await requireStaff();
     const id = Number(formData.get("id"));
-    const title = String(formData.get("title") ?? "").trim();
+    // Pasted as often as it is typed, and a paste out of Word carries whatever
+    // Word had — including glyph codepoints, which no search can match. The
+    // editor folds them back the same way the upload wizard does.
+    const title = normalizeImportedText(String(formData.get("title") ?? "")).trim();
     if (!id) return { ok: false, error: MSG.bookNotFound };
     if (!title) return { ok: false, error: MSG.nameRequired };
 
@@ -36,10 +40,10 @@ export async function updateBookAction(formData: FormData): Promise<ActionResult
       .from("books")
       .update({
         title,
-        author: String(formData.get("author") ?? "").trim(),
+        author: normalizeImportedText(String(formData.get("author") ?? "")).trim(),
         category_id: categoryRaw ? Number(categoryRaw) : null,
         date: String(formData.get("date") ?? "").trim(),
-        description: String(formData.get("description") ?? "").trim(),
+        description: normalizeImportedText(String(formData.get("description") ?? "")).trim(),
         language: String(formData.get("language") ?? "ug"),
         status: status === "published" ? "published" : "draft",
       })

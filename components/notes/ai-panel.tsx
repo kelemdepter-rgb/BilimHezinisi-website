@@ -718,6 +718,7 @@ export function NotesAiPanel({
               <label className="mt-3 block">
                 <span className="mb-1 block text-[12px] font-semibold text-ink2">سوئالىڭىز</span>
                 <textarea
+                  autoComplete="off"
                   ref={chatInputRef}
                   className="field min-h-20 resize-y"
                   rows={2}

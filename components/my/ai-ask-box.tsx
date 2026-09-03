@@ -93,6 +93,7 @@ export function AiAskBox() {
       <label className="mt-3 block">
         <span className="mb-1.5 block text-[13px] font-semibold text-ink2">سوئالىڭىز</span>
         <textarea
+          autoComplete="off"
           className="field min-h-24 resize-y"
           rows={3}
           data-testid="ai-question"

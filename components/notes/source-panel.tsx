@@ -280,6 +280,7 @@ export function SourcePanel({
               </div>
               <div className="flex gap-2">
                 <input
+                  autoComplete="off"
                   id="source-query"
                   ref={searchRef}
                   className="field min-w-0 flex-1"
@@ -397,6 +398,7 @@ export function SourcePanel({
               <p className="text-[13px] font-semibold text-ink2">سۈرە ۋە ئايەت نومۇرى</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
                 <input
+                  autoComplete="off"
                   className="field w-24"
                   type="number"
                   min={1}
@@ -410,6 +412,7 @@ export function SourcePanel({
                 />
                 <span className="text-ink3">:</span>
                 <input
+                  autoComplete="off"
                   className="field w-24"
                   type="number"
                   min={1}
@@ -497,6 +500,7 @@ export function SourcePanel({
                 </div>
                 <div className="flex gap-2">
                   <input
+                    autoComplete="off"
                     id="quran-query"
                     ref={quranSearchRef}
                     className="field min-w-0 flex-1"

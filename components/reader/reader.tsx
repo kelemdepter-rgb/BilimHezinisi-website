@@ -823,6 +823,7 @@ export function Reader({
                 would drift out of step with it. */}
             <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-2">
               <input
+                autoComplete="off"
                 ref={findInputRef}
                 className="field min-w-40 flex-1"
                 data-testid="find-input"
@@ -981,6 +982,7 @@ export function Reader({
               بەت
             </label>
             <input
+              autoComplete="off"
               id="page-jump"
               name="page"
               type="number"

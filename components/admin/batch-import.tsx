@@ -872,7 +872,7 @@ function ReviewStage({
           <div className="flex flex-wrap items-end gap-1.5">
             <label className="min-w-0 flex-1 text-[12.5px] text-ink2">
               ئاپتور
-              <input className="field mt-1" ref={bulkAuthorRef} data-testid="batch-bulk-author" />
+              <input autoComplete="off" className="field mt-1" ref={bulkAuthorRef} data-testid="batch-bulk-author" />
             </label>
             <button
               type="button"
@@ -1128,6 +1128,7 @@ function Field({
       </span>
       {multiline ? (
         <textarea
+          autoComplete="off"
           className="field min-h-16"
           data-testid={testId}
           data-suggested={suggested ? "true" : "false"}
@@ -1138,6 +1139,7 @@ function Field({
         />
       ) : (
         <input
+          autoComplete="off"
           className={`field ${invalid ? "border-am" : ""}`}
           data-testid={testId}
           data-suggested={suggested ? "true" : "false"}

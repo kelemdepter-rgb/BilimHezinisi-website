@@ -5,8 +5,10 @@ import {
   HISTORY_STORAGE_KEY,
   clearSearchHistory,
   forgetSearch,
+  isSearchHistoryOn,
   readSearchHistory,
   rememberSearch,
+  setSearchHistoryOn,
 } from "@/lib/search/history";
 
 /**
@@ -86,5 +88,42 @@ describe("bad data in storage", () => {
       JSON.stringify([{ query: "ھەدىس", at: 2 }, { nope: true }, "string", 7, { query: "", at: 1 }]),
     );
     expect(readSearchHistory().map((entry) => entry.query)).toEqual(["ھەدىس"]);
+  });
+});
+
+describe("the switch that stops a list being kept at all", () => {
+  it("is on until the reader says otherwise", () => {
+    expect(isSearchHistoryOn()).toBe(true);
+  });
+
+  it("records nothing once it is off", () => {
+    setSearchHistoryOn(false);
+    rememberSearch("ھەدىس");
+    expect(readSearchHistory()).toEqual([]);
+    expect(window.localStorage.getItem(HISTORY_STORAGE_KEY)).toBeNull();
+  });
+
+  it("erases what was already kept the moment it is turned off", () => {
+    rememberSearch("ھەدىس");
+    rememberSearch("تارىخ");
+    setSearchHistoryOn(false);
+    expect(readSearchHistory()).toEqual([]);
+    // Not an empty list left behind — the key itself is gone.
+    expect(window.localStorage.getItem(HISTORY_STORAGE_KEY)).toBeNull();
+  });
+
+  it("starts recording again when it is turned back on", () => {
+    setSearchHistoryOn(false);
+    rememberSearch("ساقلانمايدۇ");
+    setSearchHistoryOn(true);
+    rememberSearch("ساقلىنىدۇ");
+    expect(readSearchHistory().map((entry) => entry.query)).toEqual(["ساقلىنىدۇ"]);
+  });
+
+  it("leaves no key behind when it is on, which is the default", () => {
+    setSearchHistoryOn(false);
+    setSearchHistoryOn(true);
+    expect(isSearchHistoryOn()).toBe(true);
+    expect(window.localStorage.getItem("bh-search-history-off")).toBeNull();
   });
 });

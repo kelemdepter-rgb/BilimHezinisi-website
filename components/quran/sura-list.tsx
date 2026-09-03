@@ -29,6 +29,7 @@ export function SuraList({
         سۈرە ئىزدەش
       </label>
       <input
+        autoComplete="off"
         id={inputId}
         type="search"
         className="field"

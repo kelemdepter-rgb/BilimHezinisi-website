@@ -438,6 +438,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             <Icon name="undo" className="ic-lg" />
           </Link>
           <input
+            autoComplete="off"
             className="min-w-0 flex-1 bg-transparent px-2 text-[15px] font-bold text-ink outline-none"
             value={title}
             aria-label="خاتىرە ماۋزۇسى"

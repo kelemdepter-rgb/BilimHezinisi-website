@@ -37,6 +37,16 @@ export function UyghurTextField({
   const common = {
     name,
     required,
+    /**
+     * Every field this renders today is a book's title, its author or a note
+     * about it (app/request/page.tsx) — nothing that belongs to the person
+     * typing. A browser offering to fill a saved home address into «ئاپتورى»
+     * is nonsense, and after 2026-09-02 it is also the thing that frightened
+     * a reader. The email field on that form is a plain <input> and keeps its
+     * `autocomplete="email"`; if a caller ever needs an identity field here,
+     * give this component a prop rather than removing the line.
+     */
+    autoComplete: "off",
     ...(maxLength ? { maxLength } : {}),
     ...(placeholder ? { placeholder } : {}),
     ...(testId ? { "data-testid": testId } : {}),

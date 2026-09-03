@@ -508,6 +508,7 @@ function SourceStep({
         <h3 className="text-[14px] font-bold">ياكى تور بەتتىن ئەكىرىش</h3>
         <div className="mt-2 flex flex-wrap gap-2">
           <input
+            autoComplete="off"
             className="field min-w-48 flex-1"
             type="url"
             dir="ltr"
@@ -640,6 +641,7 @@ function MetaStep({
       <label className="block">
         <span className="mb-1.5 block text-[13px] font-semibold text-ink2">ماۋزۇ *</span>
         <input
+          autoComplete="off"
           className="field"
           data-testid="meta-title"
           value={meta.title}
@@ -650,7 +652,7 @@ function MetaStep({
       </label>
       <label className="block">
         <span className="mb-1.5 block text-[13px] font-semibold text-ink2">ئاپتور</span>
-        <input className="field" value={meta.author} onChange={(event) => update({ author: event.target.value })} maxLength={120} />
+        <input autoComplete="off" className="field" value={meta.author} onChange={(event) => update({ author: event.target.value })} maxLength={120} />
       </label>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
@@ -672,12 +674,13 @@ function MetaStep({
         </label>
         <label className="block">
           <span className="mb-1.5 block text-[13px] font-semibold text-ink2">چېسلا</span>
-          <input className="field" type="date" dir="ltr" value={meta.date} onChange={(event) => update({ date: event.target.value })} />
+          <input autoComplete="off" className="field" type="date" dir="ltr" value={meta.date} onChange={(event) => update({ date: event.target.value })} />
         </label>
       </div>
       <label className="block">
         <span className="mb-1.5 block text-[13px] font-semibold text-ink2">قىسقىچە چۈشەندۈرۈش</span>
         <textarea
+          autoComplete="off"
           className="field min-h-24"
           rows={3}
           value={meta.description}

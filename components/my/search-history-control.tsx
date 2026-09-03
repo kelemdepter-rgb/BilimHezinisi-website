@@ -2,29 +2,52 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { Icon } from "@/components/icons";
-import { clearSearchHistory, readSearchHistory } from "@/lib/search/history";
+import {
+  clearSearchHistory,
+  isSearchHistoryOn,
+  readSearchHistory,
+  setSearchHistoryOn,
+} from "@/lib/search/history";
 
-/** Only this tab writes the list, so there is nothing to subscribe to. */
-function subscribeToHistory() {
-  return () => {};
+/**
+ * Nothing outside this page writes the list while it is on screen, so the
+ * "store" is just this page's own writes announcing themselves — enough to
+ * re-read both snapshots below after the reader taps something.
+ */
+const listeners = new Set<() => void>();
+
+function subscribeToHistory(onChange: () => void) {
+  listeners.add(onChange);
+  return () => {
+    listeners.delete(onChange);
+  };
+}
+
+function announce() {
+  for (const listener of [...listeners]) listener();
 }
 
 /**
- * "What have I searched for, and take it away."
+ * "What have I searched for, take it away, and stop keeping it."
  *
  * The list never left this browser — there is no table and no request behind
- * it — so this is the only place it can be erased from, and erasing it here
- * erases it completely. The dropdown on the search box offers the same action
- * to a reader with no account.
+ * it — so this is one of only two places it can be managed, and erasing it
+ * here erases it completely. The other is the dropdown on the search box
+ * itself, which is the one a reader with no account can reach; both write the
+ * same key, so they always agree.
  */
 export function SearchHistoryControl() {
   const [cleared, setCleared] = useState(false);
-  // Re-read on every render; clearing below causes one, and the count with it.
   const count = useSyncExternalStore(
     subscribeToHistory,
     () => readSearchHistory().length,
     () => 0,
   );
+  /**
+   * Server-rendered as "on", which is the default; corrected on the client,
+   * because the answer lives in localStorage and no server can know it.
+   */
+  const on = useSyncExternalStore(subscribeToHistory, isSearchHistoryOn, () => true);
 
   return (
     <>
@@ -52,11 +75,36 @@ export function SearchHistoryControl() {
         onClick={() => {
           clearSearchHistory();
           setCleared(true);
+          announce();
         }}
       >
         <Icon name="trash" />
         ئىزدەش تارىخىنى ئۆچۈرۈش
       </button>
+
+      {/* The same switch as the search box's, over the same key. */}
+      <label
+        className="mt-4 flex min-h-11 cursor-pointer items-center gap-3"
+        data-testid="search-history-off-row"
+      >
+        <input
+          type="checkbox"
+          className="size-5 shrink-0 accent-[var(--am)]"
+          data-testid="search-history-off"
+          autoComplete="off"
+          checked={!on}
+          onChange={(event) => {
+            setSearchHistoryOn(!event.target.checked);
+            announce();
+          }}
+        />
+        <span className="text-[14px] font-semibold">ئىزدەش تارىخىنى ساقلىماسلىق</span>
+      </label>
+
+      <p className="mt-2 text-[12.5px] leading-6 text-ink3">
+        بۇنى بەلگىلىسىڭىز ساقلانغىنى دەرھال ئۆچۈرۈلىدۇ ۋە يېڭىسى ساقلانمايدۇ. ئوخشاش
+        بۇ تاللاش ئىزدەش رامكىسىنىڭ ئىچىدىمۇ بار.
+      </p>
     </>
   );
 }

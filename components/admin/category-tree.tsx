@@ -417,7 +417,7 @@ function AddCategoryForm({
     <form action={onSubmit} className="paper grain flex flex-wrap items-end gap-3 p-4">
       <label className="min-w-40 flex-1">
         <span className="mb-1.5 block text-[13px] font-semibold text-ink2">يېڭى تۈر ئىسمى</span>
-        <input className="field" name="name" required maxLength={80} placeholder="مەسىلەن: تارىخ" />
+        <input autoComplete="off" className="field" name="name" required maxLength={80} placeholder="مەسىلەن: تارىخ" />
       </label>
       <label>
         <span className="mb-1.5 block text-[13px] font-semibold text-ink2">سىنبەلگە</span>
@@ -458,6 +458,7 @@ function EditCategoryForm({
     <form action={onSubmit} className="flex w-full flex-wrap items-center gap-2">
       <input type="hidden" name="id" value={category.id} />
       <input
+        autoComplete="off"
         className="field min-w-40 flex-1"
         name="name"
         defaultValue={category.name}

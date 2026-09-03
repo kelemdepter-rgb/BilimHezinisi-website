@@ -52,8 +52,9 @@ export default async function AdminBooksPage({ searchParams }: PageProps<"/admin
         </div>
       </div>
 
-      <form className="mt-4 flex flex-wrap gap-2" role="search">
+      <form className="mt-4 flex flex-wrap gap-2" role="search" autoComplete="off">
         <input
+          autoComplete="off"
           className="field min-w-48 flex-1"
           type="search"
           name="q"

@@ -85,7 +85,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
         ئىزدەش
       </h1>
 
-      <form className="mt-4 flex flex-wrap gap-2" role="search" action="/search">
+      <form className="mt-4 flex flex-wrap gap-2" role="search" action="/search" autoComplete="off">
         <SearchField
           defaultValue={query}
           placeholder="سۆز، ئىبارە ياكى ئاپتور…"

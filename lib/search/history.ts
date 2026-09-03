@@ -15,6 +15,17 @@
 
 export const HISTORY_STORAGE_KEY = "bh-search-history";
 
+/**
+ * The reader's answer to "keep a list at all?".
+ *
+ * Stored as the REFUSAL rather than the permission, so the default — no key —
+ * is the behaviour the site has always had, and switching the list back on
+ * removes the key again and leaves nothing behind. Both switches read and
+ * write this one key: the dropdown on the search box, which is the only place
+ * a reader with no account can reach, and /my/account's own control.
+ */
+const HISTORY_OFF_KEY = "bh-search-history-off";
+
 /** Short on purpose: a list nobody scrolls, and less to leave behind. */
 export const HISTORY_LIMIT = 8;
 
@@ -56,9 +67,38 @@ function write(entries: SearchHistoryEntry[]): void {
   }
 }
 
+/** Is a list being kept? True unless the reader has said otherwise. */
+export function isSearchHistoryOn(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(HISTORY_OFF_KEY) !== "1";
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Turn the list on or off.
+ *
+ * Turning it OFF erases what is already there. A switch that stopped adding
+ * to a list but left the old one sitting in the browser would not be an
+ * answer to the question the reader was asking.
+ */
+export function setSearchHistoryOn(on: boolean): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (on) window.localStorage.removeItem(HISTORY_OFF_KEY);
+    else window.localStorage.setItem(HISTORY_OFF_KEY, "1");
+  } catch {
+    // Private mode or a full quota — same reasoning as write() below.
+  }
+  if (!on) write([]);
+}
+
 /** Record one search. Searching the same thing again moves it to the top. */
 export function rememberSearch(query: string): void {
   if (typeof window === "undefined") return;
+  if (!isSearchHistoryOn()) return;
   const trimmed = query.trim().slice(0, MAX_QUERY);
   if (!trimmed) return;
   const rest = readSearchHistory().filter((entry) => entry.query !== trimmed);

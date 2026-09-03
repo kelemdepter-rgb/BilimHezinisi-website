@@ -294,6 +294,26 @@ export default defineConfig({
       },
       {
         /**
+         * Nothing on this site may invite a browser to fill private data into
+         * it — and the sign-in forms must still invite a password manager to
+         * fill a password. Signed in as staff so the notebook and the account
+         * page are reachable; every block that is about a reader WITHOUT an
+         * account opens its own anonymous context.
+         */
+        name: `autofill-${viewport.name}`,
+        testMatch: /autofill\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
+        /**
          * Choosing which part of the library to search, from inside the box.
          * Anonymous — the reader it was built for usually has no account — and
          * checked at every width, because the control has to fit a 360 px

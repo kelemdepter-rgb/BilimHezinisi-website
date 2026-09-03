@@ -191,6 +191,7 @@ export function FindBar({
     >
       <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-1.5">
         <input
+          autoComplete="off"
           ref={inputRef}
           className="field min-w-0 flex-1"
           type="search"
@@ -258,6 +259,7 @@ export function FindBar({
       {showReplace && (
         <div className="mx-auto mt-1.5 flex w-full max-w-4xl flex-wrap items-center gap-1.5">
           <input
+            autoComplete="off"
             className="field min-w-0 flex-1"
             type="text"
             value={replacement}

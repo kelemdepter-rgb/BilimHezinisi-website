@@ -48,7 +48,7 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
         ئوسمانىي (ھەفس) ئەرەبچە مەتنى ۋە مۇھەممەد سالىھنىڭ ئۇيغۇرچە تەرجىمىسى.
       </p>
 
-      <form className="mt-4 flex flex-wrap gap-2" role="search" action="/quran">
+      <form className="mt-4 flex flex-wrap gap-2" role="search" action="/quran" autoComplete="off">
         {/* No history here: the Qur'an is a different corpus from the
             library, and mixing the two lists would offer a reader a search
             that finds nothing where they are standing. */}

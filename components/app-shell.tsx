@@ -131,7 +131,7 @@ export function AppShell({
             </span>
           </Link>
 
-          <form role="search" action="/search" className="sbox mx-2 hidden md:flex">
+          <form role="search" action="/search" autoComplete="off" className="sbox mx-2 hidden md:flex">
             <Icon name="search" className="text-ink3" />
             <SearchField
               placeholder="كىتاب، ئاپتور ياكى مەزمۇن ئىزدەڭ…"
@@ -174,7 +174,7 @@ export function AppShell({
 
         {mobileSearchOpen && (
           <div className="border-t border-bd px-3 pb-3 pt-2 md:hidden">
-            <form role="search" action="/search" className="sbox flex">
+            <form role="search" action="/search" autoComplete="off" className="sbox flex">
               <Icon name="search" className="text-ink3" />
               <SearchField
                 placeholder="كىتاب، ئاپتور ياكى مەزمۇن ئىزدەڭ…"

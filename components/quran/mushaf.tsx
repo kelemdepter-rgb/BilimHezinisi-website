@@ -474,6 +474,7 @@ export function Mushaf({
             سۈرە
           </label>
           <input
+            autoComplete="off"
             id="jump-sura"
             name="sura"
             type="number"
@@ -488,6 +489,7 @@ export function Mushaf({
             ئايەت
           </label>
           <input
+            autoComplete="off"
             id="jump-aya"
             name="aya"
             type="number"

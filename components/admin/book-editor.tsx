@@ -102,11 +102,11 @@ export function BookEditor({
           <input type="hidden" name="id" value={book.id} />
           <label className="block">
             <span className="mb-1.5 block text-[13px] font-semibold text-ink2">ماۋزۇ *</span>
-            <input className="field" name="title" defaultValue={book.title} required maxLength={200} />
+            <input autoComplete="off" className="field" name="title" defaultValue={book.title} required maxLength={200} />
           </label>
           <label className="block">
             <span className="mb-1.5 block text-[13px] font-semibold text-ink2">ئاپتور</span>
-            <input className="field" name="author" defaultValue={book.author} maxLength={120} />
+            <input autoComplete="off" className="field" name="author" defaultValue={book.author} maxLength={120} />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
@@ -122,12 +122,12 @@ export function BookEditor({
             </label>
             <label className="block">
               <span className="mb-1.5 block text-[13px] font-semibold text-ink2">چېسلا</span>
-              <input className="field" type="date" dir="ltr" name="date" defaultValue={book.date} />
+              <input autoComplete="off" className="field" type="date" dir="ltr" name="date" defaultValue={book.date} />
             </label>
           </div>
           <label className="block">
             <span className="mb-1.5 block text-[13px] font-semibold text-ink2">چۈشەندۈرۈش</span>
-            <textarea className="field min-h-24" name="description" rows={3} defaultValue={book.description} maxLength={2000} />
+            <textarea autoComplete="off" className="field min-h-24" name="description" rows={3} defaultValue={book.description} maxLength={2000} />
           </label>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">

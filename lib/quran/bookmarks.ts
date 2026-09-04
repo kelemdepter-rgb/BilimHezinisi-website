@@ -1,4 +1,4 @@
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabaseBrowserClient, currentUserId } from "@/lib/supabase/client";
 
 /**
  * Aya bookmarks for the signed-in reader. Book bookmarks live in `bookmarks`
@@ -9,27 +9,23 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
  */
 
 export async function addQuranBookmark(sura: number, aya: number): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
   const supabase = createSupabaseBrowserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
   const { error } = await supabase
     .from("quran_bookmarks")
-    .upsert({ user_id: user.id, sura, aya }, { onConflict: "user_id,sura,aya" });
+    .upsert({ user_id: userId, sura, aya }, { onConflict: "user_id,sura,aya" });
   if (error) throw new Error(error.message);
 }
 
 export async function removeQuranBookmark(sura: number, aya: number): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
   const supabase = createSupabaseBrowserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
   const { error } = await supabase
     .from("quran_bookmarks")
     .delete()
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .eq("sura", sura)
     .eq("aya", aya);
   if (error) throw new Error(error.message);

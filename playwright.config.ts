@@ -331,6 +331,25 @@ export default defineConfig({
       },
       {
         /**
+         * What the browser asks Supabase about the reader, and how often
+         * (PROMPT-28). Signed in as staff, because the round trips this is
+         * about only happened for a reader with a session; the signed-out
+         * block opens its own empty context.
+         */
+        name: `auth-traffic-${viewport.name}`,
+        testMatch: /auth-traffic\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
+        /**
          * The book that was stored as glyph codepoints and could not be found
          * (PROMPT-27). Anonymous, and at every width: a reader searching for
          * it on a phone is exactly who the fault was hidden from.

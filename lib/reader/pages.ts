@@ -1,4 +1,4 @@
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabaseBrowserClient, currentUserId } from "@/lib/supabase/client";
 import { createSupabasePublicClient } from "@/lib/supabase/public-client";
 import type { ReadingPosition } from "@/lib/reader/position";
 
@@ -73,14 +73,12 @@ export async function fetchBookMatchPages(
 
 /** Debounced by the caller. Anonymous readers never reach this. */
 export async function saveProgress(bookId: number, position: ReadingPosition): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
   const supabase = createSupabaseBrowserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
   await supabase.from("reading_progress").upsert(
     {
-      user_id: user.id,
+      user_id: userId,
       book_id: bookId,
       page_no: position.pageNo,
       position: position.offset,
@@ -92,15 +90,13 @@ export async function saveProgress(bookId: number, position: ReadingPosition): P
 
 /** Upsert keeps recent reads deduplicated per book. */
 export async function touchRecentRead(bookId: number): Promise<void> {
+  const userId = await currentUserId();
+  if (!userId) return;
   const supabase = createSupabaseBrowserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return;
   await supabase
     .from("recent_reads")
     .upsert(
-      { user_id: user.id, book_id: bookId, read_at: new Date().toISOString() },
+      { user_id: userId, book_id: bookId, read_at: new Date().toISOString() },
       { onConflict: "user_id,book_id" },
     );
 }
@@ -108,11 +104,8 @@ export async function touchRecentRead(bookId: number): Promise<void> {
 export async function fetchAnnotations(
   bookId: number,
 ): Promise<{ bookmarks: Annotation[]; notes: Annotation[] }> {
+  if (!(await currentUserId())) return { bookmarks: [], notes: [] };
   const supabase = createSupabaseBrowserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { bookmarks: [], notes: [] };
 
   const [bookmarkRows, noteRows] = await Promise.all([
     supabase
@@ -145,14 +138,12 @@ export async function addBookmark(
   pageNo: number,
   name: string,
 ): Promise<Annotation | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
   const supabase = createSupabaseBrowserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
   const { data, error } = await supabase
     .from("bookmarks")
-    .insert({ user_id: user.id, book_id: bookId, page_no: pageNo, position: 0, name })
+    .insert({ user_id: userId, book_id: bookId, page_no: pageNo, position: 0, name })
     .select("id, page_no, position, created_at, name")
     .single();
   if (error) throw new Error(error.message);
@@ -165,14 +156,12 @@ export async function addNote(
   pageNo: number,
   text: string,
 ): Promise<Annotation | null> {
+  const userId = await currentUserId();
+  if (!userId) return null;
   const supabase = createSupabaseBrowserClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
   const { data, error } = await supabase
     .from("book_notes")
-    .insert({ user_id: user.id, book_id: bookId, page_no: pageNo, position: 0, text })
+    .insert({ user_id: userId, book_id: bookId, page_no: pageNo, position: 0, text })
     .select("id, page_no, position, created_at, text")
     .single();
   if (error) throw new Error(error.message);

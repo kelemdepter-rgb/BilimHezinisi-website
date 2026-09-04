@@ -20,6 +20,17 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  *
  * `persistSession: false` matters: without it this client would adopt the
  * session out of storage and defeat the whole arrangement.
+ *
+ * `storageKey` matters for a smaller reason, and changes nothing about the
+ * above. Every Supabase client builds a GoTrueClient, and auth-js counts them
+ * per storage key — so this one and the session client in
+ * lib/supabase/client.ts, being two clients under one default key, made it
+ * warn «Multiple GoTrueClient instances detected in the same browser context»
+ * on every page that used both. Here that warning is a false alarm: it is
+ * about two clients writing one session, and this client has none to write.
+ * Naming its own key says so, and the console stays clean for warnings that
+ * mean something. It does NOT make the two clients one — that would break
+ * everything the note above is about.
  */
 let client: SupabaseClient | null = null;
 
@@ -28,7 +39,14 @@ export function createSupabasePublicClient(): SupabaseClient {
   client = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        storageKey: "bh-public-no-session",
+      },
+    },
   );
   return client;
 }

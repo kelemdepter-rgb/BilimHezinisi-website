@@ -50,8 +50,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local Claude settings
+# local Claude settings, and the dated copies the editor leaves beside them
 .claude/settings.local.json
+.claude/settings.local.json.backup*
 
 # library backups (large, and yours alone)
 /backups/

@@ -1,0 +1,33 @@
+# Line endings are decided here, not by whatever git happens to be installed.
+#
+# core.autocrlf lives in Git for Windows' own system config
+# (C:/Program Files/Git/etc/gitconfig) and does NOT travel with a clone, so the
+# same tree that is clean on this machine reported ~385 modified files when it
+# was opened from a Linux VM: CRLF on disk, LF in the repository, and nothing
+# telling git the two are the same file. This does tell it.
+#
+# Measured 2026-09-04 before adding this: every blob already stores LF and
+# every working-tree file is already CRLF, so these rules describe what is
+# there rather than changing it.
+* text=auto
+
+# Windows batch scripts: cmd.exe can misread a .bat that arrives with LF, so
+# these are checked out CRLF on every platform. Still stored as LF.
+*.bat text eol=crlf
+
+# Never converted, never diffed as text. Git detects most of these on its own;
+# saying so leaves nothing to detection.
+*.woff2       binary
+*.woff        binary
+*.otf         binary
+*.ttf         binary
+*.png         binary
+*.ico         binary
+*.bin         binary
+*.gz          binary
+*.traineddata binary
+*.dll         binary
+*.exe         binary
+*.db          binary
+*.db-shm      binary
+*.db-wal      binary

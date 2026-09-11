@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   },
 };
 
-const DESKTOP_REPO = "https://github.com/kelemdepter-rgb/BilimHezinisi-desktop";
+const DESKTOP_REPO = "https://apps.microsoft.com/detail/9N2T15L4DX86?hl=en-us&gl=TR&ocid=pdpshare";
 const CONTACT = "kelemdepter@gmail.com";
 
 /**

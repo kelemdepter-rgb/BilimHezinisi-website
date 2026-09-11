@@ -209,7 +209,7 @@ test.describe("/about — the owner's revision", () => {
     const link = page.getByRole("link", { name: "«بىلىم خەزىنىسى» (Windows)" });
     await expect(link).toHaveAttribute(
       "href",
-      "https://github.com/kelemdepter-rgb/BilimHezinisi-desktop",
+      "https://apps.microsoft.com/detail/9N2T15L4DX86?hl=en-us&gl=TR&ocid=pdpshare",
     );
     await expect(link).toHaveAttribute("rel", "noreferrer");
   });

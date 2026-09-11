@@ -96,7 +96,7 @@ test.describe("source attribution", () => {
 
 for (const [path, heading] of [
   ["/about", "بىلىم خەزىنىسى ھەققىدە"],
-  ["/privacy", "مەخپىيەتلىك سىياسىتى"],
+  ["/privacy", "مەخپىيەتلىك ۋە بىخەتەرلىك"],
 ] as const) {
   test.describe(`${path}`, () => {
     test("opens without an account and fits the viewport", async ({ page }) => {
@@ -147,7 +147,7 @@ for (const [path, heading] of [
  */
 const ABOUT_PARAGRAPHS = [
   "«بىلىم خەزىنىسى» — ئۇيغۇرچە ئېلېكتىرونلۇق كىتابلار جەملەنگەن، كەڭ ئۇيغۇر خەلقىمىزنىڭ پايدىلىنىشى ئۈچۈن ئېچىۋېتىلگەن رەقەملىك تور كۇتۇپخانىسىدۇر. كىتاب ئوقۇش، ماتېرىيال ئىزدەش ۋە قۇرئان كەرىمنى مۇتالىئە قىلىش ئۈچۈن ھېچقانداق ھېسابات ئېچىش تەلەپ قىلىنمايدۇ. ئەگەر ھېسابات ئاچسىڭىز، خەتكۈش، شەخسىي خاتىرە، ئوقۇش ئىزى ۋە خاتىرە دەپتەر قاتارلىق قوشۇمچە ئىقتىدارلاردىنمۇ ھەقسىز بەھرىمەن بولالايسىز.",
-  "مەزكۇر كۇتۇپخانىدا ئېلان، ئىز قوغلاش (Tracking) ۋە سىتاتىستىكا قىلىش قاتارلىقلار پۈتۈنلەي چەكلەنگەن بولۇپ، بۇ بەتلەردە ھېچقانداق ئۈچىنچى تەرەپ كودى ئىجرا قىلىنمايدۇ. تەپسىلاتىنى «بىخەتەرلىك» بېتىدىن كۆرەلەيسىز.",
+  "مەزكۇر كۇتۇپخانىدا ئېلان، ئىز قوغلاش (Tracking) ۋە سىتاتىستىكا قىلىش قاتارلىقلار پۈتۈنلەي چەكلەنگەن بولۇپ، بۇ بەتلەردە ھېچقانداق ئۈچىنچى تەرەپ كودى ئىجرا قىلىنمايدۇ. تەپسىلاتىنى «مەخپىيەتلىك ۋە بىخەتەرلىك» بېتىدىن كۆرەلەيسىز.",
   "كۇتۇپخانىنىڭ تورسىز ھالەتتىمۇ ئىشلەيدىغان «بىلىم خەزىنىسى» (Windows) نۇسخىسىمۇ تارقىتىلدى. ئۇنىڭغا سىكاننېرلانغان PDF ھۆججەتلەرنى تېكىستكە ئايلاندۇرۇش (OCR) قاتارلىق، تور نۇسخىسىدا يوق قۇلايلىق ئىقتىدارلارمۇ قوشۇلغان.",
   "مەزكۇر تور بېكەت تۆۋەندىكى مەنبەلەرنى ئۆز ئالدىغا بېكىتىلگەن ئىجازەتنامە شەرتلىرىگە ئاساسەن ئىشلىتىدۇ:",
   "كۇتۇپخانىدىكى بارلىق كىتابلارنىڭ نەشر ھوقۇقى ئۆز ئاپتورلىرى ۋە نەشرىياتلىرىغا تەۋە. بۇ كىتابلار تور بېكىتىمىزدە ئوقۇرمەنلەرنىڭ ھەقسىز ۋە ئېلانسىز پايدىلىنىشى ئۈچۈن سۇنۇلدى.",
@@ -196,9 +196,9 @@ test.describe("/about — the owner's revision", () => {
     }
   });
 
-  test("«بىخەتەرلىك» opens the privacy page", async ({ page }) => {
+  test("the privacy and security reference opens the privacy page", async ({ page }) => {
     await page.goto("/about");
-    const link = page.getByRole("link", { name: "«بىخەتەرلىك»" });
+    const link = page.getByRole("link", { name: "«مەخپىيەتلىك ۋە بىخەتەرلىك»" });
     await expect(link).toHaveAttribute("href", "/privacy");
     await link.click();
     await expect(page).toHaveURL(/\/privacy$/);
@@ -318,6 +318,171 @@ test.describe("/about — the owner's revision", () => {
       [contactBox.x + contactBox.width / 2, contactBox.y + contactBox.height / 2] as const,
     );
     expect(covering, "the contact link must be the element on top").toBe("A");
+  });
+});
+
+/* ── The Privacy page's copy, as the owner wrote it ──────────────────────── */
+
+/**
+ * The same arrangement as ABOUT_PARAGRAPHS: his wording, pasted rather than
+ * retyped. Headings, paragraphs and list items are held apart so each kind is
+ * compared in order — a section renumbered, a bullet promoted to a paragraph
+ * or a paragraph dropped all show up as a diff.
+ */
+const PRIVACY_HEADINGS = [
+  "1. ھېساباتسىز ئىشلەتكەندە",
+  "2. ھېسابات ئاچقاندا ساقلىنىدىغان ئۇچۇرلار",
+  "3. ساندان ۋە ئۇچۇر بىخەتەرلىكى",
+  "4. ئۇچۇرلىرىڭىزنى باشقۇرۇش ۋە ئۆچۈرۈش",
+  "5. بالىلارنىڭ تور بىخەتەرلىكى",
+  "6. ئالاقە ۋە باشقىلار",
+] as const;
+
+const PRIVACY_PARAGRAPHS = [
+  "قىسقىچە خۇلاسە:",
+  "بىلىم خەزىنىسىدە كىتاب ئوقۇش ۋە ئىزدىنىش ئۈچۈن ھېسابات ئېچىش تەلەپ قىلىنمايدۇ. تور بېكىتىمىزدە ھېچقانداق ئېلان، سىتاتىستىكا (Analytics)، ئىز قوغلىغۇچ (Tracker) ۋە ئۈچىنچى تەرەپ كودلىرى يوق. شەخسىيىتىڭىز ۋە ئىزلىرىڭىز تولۇق قوغدىلىدۇ.",
+  "تىزىملاتماي كىرگەن ئابونتلارنىڭ ھېچقانداق ھەرىكىتى (قايسى كىتابنى ئوقۇغانلىقى، نېمە ئىزدىگەنلىكى ۋە قانچىلىك ۋاقىت تۇرغانلىقى) ساندانغا يېزىلمايدۇ.",
+  "سىزنىڭ بەزى تەڭشەكلىرىڭىز پەقەت ئۆزىڭىزنىڭ كومپيۇتېرىدىلا (تور كۆرگۈچتە) ساقلىنىدۇ، مۇلازىمېتىرغا يوللانمايدۇ. ئۇلار:",
+  "(ئەسكەرتىش: تور كۆرگۈچىڭىزنىڭ «تارىخ ۋە سانلىق مەلۇماتنى تازىلاش» ئىقتىدارى ئارقىلىق يۇقىرىقىلارنىڭ ھەممىسىنى ئۆچۈرۈۋېتەلەيسىز.)",
+  "ھېسابات ئېچىش — پەقەت خەتكۈچ، شەخسىي خاتىرە ۋە ئوقۇش ئىزىڭىزنى باشقا ئۈسكۈنىلەردىمۇ داۋاملاشتۇرۇش ئۈچۈنلا ئىشلىتىلىدۇ. ساقلىنىدىغان ئۇچۇرلار تۆۋەندىكىچە:",
+  "بۇ ئۇچۇرلار پەقەت ئۆزىڭىزگىلا كۆرۈنىدۇ. ساندانىمىزدا قۇر دەرىجىلىك بىخەتەرلىك قائىدىسى (RLS) يولغا قويۇلغان بولۇپ، ھېچكىم سىزنىڭ شەخسىي خاتىرىلىرىڭىزنى ئوقۇيالمايدۇ.",
+  "ئاممىغا كىتاب تارقىتىش ئۈچۈن تور بېكىتىمىز بۇلۇت مۇلازىمېتىرىغا تايىنىدۇ:",
+  "بىز ھېچقانداق تاشقى CDN ياكى ئېلان تورى ئىشلەتمەيمىز. سىزنىڭ تور كۆرگۈچىڭىز پەقەت مۇشۇ تور بېكەتنىڭ ئۆزىدىنلا رەسىم ۋە خەت نۇسخىلىرىنى ئالىدۇ. مۇلازىمېتىر خاتىرىسى (Server log) سىتاتىستىكا ئۈچۈن ئىشلىتىلمەيدۇ.",
+  "ئەگەر ھېساباتىڭىز بولسا، «ھېساباتىم» بېتىگە كىرىپ تۆۋەندىكى ھوقۇقلارنى يۈرگۈزەلەيسىز:",
+  "مەزكۇر تور بېكەت ھېچكىمدىن، جۈملىدىن قۇرامىغا يەتمىگەنلەردىن شەخسىي ئۇچۇر تەلەپ قىلمايدۇ. تور بېكەتتە پۇل تۆلەش، پاراڭلىشىش ۋە ئابونتلار ئارا ئالاقە قىلىش ئىقتىدارلىرى يوق بولۇپ، بالىلارنىڭ ئوقۇشى ئۈچۈن تولۇق بىخەتەر.",
+  "مەخپىيەتلىك سىياسىتىمىزدە ئۆزگىرىش بولسا، يۇقىرىدىكى يېڭىلانغان ۋاقتى بىلەن بىللە مۇشۇ بەتتە ئېلان قىلىنىدۇ. مەنبەلەر ۋە نەشر ھوقۇقى توغرىسىدا «ھەققىدە» بېتىگە قاراڭ.",
+  "سوئال، تەكلىپ ياكى مەزمۇن ئۆچۈرۈش تەلىپىڭىز بولسا بىز بىلەن ئالاقىلىشىڭ:",
+  "ئېلخەت: kelemdepter@gmail.com",
+] as const;
+
+const PRIVACY_ITEMS = [
+  "بەت كۆرۈنۈشى: (كۈندۈز / سېپىيا / كېچە) تاللىشىڭىز كىچىك بىر cookie غا يېزىلىدۇ. بۇ پەقەت بەت ئالماشقاندا كۆزىڭىزنى قاماشتۇرماسلىق ئۈچۈنلا ئىشلىتىلىدۇ.",
+  "ئوقۇش تەڭشەكلىرى: خەت چوڭلۇقى، قۇر ئارىلىقى ۋە خەت نۇسخىسى قاتارلىق تاللاشلىرىڭىز تور كۆرگۈچىڭىزنىڭ localStorage قىسمىدىلا ساقلىنىدۇ.",
+  "ئىزدەش تارىخى: ئىزدىگەن سۆزلىرىڭىزمۇ پەقەت ئۆز ئۈسكۈنىڭىزدىلا ساقلىنىدۇ. ئەگەر بۇنىمۇ خالىمىسىڭىز، ئىزدەش رامكىسىدىكى «ئىزدەش تارىخىنى ساقلىماسلىق»نى تاللىسىڭىزلا كۇپايە.",
+  "ئېلخەت ئادرېسىڭىز ۋە شىفىرلانغان پارولىڭىز (پارولىڭىز باشقۇرغۇچىلارغىمۇ كۆرۈنمەيدۇ).",
+  "قوشقان خەتكۈچلىرىڭىز، كىتابقا يازغان خاتىرىلىرىڭىز، ئوقۇش ئىزىڭىز.",
+  "«خاتىرە دەپتىرىم»دىكى ماۋزۇ ۋە مەزمۇنلار.",
+  "ساھىبخان: تور بېكەت Vercel دە تۇرىدۇ.",
+  "ساندان ۋە ھۆججەت: ئابونت ئۇچۇرلىرى ۋە كىتاب مۇقاۋىلىرى Supabase دە ساقلىنىدۇ.",
+  "چۈشۈرۈۋېلىش: بارلىق خەتكۈچ، خاتىرە، ئوقۇش ئىزلىرىڭىزنى بىرلا JSON ھۆججىتى قىلىپ چۈشۈرۈۋالالايسىز.",
+  "پۈتۈنلەي ئۆچۈرۈش: ھېساباتىڭىزنى ۋە ئۇنىڭغا باغلانغان بارلىق سانلىق مەلۇماتلارنى بىرلا ۋاقىتتا غايىب قىلالايسىز (بۇ مەشغۇلاتنى ئەسلىگە كەلتۈرگىلى بولمايدۇ).",
+] as const;
+
+test.describe("/privacy — the owner's revision", () => {
+  test("opens under its new name, dated the day he wrote it", async ({ page }) => {
+    await page.goto("/privacy");
+    await expect(page).toHaveTitle(/مەخپىيەتلىك ۋە بىخەتەرلىك/);
+    await expect(
+      page.getByRole("heading", { name: "مەخپىيەتلىك ۋە بىخەتەرلىك", level: 1 }),
+    ).toBeVisible();
+
+    // His date, spaces and all — it is not today's — with only the label bold.
+    const updated = page.locator("h1 + p");
+    await expect(updated).toHaveText("ئاخىرقى يېڭىلانغان ۋاقتى: 2026-يىلى 9- ئاينىڭ 3- كۈنى");
+    await expect(updated.locator("strong")).toHaveText("ئاخىرقى يېڭىلانغان ۋاقتى:");
+  });
+
+  test("the six sections come in his order, numbered 1 to 6", async ({ page }) => {
+    await page.goto("/privacy");
+    const headings = page.locator(".legal h2");
+    await expect(headings).toHaveText([...PRIVACY_HEADINGS]);
+    // Every section keeps an icon in front of its title.
+    await expect(headings.locator("svg")).toHaveCount(PRIVACY_HEADINGS.length);
+  });
+
+  test("every paragraph reads exactly as he wrote it", async ({ page }) => {
+    await page.goto("/privacy");
+    const rendered = (await page.locator(".legal p").allTextContents()).map((text) =>
+      text.replace(/\s+/gu, " ").trim(),
+    );
+    expect(rendered).toEqual(
+      PRIVACY_PARAGRAPHS.map((text) => text.replace(/\s+/gu, " ").trim()),
+    );
+  });
+
+  test("every list item reads exactly as he wrote it", async ({ page }) => {
+    await page.goto("/privacy");
+    const rendered = (await page.locator(".legal li").allTextContents()).map((text) =>
+      text.replace(/\s+/gu, " ").trim(),
+    );
+    expect(rendered).toEqual(PRIVACY_ITEMS.map((text) => text.replace(/\s+/gu, " ").trim()));
+  });
+
+  test("only his labels are bold, his note italic, his three terms code", async ({ page }) => {
+    await page.goto("/privacy");
+    await expect(page.locator(".legal strong")).toHaveText([
+      "قىسقىچە خۇلاسە:",
+      "بەت كۆرۈنۈشى:",
+      "ئوقۇش تەڭشەكلىرى:",
+      "ئىزدەش تارىخى:",
+      "ساھىبخان:",
+      "ساندان ۋە ھۆججەت:",
+      "چۈشۈرۈۋېلىش:",
+      "پۈتۈنلەي ئۆچۈرۈش:",
+      "ئېلخەت:",
+    ]);
+    await expect(page.locator(".legal em")).toHaveText([
+      "(ئەسكەرتىش: تور كۆرگۈچىڭىزنىڭ «تارىخ ۋە سانلىق مەلۇماتنى تازىلاش» ئىقتىدارى ئارقىلىق يۇقىرىقىلارنىڭ ھەممىسىنى ئۆچۈرۈۋېتەلەيسىز.)",
+    ]);
+    await expect(page.locator(".legal code")).toHaveText(["cookie", "localStorage", "JSON"]);
+    // Unlike the About page, the address itself is not set in bold here.
+    await expect(page.locator(".legal strong a")).toHaveCount(0);
+  });
+
+  test("its links go where they always did", async ({ page }) => {
+    await page.goto("/privacy");
+    const legal = page.locator(".legal");
+    await expect(legal.getByRole("link", { name: "«ھېساباتىم»" })).toHaveAttribute(
+      "href",
+      "/my/account",
+    );
+    await expect(
+      legal.getByRole("link", { name: "kelemdepter@gmail.com", exact: true }),
+    ).toHaveAttribute("href", "mailto:kelemdepter@gmail.com");
+
+    const about = legal.getByRole("link", { name: "«ھەققىدە»" });
+    await expect(about).toHaveAttribute("href", "/about");
+    await about.click();
+    await expect(page).toHaveURL(/\/about$/);
+  });
+
+  test("the footer calls the page what its title does", async ({ page }) => {
+    await page.goto("/");
+    const link = page.getByTestId("privacy-link");
+    await expect(link).toHaveText("مەخپىيەتلىك ۋە بىخەتەرلىك");
+    await expect(link).toHaveAttribute("href", "/privacy");
+  });
+
+  test("the sections he removed cannot quietly come back", async ({ page }) => {
+    await page.goto("/privacy");
+    const html = await page.locator(".legal").innerHTML();
+    for (const gone of [
+      "bh-theme",
+      "ۋاقىتلىق ساقلىنىدىغىنى",
+      "7. بالىلار",
+      "9. ئالاقە",
+      "Hobby",
+    ]) {
+      expect(html, `${gone} was removed from this page on purpose`).not.toContain(gone);
+    }
+  });
+
+  test("at 360 px the longer footer label wraps; nothing scrolls sideways", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto("/privacy");
+    await assertNoHorizontalOverflow(page);
+    await scrollDownAndBackUp(page);
+    await assertNoHorizontalOverflow(page);
+
+    const first = page.locator(".legal p").first();
+    await expect(first).toBeInViewport();
+
+    const link = page.getByTestId("privacy-link");
+    await link.scrollIntoViewIfNeeded();
+    await expect(link).toBeInViewport();
+    expect(await topMostAt(page, link), "the footer link must not be covered").toBe(
+      "privacy-link",
+    );
   });
 });
 

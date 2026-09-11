@@ -220,7 +220,7 @@ export function AppShell({
               ھەققىدە
             </Link>
             <Link href="/privacy" data-testid="privacy-link" className="hover:text-am hover:underline">
-              مەخپىيەتلىك
+              مەخپىيەتلىك ۋە بىخەتەرلىك
             </Link>
             <Link href="/request" data-testid="request-link" className="hover:text-am hover:underline">
               كىتاب تەلەپ قىلىش

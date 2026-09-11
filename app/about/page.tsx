@@ -14,44 +14,56 @@ export const metadata: Metadata = {
   },
 };
 
-const REPO = "https://github.com/kelemdepter-rgb/BilimHezinisi-website";
 const DESKTOP_REPO = "https://github.com/kelemdepter-rgb/BilimHezinisi-desktop";
 const CONTACT = "kelemdepter@gmail.com";
 
-/** Every third-party source the site serves, with the licence it is used under. */
-const SOURCES: { what: string; who: string; licence: string; href?: string }[] = [
+/**
+ * Every third-party source the site serves, with the licence it is used under.
+ * `name` is the source itself and is set in bold; `qualifier` is the aside that
+ * follows it and stays at normal weight.
+ */
+const SOURCES: {
+  name: string;
+  qualifier?: string;
+  who: string;
+  licence: string;
+  href?: string;
+}[] = [
   {
-    what: "قۇرئان ئەرەبچە تېكىستى (ئوسمانىي، ھەفس)",
+    name: "قۇرئان ئەرەبچە تېكىستى",
+    qualifier: "(ئوسمانىي، ھەفس)",
     who: "Tanzil Project",
-    licence: "CC BY 3.0 — تېكىست ھېچ ئۆزگەرتىلمىگەن",
+    licence: "CC BY 3.0 — تېكىستكە ھېچقانداق ئۆزگەرتىش كىرگۈزۈلمىگەن",
     href: "https://tanzil.net",
   },
   {
-    what: "قۇرئان ئۇيغۇرچە تەرجىمىسى",
-    who: "شەيخ مۇھەممەد سالىھ — QuranEnc.com، v1.0.2-xml.1",
+    name: "قۇرئان ئۇيغۇرچە تەرجىمىسى",
+    who: "شەيخ مۇھەممەد سالىھ — QuranEnc.com, v1.0.2-xml.1",
     licence: "QuranEnc نەشر شەرتلىرى بويىچە",
     href: "https://quranenc.com/en/browse/uyghur_saleh",
   },
   {
-    what: "UKIJ خەت نۇسخىلىرى (Ekran، Tuz، Tuz Tom، Tuz Kitab)",
+    name: "UKIJ خەت نۇسخىلىرى",
+    qualifier: "(Ekran, Tuz, Tuz Tom, Tuz Kitab)",
     who: "Uyghur Computer Science Association (ukij.org)",
     licence: "LGPL",
     href: "http://www.ukij.org",
   },
   {
-    what: "Uthmanic Hafs خەت نۇسخىسى (قۇرئان ئۈچۈن)",
+    name: "Uthmanic Hafs خەت نۇسخىسى",
+    qualifier: "(قۇرئان ئۈچۈن)",
     who: "King Fahd Glorious Quran Printing Complex (KFGQPC)",
-    licence: "ھەقسىز تارقىتىشقا بولىدۇ، ئۆزگەرتىشكە بولمايدۇ — ئەينەن ساقلانغان",
+    licence: "ھەقسىز تارقىتىشقا رۇخسەت قىلىنىدۇ، لېكىن ئۆزگەرتىشكە بولمايدۇ — ئەينەن ساقلانغان",
     href: "http://fonts.qurancomplex.gov.sa/",
   },
   {
-    what: "ئىملا لۇغىتى",
+    name: "ئىملا لۇغىتى",
     who: "UyghurSpell (gheyret/UyghurSpell)",
     licence: "MIT",
     href: "https://github.com/gheyret/UyghurSpell",
   },
   {
-    what: "SymSpell ئىملا ئالگورىزىمى",
+    name: "SymSpell ئىملا ئالگورىزىمى",
     who: "Wolf Garbe",
     licence: "MIT",
     href: "https://github.com/wolfgarbe/SymSpell",
@@ -67,37 +79,40 @@ export default function AboutPage() {
       </h1>
 
       <div className="paper grain legal mt-5 p-5 sm:p-7">
-        <h2>
-          <Icon name="book-open" className="text-am" />
-          بۇ نېمە؟
-        </h2>
         <p>
-          «بىلىم خەزىنىسى» — ئۇيغۇرچە ئېلكىتابلارنى توپلىغان، ھەممەيلەنگە ئوچۇق رەقەملىك
-          كۇتۇپخانا. كىتاب ئوقۇش، ئىزدەش ۋە قۇرئان كەرىمنى مۇتالىئە قىلىش ئۈچۈن
-          <strong> ھېسابات ئېچىش تەلەپ قىلىنمايدۇ</strong>. ھېسابات ئاچسىڭىز، خەتكۈچ،
-          خاتىرە، ئوقۇش ئىزى ۋە خاتىرە دەپتەر قوشۇمچە ئىشلىتىلىدۇ — ئۇلارمۇ ھەقسىز.
+          «بىلىم خەزىنىسى» — ئۇيغۇرچە ئېلېكتىرونلۇق كىتابلار جەملەنگەن، كەڭ ئۇيغۇر
+          خەلقىمىزنىڭ پايدىلىنىشى ئۈچۈن ئېچىۋېتىلگەن رەقەملىك تور كۇتۇپخانىسىدۇر. كىتاب
+          ئوقۇش، ماتېرىيال ئىزدەش ۋە قۇرئان كەرىمنى مۇتالىئە قىلىش ئۈچۈن
+          ھېچقانداق ھېسابات ئېچىش تەلەپ قىلىنمايدۇ. ئەگەر ھېسابات
+          ئاچسىڭىز، خەتكۈش، شەخسىي خاتىرە، ئوقۇش ئىزى ۋە خاتىرە دەپتەر قاتارلىق قوشۇمچە
+          ئىقتىدارلاردىنمۇ ھەقسىز بەھرىمەن بولالايسىز.
         </p>
         <p>
-          كۇتۇپخانىدا <strong>ئېلان يوق، ئىزلاش (tracking) يوق، ستاتىستىكا يوق</strong>.
-          ھېچقانداق ئۈچىنچى تەرەپنىڭ كودى بۇ بەتلەردە ئىجرا بولمايدۇ. تەپسىلاتىنى{" "}
-          <Link href="/privacy">مەخپىيەتلىك سىياسىتى</Link> بەتتىن ئوقۇيالايسىز.
+          مەزكۇر كۇتۇپخانىدا ئېلان، ئىز قوغلاش (Tracking) ۋە سىتاتىستىكا قىلىش قاتارلىقلار
+          پۈتۈنلەي چەكلەنگەن
+          بولۇپ، بۇ بەتلەردە ھېچقانداق ئۈچىنچى تەرەپ كودى ئىجرا قىلىنمايدۇ. تەپسىلاتىنى{" "}
+          <Link href="/privacy">«بىخەتەرلىك»</Link> بېتىدىن كۆرەلەيسىز.
         </p>
 
         <h2>
           <Icon name="users" className="text-am" />
           تارقاتقۇچى
         </h2>
+        <ul>
+          <li>
+            <strong>تارقاتقۇچى ئورۇن:</strong> ئىخلاس نەشرىياتى
+          </li>
+          <li>
+            <strong>تۈزگۈچى:</strong> ئابدۇسەمەد
+          </li>
+        </ul>
         <p>
-          تارقاتقۇچى ئورۇن: <strong>ئىخلاس نەشرىياتى</strong>. ياسىغۇچى:{" "}
-          <strong>ئابدۇسەمەد</strong>.
-        </p>
-        <p>
-          كومپيۇتېر ئۈچۈن تورسىز ئىشلەيدىغان Windows نۇسخىسىمۇ بار:{" "}
+          كۇتۇپخانىنىڭ تورسىز ھالەتتىمۇ ئىشلەيدىغان{" "}
           <a href={DESKTOP_REPO} target="_blank" rel="noreferrer">
-            بىلىم خەزىنىسى (Windows)
-          </a>
-          . ئۇنىڭدا سىكانېرلانغان PDF لارنى خەتكە ئايلاندۇرۇش (OCR) قاتارلىق تور نۇسخىسىدا
-          يوق ئىقتىدارلار بار.
+            «بىلىم خەزىنىسى» (Windows)
+          </a>{" "}
+          نۇسخىسىمۇ تارقىتىلدى. ئۇنىڭغا سىكاننېرلانغان PDF ھۆججەتلەرنى تېكىستكە
+          ئايلاندۇرۇش (OCR) قاتارلىق، تور نۇسخىسىدا يوق قۇلايلىق ئىقتىدارلارمۇ قوشۇلغان.
         </p>
 
         <h2>
@@ -105,7 +120,8 @@ export default function AboutPage() {
           مەنبەلەر ۋە ئىجازەتنامىلەر
         </h2>
         <p>
-          بۇ سايت تۆۋەندىكى ئەسەرلەرنى ئۇلارنىڭ ئۆز ئىجازەتنامىسى بويىچە ئىشلىتىدۇ:
+          مەزكۇر تور بېكەت تۆۋەندىكى مەنبەلەرنى ئۆز ئالدىغا بېكىتىلگەن ئىجازەتنامە
+          شەرتلىرىگە ئاساسەن ئىشلىتىدۇ:
         </p>
         <div className="table-scroll">
           <table>
@@ -113,13 +129,16 @@ export default function AboutPage() {
               <tr>
                 <th>مەنبە</th>
                 <th>ئىگىسى</th>
-                <th>ئىجازەتنامە</th>
+                <th>ئىجازەتنامە شەرتى</th>
               </tr>
             </thead>
             <tbody>
               {SOURCES.map((source) => (
-                <tr key={source.what}>
-                  <td>{source.what}</td>
+                <tr key={source.name}>
+                  <td>
+                    <strong>{source.name}</strong>
+                    {source.qualifier ? ` ${source.qualifier}` : null}
+                  </td>
                   <td>
                     {source.href ? (
                       <a href={source.href} target="_blank" rel="noreferrer">
@@ -136,37 +155,14 @@ export default function AboutPage() {
           </table>
         </div>
 
-        <h3>خەت نۇسخىسى ھەققىدە بىر ئىزاھات</h3>
-        <p>
-          «Traditional Arabic» ۋە «Bahij Nazanin» خەت نۇسخىلىرى بۇ سايتتىن{" "}
-          <strong>ھەرگىز يۈكلەنمەيدۇ</strong>، چۈنكى ئۇلارنىڭ ئىجازەتنامىسى باشقىلارغا
-          تارقىتىشقا رۇخسەت قىلمايدۇ. «Traditional Arabic» ئوقۇغۇچتا تاللىنىدۇ، لېكىن ئۇ
-          سىزنىڭ ئۆز كومپيۇتېرىڭىزدىكى (Windows بىلەن كەلگەن) نۇسخىدىن ئوقۇلىدۇ. ئۇ
-          يوق بولسا، سايت ئۆزى تارقىتىشقا ھوقۇقلۇق بولغان UKIJ Ekran غا قايتىدۇ.
-        </p>
-
-        <h3>پروگرامما كودى</h3>
-        <p>
-          بۇ سايتنىڭ ئۆز كودى <strong>MIT</strong> ئىجازەتنامىسى ئاستىدا. ئىشلىتىلگەن
-          npm بۆلەكلىرىنىڭ ئىجازەتنامىلىرى ئاساسەن MIT، Apache-2.0، BSD-2-Clause ۋە
-          MPL-2.0 ئائىلىسىدىن. تولۇق تىزىملىك:{" "}
-          <a href={`${REPO}/blob/main/THIRD-PARTY-NOTICES.md`} target="_blank" rel="noreferrer">
-            THIRD-PARTY-NOTICES.md
-          </a>{" "}
-          ·{" "}
-          <a href={`${REPO}/blob/main/LICENSE`} target="_blank" rel="noreferrer">
-            LICENSE
-          </a>
-          .
-        </p>
-
         <h2>
           <Icon name="book-marked" className="text-am" />
           كىتابلار ھەققىدە
         </h2>
         <p>
-          كۇتۇپخانىدىكى كىتابلار ئۆز ئاپتورلىرى ۋە نەشرىياتلىرىغا تەۋە. ئۇلار بۇ يەردە
-          ھەقسىز، ئېلانسىز ھالدا ئوقۇشقا سۇنۇلىدۇ.
+          كۇتۇپخانىدىكى بارلىق كىتابلارنىڭ نەشر ھوقۇقى ئۆز ئاپتورلىرى ۋە نەشرىياتلىرىغا
+          تەۋە. بۇ كىتابلار تور بېكىتىمىزدە ئوقۇرمەنلەرنىڭ ھەقسىز ۋە ئېلانسىز
+          پايدىلىنىشى ئۈچۈن سۇنۇلدى.
         </p>
 
         <h2>
@@ -174,17 +170,20 @@ export default function AboutPage() {
           ئالاقە ۋە مەزمۇن ئۆچۈرۈش تەلىپى
         </h2>
         <p>
-          سوئال، تۈزىتىش ياكى تەكلىپ ئۈچۈن:{" "}
-          <a href={`mailto:${CONTACT}`} dir="ltr">
-            {CONTACT}
-          </a>
+          ھەر قانداق سوئال، تۈزىتىش پىكرى ياكى تەكلىپ-مەسلىھەتلىرىڭىز بولسا تۆۋەندىكى
+          ئېلخەت ئارقىلىق بىز بىلەن ئالاقىلىشىڭ:
         </p>
         <p>
           <strong>
-            ئەگەر بۇ سايتتىكى بىرەر مەزمۇن سىزنىڭ ھوقۇقىڭىزغا دەخلى قىلىدۇ دەپ
-            قارىسىڭىز، يۇقىرىقى ئادرېسقا خەت يېزىڭ — ئۇ مەزمۇن دەرھال تۈزىتىلىدۇ ياكى
-            ئۆچۈرۈلىدۇ.
+            <a href={`mailto:${CONTACT}`} dir="ltr">
+              {CONTACT}
+            </a>
           </strong>
+        </p>
+        <p>
+          ئەگەر مەزكۇر تور بېكەتتىكى مەلۇم بىر مەزمۇننى نەشر ھوقۇقىڭىزغا دەخلى-تەرۇز
+          قىلدى دەپ قارىسىڭىز، يۇقىرىقى ئېلخەت ئادرېسىغا ئۇچۇر قىلىڭ. مۇناسىۋەتلىك
+          مەزمۇنلار دەرھال تۈزىتىلىدۇ ياكى سىستېمىدىن ئۆچۈرۈلىدۇ.
         </p>
       </div>
     </div>

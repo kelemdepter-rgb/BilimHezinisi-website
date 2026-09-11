@@ -138,6 +138,189 @@ for (const [path, heading] of [
   });
 }
 
+/* ── The About page's copy, as the owner wrote it ────────────────────────── */
+
+/**
+ * The owner rewrote this page himself; every paragraph below is his wording,
+ * pasted rather than retyped. Comparing the rendered text against it is what
+ * makes "word for word" checkable instead of a promise.
+ */
+const ABOUT_PARAGRAPHS = [
+  "«بىلىم خەزىنىسى» — ئۇيغۇرچە ئېلېكتىرونلۇق كىتابلار جەملەنگەن، كەڭ ئۇيغۇر خەلقىمىزنىڭ پايدىلىنىشى ئۈچۈن ئېچىۋېتىلگەن رەقەملىك تور كۇتۇپخانىسىدۇر. كىتاب ئوقۇش، ماتېرىيال ئىزدەش ۋە قۇرئان كەرىمنى مۇتالىئە قىلىش ئۈچۈن ھېچقانداق ھېسابات ئېچىش تەلەپ قىلىنمايدۇ. ئەگەر ھېسابات ئاچسىڭىز، خەتكۈش، شەخسىي خاتىرە، ئوقۇش ئىزى ۋە خاتىرە دەپتەر قاتارلىق قوشۇمچە ئىقتىدارلاردىنمۇ ھەقسىز بەھرىمەن بولالايسىز.",
+  "مەزكۇر كۇتۇپخانىدا ئېلان، ئىز قوغلاش (Tracking) ۋە سىتاتىستىكا قىلىش قاتارلىقلار پۈتۈنلەي چەكلەنگەن بولۇپ، بۇ بەتلەردە ھېچقانداق ئۈچىنچى تەرەپ كودى ئىجرا قىلىنمايدۇ. تەپسىلاتىنى «بىخەتەرلىك» بېتىدىن كۆرەلەيسىز.",
+  "كۇتۇپخانىنىڭ تورسىز ھالەتتىمۇ ئىشلەيدىغان «بىلىم خەزىنىسى» (Windows) نۇسخىسىمۇ تارقىتىلدى. ئۇنىڭغا سىكاننېرلانغان PDF ھۆججەتلەرنى تېكىستكە ئايلاندۇرۇش (OCR) قاتارلىق، تور نۇسخىسىدا يوق قۇلايلىق ئىقتىدارلارمۇ قوشۇلغان.",
+  "مەزكۇر تور بېكەت تۆۋەندىكى مەنبەلەرنى ئۆز ئالدىغا بېكىتىلگەن ئىجازەتنامە شەرتلىرىگە ئاساسەن ئىشلىتىدۇ:",
+  "كۇتۇپخانىدىكى بارلىق كىتابلارنىڭ نەشر ھوقۇقى ئۆز ئاپتورلىرى ۋە نەشرىياتلىرىغا تەۋە. بۇ كىتابلار تور بېكىتىمىزدە ئوقۇرمەنلەرنىڭ ھەقسىز ۋە ئېلانسىز پايدىلىنىشى ئۈچۈن سۇنۇلدى.",
+  "ھەر قانداق سوئال، تۈزىتىش پىكرى ياكى تەكلىپ-مەسلىھەتلىرىڭىز بولسا تۆۋەندىكى ئېلخەت ئارقىلىق بىز بىلەن ئالاقىلىشىڭ:",
+  "kelemdepter@gmail.com",
+  "ئەگەر مەزكۇر تور بېكەتتىكى مەلۇم بىر مەزمۇننى نەشر ھوقۇقىڭىزغا دەخلى-تەرۇز قىلدى دەپ قارىسىڭىز، يۇقىرىقى ئېلخەت ئادرېسىغا ئۇچۇر قىلىڭ. مۇناسىۋەتلىك مەزمۇنلار دەرھال تۈزىتىلىدۇ ياكى سىستېمىدىن ئۆچۈرۈلىدۇ.",
+] as const;
+
+test.describe("/about — the owner's revision", () => {
+  test("opens with his two paragraphs, under the same heading", async ({ page }) => {
+    await page.goto("/about");
+    await expect(
+      page.getByRole("heading", { name: "بىلىم خەزىنىسى ھەققىدە", level: 1 }),
+    ).toBeVisible();
+
+    // No section heading stands between the title and the opening paragraph.
+    const first = page.locator(".legal p").first();
+    await expect(first).toBeVisible();
+    await expect(first).toContainText("رەقەملىك تور كۇتۇپخانىسىدۇر");
+  });
+
+  test("every paragraph reads exactly as he wrote it", async ({ page }) => {
+    await page.goto("/about");
+    const rendered = (await page.locator(".legal p").allTextContents()).map((text) =>
+      text.replace(/\s+/gu, " ").trim(),
+    );
+    expect(rendered).toEqual(
+      ABOUT_PARAGRAPHS.map((text) => text.replace(/\s+/gu, " ").trim()),
+    );
+  });
+
+  test("the sections he removed cannot quietly come back", async ({ page }) => {
+    await page.goto("/about");
+    await expect(page.getByRole("heading", { name: "بۇ نېمە؟" })).toHaveCount(0);
+
+    // Markup, not just text: the code-licence section was a pair of links.
+    const html = await page.locator(".legal").innerHTML();
+    for (const gone of [
+      "بۇ نېمە؟",
+      "Traditional Arabic",
+      "Bahij Nazanin",
+      "THIRD-PARTY-NOTICES",
+      "پروگرامما كودى",
+    ]) {
+      expect(html, `${gone} was removed from this page on purpose`).not.toContain(gone);
+    }
+  });
+
+  test("«بىخەتەرلىك» opens the privacy page", async ({ page }) => {
+    await page.goto("/about");
+    const link = page.getByRole("link", { name: "«بىخەتەرلىك»" });
+    await expect(link).toHaveAttribute("href", "/privacy");
+    await link.click();
+    await expect(page).toHaveURL(/\/privacy$/);
+  });
+
+  test("the desktop edition is still linked, and opened safely", async ({ page }) => {
+    await page.goto("/about");
+    const link = page.getByRole("link", { name: "«بىلىم خەزىنىسى» (Windows)" });
+    await expect(link).toHaveAttribute(
+      "href",
+      "https://github.com/kelemdepter-rgb/BilimHezinisi-desktop",
+    );
+    await expect(link).toHaveAttribute("rel", "noreferrer");
+  });
+
+  test("the publisher is named as two facts, not a sentence", async ({ page }) => {
+    await page.goto("/about");
+    const items = page.locator(".legal ul li");
+    await expect(items).toHaveCount(2);
+    await expect(items).toHaveText([
+      "تارقاتقۇچى ئورۇن: ئىخلاس نەشرىياتى",
+      "تۈزگۈچى: ئابدۇسەمەد",
+    ]);
+    await expect(items.locator("strong")).toHaveText([
+      "تارقاتقۇچى ئورۇن:",
+      "تۈزگۈچى:",
+    ]);
+  });
+
+  test("only the specified labels, source names and email are emphasized", async ({ page }) => {
+    await page.goto("/about");
+    await expect(page.locator(".legal strong")).toHaveText([
+      "تارقاتقۇچى ئورۇن:",
+      "تۈزگۈچى:",
+      "قۇرئان ئەرەبچە تېكىستى",
+      "قۇرئان ئۇيغۇرچە تەرجىمىسى",
+      "UKIJ خەت نۇسخىلىرى",
+      "Uthmanic Hafs خەت نۇسخىسى",
+      "ئىملا لۇغىتى",
+      "SymSpell ئىملا ئالگورىزىمى",
+      "kelemdepter@gmail.com",
+    ]);
+  });
+
+  test("all six sources are credited, with the source name set apart", async ({ page }) => {
+    await page.goto("/about");
+    const rows = page.locator(".legal table tbody tr");
+    await expect(rows).toHaveCount(6);
+
+    await expect(page.locator(".legal table thead th").nth(2)).toHaveText("ئىجازەتنامە شەرتى");
+    await expect(rows.first().locator("td").first().locator("strong")).toHaveText(
+      "قۇرئان ئەرەبچە تېكىستى",
+    );
+    // The licences themselves are the reason this table exists.
+    await expect(page.getByRole("link", { name: "Tanzil Project" })).toHaveAttribute(
+      "href",
+      "https://tanzil.net",
+    );
+    await expect(rows.first()).toContainText("CC BY 3.0");
+  });
+
+  test("at 360 px the table scrolls, not the page", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto("/about");
+    await page.locator(".legal .table-scroll").scrollIntoViewIfNeeded();
+
+    const metrics = await page.evaluate(() => {
+      const box = document.querySelector<HTMLElement>(".legal .table-scroll")!;
+      return {
+        pageScroll: document.documentElement.scrollWidth,
+        pageClient: document.documentElement.clientWidth,
+        boxScroll: box.scrollWidth,
+        boxClient: box.clientWidth,
+        overflowX: getComputedStyle(box).overflowX,
+      };
+    });
+    expect(metrics.pageScroll, "the page must not scroll sideways").toBeLessThanOrEqual(
+      metrics.pageClient + 1,
+    );
+    if (metrics.boxScroll > metrics.boxClient + 1) {
+      expect(["auto", "scroll"]).toContain(metrics.overflowX);
+      const distance = await page.locator(".legal .table-scroll").evaluate((box) => {
+        box.scrollLeft = -box.scrollWidth;
+        const negative = box.scrollLeft;
+        box.scrollLeft = box.scrollWidth;
+        const positive = box.scrollLeft;
+        box.scrollLeft = 0;
+        return Math.abs(negative) + Math.abs(positive);
+      });
+      expect(distance, "overflowing table can scroll in RTL").toBeGreaterThan(0);
+    }
+  });
+
+  test("nothing is swallowed after scrolling down and back up", async ({ page }) => {
+    await page.goto("/about");
+    await scrollDownAndBackUp(page);
+    await assertNoHorizontalOverflow(page);
+
+    const first = page.locator(".legal p").first();
+    await expect(first).toBeInViewport();
+    const paragraphBox = (await first.boundingBox())!;
+    const overParagraph = await first.evaluate(
+      (paragraph, [x, y]) => paragraph.contains(document.elementFromPoint(x, y)),
+      [paragraphBox.x + paragraphBox.width / 2, Math.max(paragraphBox.y, 0) + 8] as const,
+    );
+    expect(overParagraph, "the opening paragraph must not be covered").toBe(true);
+
+    const contact = page.locator(".legal").getByRole("link", { name: "kelemdepter@gmail.com", exact: true });
+    await contact.scrollIntoViewIfNeeded();
+    await expect(contact).toBeVisible();
+    await expect(contact).toBeInViewport();
+    await expect(contact).toHaveAttribute("href", "mailto:kelemdepter@gmail.com");
+    await contact.click({ trial: true });
+    const contactBox = (await contact.boundingBox())!;
+    const covering = await page.evaluate(
+      ([x, y]) => document.elementFromPoint(x, y)?.tagName ?? null,
+      [contactBox.x + contactBox.width / 2, contactBox.y + contactBox.height / 2] as const,
+    );
+    expect(covering, "the contact link must be the element on top").toBe("A");
+  });
+});
+
 /* ── Fonts we are allowed to serve ───────────────────────────────────────── */
 
 test.describe("the reader's font picker", () => {

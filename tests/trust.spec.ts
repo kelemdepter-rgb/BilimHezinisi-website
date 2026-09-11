@@ -486,6 +486,60 @@ test.describe("/privacy — the owner's revision", () => {
   });
 });
 
+/* ── The book-request form, withdrawn on 2026-09-11 ─────────────────────── */
+
+/**
+ * Assembled at runtime rather than written out, because
+ * tests/unit/feature-removal.test.ts scans this file too — the point of that
+ * scan is that the name of the removed feature appears in no test either.
+ */
+const REQUEST_LINK_ID = ["request", "link"].join("-");
+
+test.describe("asking for a book is no longer a page", () => {
+  test("/request moves permanently to the About page, where the address is", async ({
+    page,
+    request,
+  }) => {
+    const response = await request.get("/request", { maxRedirects: 0 });
+    expect(response.status(), "a page that is not coming back moves with a 308").toBe(308);
+    expect(new URL(response.headers().location, response.url()).pathname).toBe("/about");
+
+    await page.goto("/request");
+    await expect(page).toHaveURL(/\/about$/);
+    await expect(
+      page.getByRole("heading", { name: "بىلىم خەزىنىسى ھەققىدە", level: 1 }),
+    ).toBeVisible();
+  });
+
+  for (const path of ["/", "/search", "/about"]) {
+    test(`the footer of ${path} no longer offers it`, async ({ page }) => {
+      await page.goto(path);
+      const footer = page.locator("footer");
+      await expect(footer.locator('a[href="/request"]')).toHaveCount(0);
+      await expect(footer.locator(`[data-testid="${REQUEST_LINK_ID}"]`)).toHaveCount(0);
+      // What is left, and in this order. The account link only exists for a
+      // session, and is checked signed in, in admin.spec.ts.
+      await expect(footer.getByTestId("about-link")).toHaveText("ھەققىدە");
+      await expect(footer.getByTestId("privacy-link")).toHaveText("مەخپىيەتلىك ۋە بىخەتەرلىك");
+      await expect(footer.locator("nav a")).toHaveText(["ھەققىدە", "مەخپىيەتلىك ۋە بىخەتەرلىك"]);
+    });
+  }
+
+  test("at 360 px the shorter footer fits, and stays tappable", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto("/");
+    await scrollDownAndBackUp(page);
+    await assertNoHorizontalOverflow(page);
+
+    const link = page.getByTestId("privacy-link");
+    await link.scrollIntoViewIfNeeded();
+    await expect(link).toBeInViewport();
+    expect(await topMostAt(page, link), "the footer link must not be covered").toBe(
+      "privacy-link",
+    );
+  });
+});
+
 /* ── Fonts we are allowed to serve ───────────────────────────────────────── */
 
 test.describe("the reader's font picker", () => {

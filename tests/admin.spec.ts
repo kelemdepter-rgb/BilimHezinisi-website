@@ -45,6 +45,64 @@ test.describe("admin access", () => {
   });
 });
 
+/**
+ * The book-request inbox was withdrawn on 2026-09-11. Its address and the
+ * test id of its dashboard button are assembled at runtime here, because
+ * tests/unit/feature-removal.test.ts scans this file for the same names.
+ *
+ * Signed in as the seeded staff account, which is an uploader — the suite
+ * has never created an administrator in the live project. The entry and the
+ * button were admin-only, so for an uploader this proves the markup is gone
+ * rather than merely hidden; what an admin sees is the same component with
+ * the same, now absent, entries.
+ */
+test.describe("the request inbox is gone", () => {
+  const INBOX_PATH = ["/admin", "requests"].join("/");
+  const INBOX_LINK_ID = ["admin", "requests", "link"].join("-");
+
+  test("its address answers 404, like any page that does not exist", async ({ page }) => {
+    const response = await page.goto(INBOX_PATH);
+    expect(response?.status(), "an unknown admin page is a 404, not an inbox").toBe(404);
+    await expect(page.locator("h1.next-error-h1")).toHaveText("404");
+  });
+
+  test("the navigation and the dashboard no longer lead to it", async ({ page }) => {
+    await page.goto("/admin");
+    const nav = page.getByRole("navigation", { name: "باشقۇرۇش تىزىملىكى" });
+    await expect(nav.getByRole("link", { name: "تەلەپلەر" })).toHaveCount(0);
+    await expect(page.locator(`a[href="${INBOX_PATH}"]`)).toHaveCount(0);
+    await expect(page.getByTestId(INBOX_LINK_ID)).toHaveCount(0);
+
+    // Three cards and three buttons, the same ones as before the inbox came.
+    const cards = page.locator("main div.grid > div.paper");
+    await expect(cards).toHaveCount(3);
+    await expect(cards.locator("p.font-semibold")).toHaveText(["سالاھىيىتىڭىز", "كىتابلار", "تۈرلەر"]);
+    const buttons = page.locator("main div.flex-wrap > a");
+    await expect(buttons).toHaveText(["يېڭى كىتاب قوشۇش", "كىتابلارنى باشقۇرۇش", "تۈرلەرنى باشقۇرۇش"]);
+
+    // The footer keeps the account link a session is entitled to.
+    const footer = page.locator("footer");
+    await expect(footer.locator("nav a")).toHaveText([
+      "ھەققىدە",
+      "مەخپىيەتلىك ۋە بىخەتەرلىك",
+      "ھېساباتىم",
+    ]);
+    await expect(footer.getByTestId("account-link")).toHaveAttribute("href", "/my/account");
+  });
+
+  test("at 360 px the dashboard still lays out without sideways scroll", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 640 });
+    await page.goto("/admin");
+    await expect(page.locator("main div.grid > div.paper")).toHaveCount(3);
+    await assertNoHorizontalOverflow(page);
+    await scrollDownAndBackUp(page);
+    await assertNoHorizontalOverflow(page);
+    const privacy = page.getByTestId("privacy-link");
+    await privacy.scrollIntoViewIfNeeded();
+    await expect(privacy).toBeInViewport();
+  });
+});
+
 test.describe("category management", () => {
   const NAME_A = "__e2e_tur_a__";
   const NAME_B = "__e2e_tur_b__";

@@ -58,18 +58,6 @@ export const PASSWORD_RESET_RULE: RateLimitRule = { limit: 4, windowMs: 60 * 60_
 export const BOOK_DOWNLOAD_RULE: RateLimitRule = { limit: 20, windowMs: 10 * 60_000 };
 
 /**
- * Asking for a book to be added.
- *
- * The tightest rule here, and deliberately: a request writes a row to a table
- * only the admin will ever read, so the only thing volume can achieve is
- * filling the owner's inbox and the 500 MB budget. Three an hour is more than
- * anyone genuinely asking for books needs; the database enforces a daily and a
- * total cap behind it, because the anon key is public and the form is not the
- * only way in.
- */
-export const BOOK_REQUEST_RULE: RateLimitRule = { limit: 3, windowMs: 60 * 60_000 };
-
-/**
  * Searching the library from inside a note.
  *
  * Every keystroke is debounced into at most one search, and a writer looking

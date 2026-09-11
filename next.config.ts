@@ -106,6 +106,23 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        /**
+         * The book-request form was removed on 2026-09-11; the contact
+         * address on /about is the channel that replaced it. Anyone who
+         * bookmarked the form, and any crawler that indexed it, lands there
+         * rather than on a 404. Permanent, because the page is not coming
+         * back. The domain move's redirects live in proxy.ts and
+         * lib/legacy-host.ts and are a separate matter.
+         */
+        source: "/request",
+        destination: "/about",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

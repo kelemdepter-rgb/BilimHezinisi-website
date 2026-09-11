@@ -1,16 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
-import { SEED_BOOK_TITLE, SEED_REQUEST_PREFIX, hasStaffTestEnv, loadEnvLocal } from "./env";
+import { SEED_BOOK_TITLE, hasStaffTestEnv, loadEnvLocal } from "./env";
 
 loadEnvLocal();
 
 test.skip(!hasStaffTestEnv(), "Supabase env not configured");
 
 /**
- * Being found, and being asked for: authors, what is new, the feed, and the
- * book-request inbox.
+ * Being found: authors, what is new, and the feed.
  *
- * Anonymous by default — every one of these has to work with no account —
- * with the admin block opening its own signed-in context.
+ * Anonymous by default — every one of these has to work with no account.
  */
 
 /** The author the setup project seeds its book under. */
@@ -360,92 +358,5 @@ test.describe("the feed", () => {
     const link = page.locator('link[rel="alternate"][type="application/atom+xml"]');
     await expect(link).toHaveCount(1);
     await expect(link).toHaveAttribute("href", "/feed.xml");
-  });
-});
-
-test.describe("asking for a book", () => {
-  test("takes a request from a signed-out visitor", async ({ page }) => {
-    await page.goto("/request");
-    await page.getByTestId("request-title").fill(`${SEED_REQUEST_PREFIX} قۇتادغۇ بىلىك`);
-    await page.getByTestId("request-author").fill("يۈسۈپ خاس ھاجىپ");
-    await page.getByTestId("request-note").fill("Playwright سىنىقى.");
-
-    // The form refuses anything filled in faster than a person could.
-    await page.waitForTimeout(2500);
-    await page.getByTestId("request-submit").click();
-
-    await expect(page.getByTestId("request-sent")).toBeVisible();
-    await assertNoHorizontalOverflow(page);
-  });
-
-  test("swallows a bot without telling it why", async ({ page }) => {
-    await page.goto("/request");
-    await page.getByTestId("request-title").fill(`${SEED_REQUEST_PREFIX} بوت تەلىپى`);
-    // The honeypot: a field no person can see or tab to.
-    await page.evaluate(() => {
-      const field = document.querySelector<HTMLInputElement>('input[name="website"]');
-      if (!field) throw new Error("the honeypot field is missing");
-      field.value = "https://spam.example";
-    });
-    await page.waitForTimeout(2500);
-    await page.getByTestId("request-submit").click();
-
-    // Exactly the same message an honest reader gets: a bot that is told which
-    // field gave it away simply stops filling that field.
-    await expect(page.getByTestId("request-sent")).toBeVisible();
-    await expect(page.getByTestId("request-error")).toHaveCount(0);
-  });
-
-  test("turns away a burst with a friendly Uyghur message", async ({ page }) => {
-    // The rate limiter counts per address, so this spends its own allowance
-    // and then reads the message the fourth attempt gets.
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      await page.goto("/request");
-      await page.getByTestId("request-title").fill(`${SEED_REQUEST_PREFIX} تېز تەلەپ ${attempt}`);
-      await page.waitForTimeout(2100);
-      await page.getByTestId("request-submit").click();
-      await page.waitForLoadState("load");
-      if ((await page.getByTestId("request-error").count()) > 0) break;
-    }
-
-    const error = page.getByTestId("request-error");
-    await expect(error).toBeVisible();
-    // Uyghur, not a bare 429.
-    await expect(error).toContainText(/[؀-ۿ]/);
-    await assertNoHorizontalOverflow(page);
-  });
-});
-
-test.describe("the request inbox is the admin's alone", () => {
-  test("sends a signed-out visitor to sign in", async ({ page }) => {
-    await page.goto("/admin/requests");
-    await expect(page).not.toHaveURL(/\/admin\/requests/);
-    await expect(page).toHaveURL(/\/login/);
-  });
-
-  test("turns a plain reader away", async ({ browser }) => {
-    const context = await browser.newContext({ storageState: "tests/.auth/reader.json" });
-    const page = await context.newPage();
-    await page.goto("/admin/requests");
-    await expect(page, "a reader is not an admin").not.toHaveURL(/\/admin\/requests/);
-    await context.close();
-  });
-
-  test("turns an uploader away too — books are not messages", async ({ browser }) => {
-    /**
-     * The seeded staff account is an uploader, which is the interesting case:
-     * they may add and publish books, and still have no business reading
-     * strangers' notes and email addresses.
-     *
-     * What an ADMIN sees is proven one layer down, in
-     * tests/unit/book-requests-sql.test.ts, against the policy itself — there
-     * is no admin account to sign in as here, and creating one would leave a
-     * real administrator behind in the live project.
-     */
-    const context = await browser.newContext({ storageState: "tests/.auth/staff.json" });
-    const page = await context.newPage();
-    await page.goto("/admin/requests");
-    await expect(page).not.toHaveURL(/\/admin\/requests/);
-    await context.close();
   });
 });

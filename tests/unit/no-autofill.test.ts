@@ -183,7 +183,6 @@ describe("autofill still works where it should", () => {
     ["app/(auth)/register/page.tsx", ['autoComplete="name"', 'autoComplete="email"', 'autoComplete="new-password"']],
     ["app/(auth)/forgot-password/page.tsx", ['autoComplete="email"']],
     ["app/(auth)/reset-password/page.tsx", ['autoComplete="new-password"']],
-    ["app/request/page.tsx", ['autoComplete="email"']],
   ])("%s keeps its identity tokens", (file, expected) => {
     const source = read(file);
     for (const token of expected) expect(source, `${file} must keep ${token}`).toContain(token);

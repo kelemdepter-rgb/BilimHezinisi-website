@@ -222,9 +222,6 @@ export function AppShell({
             <Link href="/privacy" data-testid="privacy-link" className="hover:text-am hover:underline">
               مەخپىيەتلىك ۋە بىخەتەرلىك
             </Link>
-            <Link href="/request" data-testid="request-link" className="hover:text-am hover:underline">
-              كىتاب تەلەپ قىلىش
-            </Link>
             <Suspense fallback={<AccountLinkSkeleton signedIn={looksSignedIn} />}>
               <AccountLink sessionPromise={sessionPromise} />
             </Suspense>

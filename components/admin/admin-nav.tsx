@@ -9,7 +9,6 @@ const LINKS: { href: string; label: string; icon: IconName; adminOnly?: boolean 
   { href: "/admin", label: "باشلىنىش", icon: "chart" },
   { href: "/admin/books", label: "كىتابلار", icon: "book" },
   { href: "/admin/categories", label: "تۈرلەر", icon: "layers" },
-  { href: "/admin/requests", label: "تەلەپلەر", icon: "mail", adminOnly: true },
   { href: "/admin/users", label: "ئەزالار", icon: "user", adminOnly: true },
 ];
 

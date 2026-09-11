@@ -277,9 +277,8 @@ export default defineConfig({
       },
       {
         /**
-         * Authors, what is new, the feed and the book-request inbox.
-         * Anonymous by default — none of it may need an account — with the
-         * inbox block opening its own signed-in contexts.
+         * Authors, what is new and the feed. Anonymous by default — none of
+         * it may need an account.
          */
         name: `discovery-${viewport.name}`,
         testMatch: /discovery.spec.ts/,

@@ -144,15 +144,6 @@ test.describe("autofill still works where a password manager should help", () =>
     await context.close();
   });
 
-  test("the book-request form still offers to fill in an email", async ({ browser }) => {
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    await page.goto("/request");
-    await expect(page.getByTestId("request-contact")).toHaveAttribute("autocomplete", "email");
-    // …and the title beside it does not, because it is not the reader's.
-    await expect(page.getByTestId("request-title")).toHaveAttribute("autocomplete", "off");
-    await context.close();
-  });
 });
 
 /**

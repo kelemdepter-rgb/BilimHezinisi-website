@@ -80,7 +80,7 @@ function autocompleteValues(): { file: string; value: string }[] {
     for (const match of source.matchAll(/autoComplete=(?:"([^"]*)"|\{"([^"]*)"\})/g)) {
       found.push({ file: path, value: match[1] ?? match[2] ?? "" });
     }
-    // The object-spread form used by components/search/uyghur-text-field.tsx.
+    // The object-spread form, `autoComplete: "…"` inside a props object.
     for (const match of source.matchAll(/autoComplete:\s*"([^"]*)"/g)) {
       found.push({ file: path, value: match[1] });
     }

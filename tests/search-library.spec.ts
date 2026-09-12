@@ -57,6 +57,17 @@ async function topMostTestIdAt(page: Page, testId: string): Promise<string | nul
   );
 }
 
+/**
+ * No failure notice on the page. Scoped to <main>: Next mounts its own route
+ * announcer with role="alert" at the end of every body, so a bare
+ * getByRole("alert") always finds one element.
+ */
+async function expectNoSearchFailure(page: Page) {
+  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+  await expect(page.getByTestId("search-timeout")).toHaveCount(0);
+  await expect(page.getByTestId("search-failed")).toHaveCount(0);
+}
+
 /** Type into the header's search box — the desktop field or the phone panel. */
 async function searchFromHeader(page: Page, term: string) {
   if (narrow(page)) {
@@ -78,7 +89,7 @@ test.describe("the whole library, anonymously", () => {
 
     expect(new URL(page.url()).searchParams.has("cat"), "no category was chosen").toBe(false);
     await expect(page.getByTestId("search-result").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expectNoSearchFailure(page);
     await expect(page.getByTestId("search-scope")).toHaveAttribute("data-scope", "all");
     await assertNoHorizontalOverflow(page);
   });
@@ -86,7 +97,7 @@ test.describe("the whole library, anonymously", () => {
   test("a word that occurs nowhere answers «ھېچنېمە تېپىلمىدى», not an error", async ({ page }) => {
     await page.goto(`/search?q=${encodeURIComponent(NOWHERE)}`);
     await expect(page.getByTestId("search-empty")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expectNoSearchFailure(page);
   });
 
   test("a result opens the reader with the ↑ ↓ navigator and its counter", async ({ page }) => {

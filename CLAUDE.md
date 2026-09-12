@@ -89,9 +89,11 @@ modify anything there from this project).
 `books` (id, title, author, category_id, format, date, description, language,
 cover_path, original_file_path NULL, file_hash, page_count, status `draft|published`,
 uploaded_by, timestamps) ·
-`book_pages` (book_id, page_no, content, content_norm tsvector) — desktop stores one
-big text per book; the web MUST chunk into pages (~2,000–3,000 chars, split on
-paragraph boundaries) for lazy loading and search snippets ·
+`book_pages` (book_id, page_no, content) — searched through the expression index
+`book_pages_fts_idx` on `to_tsvector('simple', ug_normalize(content))`; there is NO
+stored `content_norm` column (0014 dropped it: 4 MB per book on a 500 MB ceiling).
+Desktop stores one big text per book; the web MUST chunk into pages (~2,000–3,000
+chars, split on paragraph boundaries) for lazy loading and search snippets ·
 `quran_suras` / `quran_ayas` (same columns as desktop: number, name_ar, name_ug,
 text_ar, text_ar_simple, text_ug) + FTS ·
 `bookmarks`, `book_notes`, `reading_progress`, `recent_reads` (all per-user:
@@ -107,7 +109,15 @@ here. The table is left in place because an applied migration is never edited ·
   substring/wildcard matching. Target <3 s across 500 books.
 - Port `normalizeArabicQuery` from desktop `database.js` into a SQL function
   `ug_normalize(text)` (hamza unification, ya/alif maqsura, ta marbuta, diacritic
-  stripping) and apply it BOTH at index time (`content_norm`) and query time.
+  stripping) and apply it BOTH at index time (the expression index
+  `book_pages_fts_idx`) and query time.
+- **Every search path must be able to use `book_pages_fts_idx`.** `search_books` and
+  `book_match_pages` are PL/pgSQL with `plan_cache_mode = force_custom_plan` for that
+  reason (0025): each call is planned with the real word, so a whole-library search
+  reads the index instead of every page (17,601 pages timed out at 3 s for every
+  anonymous visitor on 2026-09-11). After the owner applies ANY migration that touches
+  search, `node --env-file=.env.local scripts/search-timing.mjs after` runs **as anon**
+  (the default) and must pass — it exits non-zero on a failure or a missed budget.
 - RPC `search_books(query, category, limit, offset)` returning ranked results with
   highlighted snippets, plus `page_no` and `match_pos` so the reader can jump to the
   exact occurrence.
@@ -273,9 +283,10 @@ put a bill on the owner and make us the custodian of other people's secrets.
   be merged with, replaced by, or reopened for AI proofreading.
 
 ## Cost / Free-Tier Notes
-- Supabase free projects PAUSE after ~7 days without requests → keep an external
-  uptime ping (e.g. cron / UptimeRobot) once live; upgrade to Pro ($25/mo) when the
-  library grows.
+- Supabase free projects PAUSE after ~7 days without requests → the daily Vercel cron
+  hits `/api/health`, which is the keep-alive. There is **no upgrade, ever** — "free
+  tier permanently" is a constraint, not a phase: the usage panel on `/admin`
+  («ھەقسىز بوشلۇق ئەھۋالى») shows the headroom, and the library stays inside it.
 - Gemini costs the owner **nothing, by construction**: there is no server-side key and
   no AI server route, so no request the site makes is billable to anyone. A reader who
   wants the paid-only model enables billing on their OWN Google account; the site never

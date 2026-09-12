@@ -91,6 +91,10 @@ beforeAll(async () => {
   await db.exec(readFileSync(join(MIGRATIONS, "0019_one_matcher.sql"), "utf8"));
   await db.exec(readFileSync(join(MIGRATIONS, "0020_faster_one_matcher.sql"), "utf8"));
   await db.exec(readFileSync(join(MIGRATIONS, "0023_search_category_tree.sql"), "utf8"));
+  // 0025 carries the same walk into PL/pgSQL, resolved once into an array
+  // before the search statement runs; the shipped function is what answers
+  // every assertion below.
+  await db.exec(readFileSync(join(MIGRATIONS, "0025_search_uses_the_index.sql"), "utf8"));
 
   // Parents before children, so the self-reference is satisfiable.
   for (const category of CATEGORIES) {

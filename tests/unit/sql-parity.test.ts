@@ -27,6 +27,18 @@ function functionSql(file: string, name: string): string {
   return sql.slice(start, end + "$fn$;".length);
 }
 
+/**
+ * The same statement, defining the function under another name — so an
+ * earlier body can be kept beside the shipped one and the two compared row
+ * for row on one corpus. The body's own qualified parameter references
+ * (`search_books.category_id`) follow the rename.
+ */
+function functionSqlAs(file: string, name: string, alias: string): string {
+  return functionSql(file, name)
+    .replace(`function public.${name}(`, `function public.${alias}(`)
+    .replaceAll(`${name}.`, `${alias}.`);
+}
+
 const PHRASE = "نامازغا چا";
 
 /** Real text from book 72 p203 — the page the bug was reported on. */
@@ -106,10 +118,25 @@ beforeAll(async () => {
   // at and nothing whatever about what matches inside them, which is exactly
   // what the assertions below still check, now against the shipped function.
   await db.exec(readFileSync(join(MIGRATIONS, "0023_search_category_tree.sql"), "utf8"));
+  // 0025 rewrites both functions in PL/pgSQL so that every path is planned
+  // with the real word and reads the index. Its bodies are 0023's and 0020's
+  // line for line, and the last block below holds them to it: the earlier
+  // bodies are kept here under other names and compared on the same corpus.
+  await db.exec(functionSqlAs("0023_search_category_tree.sql", "search_books", "search_books_0023"));
+  await db.exec(
+    functionSqlAs("0020_faster_one_matcher.sql", "book_match_pages", "book_match_pages_0020"),
+  );
+  await db.exec(readFileSync(join(MIGRATIONS, "0025_search_uses_the_index.sql"), "utf8"));
 
+  // Book 1 sits in a child category, so a search scoped to the parent has to
+  // walk the tree to find it (0023) — and so both of 0025's statements, the
+  // whole-library one and the scoped one, actually run here.
   await db.exec(`
-    insert into public.books (id, title, author, status)
-      values (1, 'سەھىھ ھەدىسلەر توپلىمى', 'سىناق', 'published');
+    insert into public.categories (id, parent_id, name)
+      values (1, null, 'ھەدىس'), (2, 1, 'سەھىھ ھەدىسلەر');
+    select setval(pg_get_serial_sequence('public.categories', 'id'), 2);
+    insert into public.books (id, title, author, category_id, status)
+      values (1, 'سەھىھ ھەدىسلەر توپلىمى', 'سىناق', 2, 'published');
     select setval(pg_get_serial_sequence('public.books', 'id'), 1);
   `);
   await db.query(
@@ -271,5 +298,149 @@ describe("search_books returns only rows the client can highlight", () => {
       ["ناماز"],
     );
     expect(rows.rows.map((row) => row.page_no)).toContain(203);
+  });
+});
+
+/**
+ * 0025 moved both functions to PL/pgSQL, where the output columns and the
+ * parameters are variables that share their names with columns in the
+ * queries. An "ambiguous column" mistake there only shows when the statement
+ * runs, so both of search_books' statements — the whole library and one
+ * category — are called here, not just the one the tests above use.
+ */
+describe("search_books (0025) runs both of its statements", () => {
+  it("answers the whole library and a category with the same page", async () => {
+    for (const scope of [null, 1, 2]) {
+      const rows = await db.query<{ page_no: number; snippet: string }>(
+        `select page_no, snippet from public.search_books($1, $2, 20, 0)`,
+        [PHRASE, scope],
+      );
+      expect(rows.rows.map((row) => row.page_no), `scope ${scope ?? "null"}`).toEqual([203]);
+    }
+  });
+
+  it("finds a child's book when the parent category is searched, and not from elsewhere", async () => {
+    // Book 1 is filed under category 2, whose parent is 1 (0023's walk).
+    const found = async (scope: number) =>
+      (
+        await db.query<{ book_id: number }>(
+          `select distinct book_id from public.search_books($1, $2, 20, 0)`,
+          ["ناماز", scope],
+        )
+      ).rows.map((row) => Number(row.book_id));
+    expect(await found(1)).toEqual([1]);
+    expect(await found(2)).toEqual([1]);
+    expect(await found(9999)).toEqual([]);
+  });
+
+  it("terminates on a category tree that has become a ring", async () => {
+    await db.exec(`update public.categories set parent_id = 2 where id = 1`);
+    try {
+      const rows = await db.query<{ page_no: number }>(
+        `select page_no from public.search_books($1, 1, 20, 0)`,
+        [PHRASE],
+      );
+      expect(rows.rows.map((row) => row.page_no)).toEqual([203]);
+    } finally {
+      await db.exec(`update public.categories set parent_id = null where id = 1`);
+    }
+  });
+
+  it("navigates one book on both sides of a draft", async () => {
+    // book_match_pages qualifies book_id — parameter and column at once.
+    const before = await db.query(`select page_no from public.book_match_pages(1, $1, 500)`, [PHRASE]);
+    expect(before.rows.map((row) => (row as { page_no: number }).page_no)).toEqual([203]);
+    await db.exec(`update public.books set status = 'draft' where id = 1`);
+    try {
+      const hidden = await db.query(`select page_no from public.book_match_pages(1, $1, 500)`, [PHRASE]);
+      expect(hidden.rows).toEqual([]);
+    } finally {
+      await db.exec(`update public.books set status = 'published' where id = 1`);
+    }
+  });
+});
+
+/**
+ * A word that occurs nowhere else, on exactly as many pages as the cap.
+ * 301 candidates, not 300, is what makes `capped` true (0014): the extra row
+ * tells "exactly 300 matches" from "more than we are willing to rank".
+ */
+const CAP_WORD = "چەكسىناق";
+
+describe("the candidate cap", () => {
+  beforeAll(async () => {
+    await db.exec(`
+      insert into public.books (id, title, author, category_id, status)
+        values (2, 'چەك سىناق كىتابى', 'سىناق', 1, 'published');
+      select setval(pg_get_serial_sequence('public.books', 'id'), 2);
+      insert into public.book_pages (book_id, page_no, content)
+        select 2, g, 'بۇ بەتتە ${CAP_WORD} دېگەن سۆز بار.' from generate_series(1, 300) as g;
+    `);
+  });
+
+  const capped = async (scope: number | null) =>
+    (
+      await db.query<{ capped: boolean }>(
+        `select capped from public.search_books($1, $2, 1, 0)`,
+        [CAP_WORD, scope],
+      )
+    ).rows[0]?.capped;
+
+  it("is not reached at 300 matching pages", async () => {
+    expect(await capped(null)).toBe(false);
+    expect(await capped(1)).toBe(false);
+  });
+
+  it("flips at the 301st, on the whole library and inside a category", async () => {
+    await db.exec(
+      `insert into public.book_pages (book_id, page_no, content) values (2, 301, 'يەنە بىر ${CAP_WORD}.')`,
+    );
+    expect(await capped(null)).toBe(true);
+    expect(await capped(1)).toBe(true);
+  });
+});
+
+/**
+ * 0025 changed how the rows are found, and must not have changed the rows:
+ * on this corpus — the phrase pages, the Arabic page, the punctuated page,
+ * the capped book, a title hit through the author, an empty query, a scope
+ * that does not exist — the PL/pgSQL bodies return exactly the rows, order,
+ * ranks and snippets that 0023's search_books and 0020's book_match_pages
+ * return, kept here under other names.
+ */
+describe("0025 answers exactly as 0023 and 0020 did", () => {
+  const QUERIES = [PHRASE, "ناماز", "چالايلى", "الحمد", "قىيامەت كۈنى پىلسىرات", "", "   ", "سىناق", CAP_WORD];
+
+  it("search_books: every query, every scope, every limit and offset", async () => {
+    let compared = 0;
+    for (const q of QUERIES) {
+      for (const scope of [null, 1, 2, 9999]) {
+        for (const [lim, off] of [
+          [20, 0],
+          [1, 0],
+          [5, 2],
+          [null, null],
+          [0, 0],
+        ]) {
+          const shipped = await db.query(`select * from public.search_books($1, $2, $3, $4)`, [q, scope, lim, off]);
+          const earlier = await db.query(`select * from public.search_books_0023($1, $2, $3, $4)`, [q, scope, lim, off]);
+          expect(shipped.rows, `«${q}» scope ${scope ?? "null"} limit ${lim} offset ${off}`).toEqual(earlier.rows);
+          compared += 1;
+        }
+      }
+    }
+    expect(compared).toBe(QUERIES.length * 4 * 5);
+  });
+
+  it("book_match_pages: every query, every book, every limit", async () => {
+    for (const q of QUERIES) {
+      for (const book of [1, 2, 42]) {
+        for (const lim of [500, 2, null, 0]) {
+          const shipped = await db.query(`select * from public.book_match_pages($1, $2, $3)`, [book, q, lim]);
+          const earlier = await db.query(`select * from public.book_match_pages_0020($1, $2, $3)`, [book, q, lim]);
+          expect(shipped.rows, `«${q}» book ${book} limit ${lim}`).toEqual(earlier.rows);
+        }
+      }
+    }
   });
 });

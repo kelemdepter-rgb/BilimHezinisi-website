@@ -1,4 +1,5 @@
 import { Icon } from "@/components/icons";
+import { summarizeSearchHealth } from "@/lib/search/health";
 import { FREE_DB_BYTES, FREE_STORAGE_BYTES, type UsageLevel, type UsageReport } from "@/lib/usage";
 
 const LEVEL_STYLES: Record<UsageLevel, string> = {
@@ -41,8 +42,15 @@ function Gauge({ used, limit, level, label }: { used: number; limit: number; lev
   );
 }
 
+const SEARCH_HEALTH_STYLES = {
+  ok: "text-ink3",
+  unknown: "text-ink3",
+  warning: "rounded-[var(--radius)] border border-am bg-ab2 px-3.5 py-2.5 text-ink",
+} as const;
+
 /** Free-tier gauge for the admin dashboard. Server-rendered, admin only. */
 export function UsagePanel({ report }: { report: UsageReport }) {
+  const searchHealth = summarizeSearchHealth(report.searchHealth);
   if (!report.available) {
     return (
       <div className="paper mt-5 p-5" data-testid="usage-panel">
@@ -99,6 +107,16 @@ export function UsagePanel({ report }: { report: UsageReport }) {
         {report.lastPing
           ? `ئاخىرقى ئاۋتوماتىك تەكشۈرۈش: ${report.lastPing.slice(0, 16).replace("T", " ")} (UTC) — سايت ئۇخلاپ قالمايدۇ.`
           : "ئاۋتوماتىك تەكشۈرۈش تېخى ئىشلىمىدى. Vercel دا CRON_SECRET نى تەڭشەڭ."}
+      </p>
+
+      {/* The daily ping also searches as an anonymous visitor (lib/search/health.ts):
+          the one line that says whether readers can search today. */}
+      <p
+        className={`mt-2 text-[12.5px] leading-6 ${SEARCH_HEALTH_STYLES[searchHealth.level]}`}
+        data-testid="search-health"
+        data-level={searchHealth.level}
+      >
+        {searchHealth.text}
       </p>
     </section>
   );

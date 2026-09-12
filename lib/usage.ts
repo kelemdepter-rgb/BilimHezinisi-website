@@ -1,5 +1,6 @@
 import "server-only";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { SEARCH_HEALTH_KEY, parseSearchHealth, type SearchHealth } from "@/lib/search/health";
 
 export const FREE_DB_BYTES = 500 * 1024 * 1024;
 export const FREE_STORAGE_BYTES = 1024 * 1024 * 1024;
@@ -25,6 +26,8 @@ export type UsageReport = {
   dbLevel: UsageLevel;
   storageLevel: UsageLevel;
   lastPing: string | null;
+  /** What the daily search self-check found, or null before its first run. */
+  searchHealth: SearchHealth | null;
 };
 
 /**
@@ -107,16 +110,18 @@ export async function getUsageReport(): Promise<UsageReport> {
     dbLevel: "normal",
     storageLevel: "normal",
     lastPing: null,
+    searchHealth: null,
   };
 
   const supabase = createSupabaseAdminClient();
   if (!supabase) return empty;
 
-  const [{ data: dbBytes, error }, books, pages, ping] = await Promise.all([
+  const [{ data: dbBytes, error }, books, pages, ping, searchHealth] = await Promise.all([
     supabase.rpc("db_total_size"),
     supabase.from("books").select("id", { count: "exact", head: true }),
     supabase.from("book_pages").select("book_id", { count: "exact", head: true }),
     supabase.from("settings").select("value").eq("key", "last_health_ping").maybeSingle(),
+    supabase.from("settings").select("value").eq("key", SEARCH_HEALTH_KEY).maybeSingle(),
   ]);
   // The size RPCs arrive with migration 0005; before that the panel simply
   // reports itself unavailable rather than showing invented numbers.
@@ -155,5 +160,6 @@ export async function getUsageReport(): Promise<UsageReport> {
     dbLevel: levelFor(total, FREE_DB_BYTES),
     storageLevel: levelFor(storageBytes, FREE_STORAGE_BYTES),
     lastPing: (ping.data?.value as string | null) ?? null,
+    searchHealth: parseSearchHealth(searchHealth.data?.value),
   };
 }

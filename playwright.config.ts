@@ -330,6 +330,24 @@ export default defineConfig({
       },
       {
         /**
+         * Searching the WHOLE library without an account — the default scope
+         * on every page, and the path that failed for every visitor on
+         * 2026-09-11 (PROMPT-32). Anonymous, at every width, against the
+         * seeded book, so setup runs first.
+         */
+        name: `library-${viewport.name}`,
+        testMatch: /search-library\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
+        /**
          * What the browser asks Supabase about the reader, and how often
          * (PROMPT-28). Signed in as staff, because the round trips this is
          * about only happened for a reader with a session; the signed-out

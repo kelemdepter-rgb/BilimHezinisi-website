@@ -60,7 +60,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
 
   const [categories, categoryCounts] = await Promise.all([getCategories(), getCategoryCounts()]);
 
-  const { hits, elapsedMs, failed, moreAvailable, tooCommon } = await runBookSearch({
+  const { hits, elapsedMs, failed, failure, moreAvailable, tooCommon } = await runBookSearch({
     query,
     categoryId: categoryId && Number.isFinite(categoryId) ? categoryId : null,
     limit: PAGE_SIZE,
@@ -131,8 +131,17 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
           ئىزدەش ئۈچۈن يۇقىرىدىكى رامكىغا سۆز كىرگۈزۈڭ.
         </p>
       ) : failed ? (
-        <p role="alert" className="mt-5 rounded-[var(--radius)] border border-bd2 bg-ab2 px-3.5 py-3 text-[13px]">
-          ئىزدەشتە خاتالىق كۆرۈلدى. سەل تۇرۇپ قايتا سىناڭ.
+        /* A timeout is the one failure a reader can do something about, so it
+           says what: a narrower scope or a second word. Anything else keeps
+           the plain message. */
+        <p
+          role="alert"
+          className="mt-5 rounded-[var(--radius)] border border-bd2 bg-ab2 px-3.5 py-3 text-[13px] leading-7"
+          data-testid={failure === "timeout" ? "search-timeout" : "search-failed"}
+        >
+          {failure === "timeout"
+            ? "ئىزدەش بەك ئۇزۇن ۋاقىت ئالدى. بىر تۈرنى تاللاپ ياكى يەنە بىر سۆز قوشۇپ قايتا سىناڭ."
+            : "ئىزدەشتە خاتالىق كۆرۈلدى. سەل تۇرۇپ قايتا سىناڭ."}
         </p>
       ) : hits.length === 0 ? (
         <div className="paper mt-5 p-6 text-center" data-testid="search-empty">

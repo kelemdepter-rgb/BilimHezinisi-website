@@ -1,18 +1,17 @@
 import { test as teardown } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import {
-  BATCH_PREFIX,
-  READER_EMAIL,
-  SEED_BOOK_HASH,
-  SEED_MD_BOOK_HASH,
-  STAFF_EMAIL,
-  hasStaffTestEnv,
-  loadEnvLocal,
-} from "./env";
+import { BATCH_PREFIX, SEED_BOOK_HASH, SEED_MD_BOOK_HASH, hasStaffTestEnv, loadEnvLocal } from "./env";
+import { sweepTestAccounts } from "./fixtures/accounts";
 
 loadEnvLocal();
 
-/** Remove the disposable accounts and books so a run leaves nothing behind. */
+/**
+ * Remove the disposable accounts and books so a run leaves nothing behind.
+ *
+ * The accounts go by prefix, the same sweep the setup opens with: the run's
+ * two shared accounts, any throwaway a spec created and did not get to
+ * remove, and whatever an earlier run left behind.
+ */
 teardown("remove the test accounts and seeded book", async () => {
   teardown.skip(!hasStaffTestEnv(), "Supabase env not configured");
 
@@ -30,11 +29,6 @@ teardown("remove the test accounts and seeded book", async () => {
   // short partway through would otherwise leave real rows in the library.
   await admin.from("books").delete().like("title", `${BATCH_PREFIX}%`);
 
-  const { data } = await admin.auth.admin.listUsers({ perPage: 200 });
-  for (const user of data?.users ?? []) {
-    // Notes cascade with the profile, which cascades with the auth user.
-    if (user.email === STAFF_EMAIL || user.email === READER_EMAIL) {
-      await admin.auth.admin.deleteUser(user.id);
-    }
-  }
+  const removed = await sweepTestAccounts(admin);
+  console.log(`removed ${removed} test account(s)`);
 });

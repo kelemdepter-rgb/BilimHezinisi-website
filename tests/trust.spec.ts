@@ -4,9 +4,11 @@ import { readFileSync } from "node:fs";
 import {
   READER_SETTINGS_KEY,
   STAFF_STATE_PATH,
+  freshPassword,
   hasStaffTestEnv,
   loadEnvLocal,
   readSeed,
+  testEmail,
 } from "./env";
 
 loadEnvLocal();
@@ -671,7 +673,7 @@ test.describe("password recovery", () => {
     await page.goto("/forgot-password");
     // An address that certainly has no account here — so nothing is actually
     // sent, and the free tier's email allowance is not spent on a test.
-    await page.getByTestId("reset-email").fill(`bh-e2e-nobody-${Date.now()}@mailinator.com`);
+    await page.getByTestId("reset-email").fill(testEmail(`nobody-${Date.now()}`));
     await page.getByTestId("reset-submit").click();
 
     const notice = page.getByTestId("reset-sent");
@@ -694,7 +696,7 @@ test.describe("password recovery", () => {
     // PASSWORD_RESET_RULE allows four an hour; the fifth must be refused.
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       await page.goto("/forgot-password");
-      await page.getByTestId("reset-email").fill(`bh-e2e-burst-${attempt}@mailinator.com`);
+      await page.getByTestId("reset-email").fill(testEmail(`burst-${attempt}`));
       await page.getByTestId("reset-submit").click();
       await expect(page.getByTestId("reset-sent").or(page.getByTestId("reset-error"))).toBeVisible({
         timeout: 20_000,
@@ -721,9 +723,9 @@ test.describe("password recovery", () => {
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
 
-    const email = `bh-e2e-recover-${testInfo.project.name}@mailinator.com`;
-    const oldPassword = "bh-e2e-password-1001";
-    const newPassword = "bh-e2e-password-2002";
+    const email = testEmail(`recover-${testInfo.project.name}`);
+    const oldPassword = freshPassword();
+    const newPassword = freshPassword();
 
     const { data: existing } = await admin.auth.admin.listUsers({ perPage: 200 });
     for (const user of existing?.users ?? []) {
@@ -890,8 +892,8 @@ test.describe("deleting an account", () => {
     );
 
     // One throwaway account per project, so the three viewports never collide.
-    const email = `bh-e2e-delete-${testInfo.project.name}@mailinator.com`;
-    const password = "bh-e2e-password-9931";
+    const email = testEmail(`delete-${testInfo.project.name}`);
+    const password = freshPassword();
 
     const { data: existing } = await admin.auth.admin.listUsers({ perPage: 200 });
     for (const user of existing?.users ?? []) {

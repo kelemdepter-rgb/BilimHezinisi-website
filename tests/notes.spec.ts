@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import { READER_STATE_PATH, hasStaffTestEnv, loadEnvLocal } from "./env";
+import { READER_STATE_PATH, freshPassword, hasStaffTestEnv, loadEnvLocal, testEmail } from "./env";
 
 loadEnvLocal();
 
@@ -280,8 +280,8 @@ test.describe("a brand-new account's first note", () => {
     );
 
   test("creates, opens and keeps a note", async ({ page }, testInfo) => {
-    const email = `bh-e2e-fresh-${testInfo.project.name}-${Date.now()}@mailinator.com`;
-    const password = "bh-e2e-fresh-4471";
+    const email = testEmail(`fresh-${testInfo.project.name}-${Date.now()}`);
+    const password = freshPassword();
     const supabase = admin();
 
     const { data: created, error } = await supabase.auth.admin.createUser({

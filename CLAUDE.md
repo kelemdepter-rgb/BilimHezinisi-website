@@ -186,6 +186,10 @@ here. The table is left in place because an applied migration is never edited ·
 - Sanitize all rendered book/note HTML (port `sanitize.js` approach; DOMPurify).
 - Do not weaken CSP; no third-party scripts/CDNs at runtime.
 - Never edit an applied migration — always add a new file in `supabase/migrations/`.
+- Test accounts are created at run time with random passwords, on a domain whose
+  mail nobody can read (`example.com`), and are swept by the `bh-e2e-` prefix at
+  the start and end of every run. Never commit a password
+  (`tests/unit/test-account-hygiene.test.ts` fails if one comes back).
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +

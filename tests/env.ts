@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -38,8 +39,6 @@ export const STAFF_STATE_PATH = "tests/.auth/staff.json";
  * to leave readers who stored a now-removed font still able to open a book.
  */
 export const READER_SETTINGS_KEY = "bh-reader-settings";
-export const STAFF_EMAIL = "bh-e2e-uploader@mailinator.com";
-export const STAFF_PASSWORD = "bh-e2e-password-8842";
 
 /**
  * A second, ordinary account. Notes are per-user, and the only honest way to
@@ -47,8 +46,63 @@ export const STAFF_PASSWORD = "bh-e2e-password-8842";
  * open it.
  */
 export const READER_STATE_PATH = "tests/.auth/reader.json";
-export const READER_EMAIL = "bh-e2e-reader@mailinator.com";
-export const READER_PASSWORD = "bh-e2e-password-5517";
+
+/**
+ * The run's accounts — addresses and passwords — written by auth.setup.ts.
+ *
+ * The saved storage states above are what every spec signs in with. A spec
+ * that has to go through the sign-in form as one of these accounts reads the
+ * password from here, and from nowhere else: nothing under tests/.auth/ is
+ * tracked, and no password is ever written into a source file.
+ */
+export const ACCOUNTS_PATH = "tests/.auth/accounts.json";
+
+/**
+ * Every account the suite creates starts with this, and it is what the sweeps
+ * key on: at the start and the end of every run, every auth user whose address
+ * begins with it is deleted, so an account left behind by an interrupted run —
+ * or by an older version of this suite — never outlives the next run.
+ */
+export const E2E_ACCOUNT_PREFIX = "bh-e2e-";
+
+/**
+ * Where the suite's mail would go: nowhere. RFC 2606 reserves example.com, and
+ * nothing is delivered there — so a recovery link sent to one of these
+ * addresses can be read by nobody. (On a public inbox service, anyone could
+ * have opened it, and with it the account.) No mail is sent for the accounts
+ * the suite creates anyway: they are made through the admin API with
+ * `email_confirm: true`.
+ */
+export const E2E_MAIL_DOMAIN = "example.com";
+
+/**
+ * One id per run, shared by everything the run spawns.
+ *
+ * Set on process.env the first time this module loads — in the runner, when
+ * playwright.config.ts imports it, before any worker or server exists — and
+ * inherited from there, so the setup, every spec and the teardown agree on
+ * which accounts are this run's. A second run, a second checkout, or a run
+ * restarted before its teardown draws a different one, so two runs against
+ * the same project never share an address.
+ */
+process.env.BH_E2E_RUN_ID ||= randomBytes(4).toString("hex");
+export const RUN_ID = process.env.BH_E2E_RUN_ID;
+
+/** An address for this run only: `bh-e2e-<label>-<run id>@example.com`. */
+export function testEmail(label: string): string {
+  return `${E2E_ACCOUNT_PREFIX}${label}-${RUN_ID}@${E2E_MAIL_DOMAIN}`;
+}
+
+/**
+ * A password that exists for one run and is never written into the repository.
+ *
+ * 24 random bytes, base64url — 32 characters nobody can guess and no file
+ * under version control ever holds. Where a spec needs it again, it travels
+ * through tests/.auth/, never through source.
+ */
+export function freshPassword(): string {
+  return randomBytes(24).toString("base64url");
+}
 
 /**
  * Marks every book the batch-import spec creates.

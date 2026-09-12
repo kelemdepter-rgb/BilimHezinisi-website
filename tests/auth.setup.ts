@@ -1,11 +1,11 @@
 import { test as setup, expect, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import {
-  READER_EMAIL,
-  READER_PASSWORD,
+  ACCOUNTS_PATH,
   READER_STATE_PATH,
+  RUN_ID,
   SEED_BOOK_HASH,
   SEED_BOOK_TITLE,
   SEED_FRAGMENT_DECOYS,
@@ -21,14 +21,34 @@ import {
   SEED_NEEDLE_LATER_PAGE,
   SEED_PAGE_COUNT,
   SEED_PATH,
-  STAFF_EMAIL,
-  STAFF_PASSWORD,
   STAFF_STATE_PATH,
+  freshPassword,
   hasStaffTestEnv,
   loadEnvLocal,
+  testEmail,
 } from "./env";
+import { sweepTestAccounts } from "./fixtures/accounts";
 
 loadEnvLocal();
+
+type TestAccount = { email: string; password: string };
+
+/**
+ * Record one of the run's accounts in ACCOUNTS_PATH, beside the saved
+ * storage states — the only place a generated password is ever written, and
+ * a git-ignored one. A file left by an earlier run is replaced, not merged.
+ */
+function recordAccount(role: "staff" | "reader", account: TestAccount): void {
+  let record: { runId?: string; staff?: TestAccount; reader?: TestAccount } = {};
+  try {
+    record = JSON.parse(readFileSync(ACCOUNTS_PATH, "utf8")) as typeof record;
+  } catch {
+    // Nothing recorded yet.
+  }
+  if (record.runId !== RUN_ID) record = {};
+  mkdirSync(dirname(ACCOUNTS_PATH), { recursive: true });
+  writeFileSync(ACCOUNTS_PATH, JSON.stringify({ ...record, runId: RUN_ID, [role]: account }), "utf8");
+}
 
 /**
  * Sign in, and try once more if the session did not take.
@@ -73,9 +93,30 @@ async function signIn(
 }
 
 /**
+ * Start clean. A run stopped before its teardown — Ctrl+C, a crash, a closed
+ * terminal — leaves its accounts behind, and an uploader account nobody is
+ * watching must not outlive the next run. This is also what removed the
+ * accounts of the older suite, which used fixed addresses on a public inbox.
+ */
+setup("remove the test accounts an earlier run left behind", async () => {
+  setup.skip(!hasStaffTestEnv(), "Supabase env not configured");
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  const removed = await sweepTestAccounts(admin);
+  // The count is all that is said about them.
+  console.log(`removed ${removed} leftover test account(s)`);
+});
+
+/**
  * Provision a disposable `uploader` account and save its signed-in state, so
- * the admin specs exercise the real guard rather than a mock. Removed again by
- * auth.teardown.ts.
+ * the admin specs exercise the real guard rather than a mock. Its address is
+ * this run's alone and its password is drawn here, now — neither is in any
+ * file the repository tracks. Removed again by auth.teardown.ts.
  */
 setup("create and sign in a staff account", async ({ page }) => {
   setup.skip(!hasStaffTestEnv(), "Supabase env not configured");
@@ -86,14 +127,11 @@ setup("create and sign in a staff account", async ({ page }) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  const { data: existing } = await admin.auth.admin.listUsers({ perPage: 200 });
-  for (const user of existing?.users ?? []) {
-    if (user.email === STAFF_EMAIL) await admin.auth.admin.deleteUser(user.id);
-  }
-
+  const email = testEmail("uploader");
+  const password = freshPassword();
   const { data: created, error } = await admin.auth.admin.createUser({
-    email: STAFF_EMAIL,
-    password: STAFF_PASSWORD,
+    email,
+    password,
     email_confirm: true,
   });
   if (error || !created.user) throw new Error(`could not create test user: ${error?.message}`);
@@ -104,10 +142,11 @@ setup("create and sign in a staff account", async ({ page }) => {
   if (roleError) throw new Error(`could not set uploader role: ${roleError.message}`);
 
   // The admin link only renders for a staff session, so it proves the role took.
-  await signIn(page, STAFF_EMAIL, STAFF_PASSWORD, page.getByRole("link", { name: /باشقۇرۇش/ }));
+  await signIn(page, email, password, page.getByRole("link", { name: /باشقۇرۇش/ }));
 
   mkdirSync(dirname(STAFF_STATE_PATH), { recursive: true });
   await page.context().storageState({ path: STAFF_STATE_PATH });
+  recordAccount("staff", { email, password });
 });
 
 /**
@@ -262,21 +301,19 @@ setup("create and sign in a plain reader account", async ({ page }) => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
-  const { data: existing } = await admin.auth.admin.listUsers({ perPage: 200 });
-  for (const user of existing?.users ?? []) {
-    if (user.email === READER_EMAIL) await admin.auth.admin.deleteUser(user.id);
-  }
-
+  const email = testEmail("reader");
+  const password = freshPassword();
   const { data: created, error } = await admin.auth.admin.createUser({
-    email: READER_EMAIL,
-    password: READER_PASSWORD,
+    email,
+    password,
     email_confirm: true,
   });
   if (error || !created.user) throw new Error(`could not create reader user: ${error?.message}`);
 
   // No admin link for this one — the sign-out control is what proves a session.
-  await signIn(page, READER_EMAIL, READER_PASSWORD, page.getByRole("button", { name: /چىقىش/ }));
+  await signIn(page, email, password, page.getByRole("button", { name: /چىقىش/ }));
 
   mkdirSync(dirname(READER_STATE_PATH), { recursive: true });
   await page.context().storageState({ path: READER_STATE_PATH });
+  recordAccount("reader", { email, password });
 });

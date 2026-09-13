@@ -1,6 +1,11 @@
 import { createSupabaseBrowserClient, currentUserId } from "@/lib/supabase/client";
 import { createSupabasePublicClient } from "@/lib/supabase/public-client";
 import type { ReadingPosition } from "@/lib/reader/position";
+import {
+  MATCH_PAGE_LIMIT,
+  matchPagesCapped,
+  type MatchPage,
+} from "@/lib/search/book-matches";
 
 export type BookPage = { page_no: number; content: string };
 export type Annotation = {
@@ -39,11 +44,7 @@ export async function fetchPages(
   return (data as BookPage[] | null) ?? [];
 }
 
-/** One page of the book that carries the phrase, and how often. */
-export type MatchPage = { page_no: number; hits: number };
-
-/** The cap the navigator reports as "more than this". */
-export const MATCH_PAGE_LIMIT = 500;
+export type { MatchPage };
 
 /**
  * Every page of THIS book carrying the phrase, in order, with the number of
@@ -52,7 +53,9 @@ export const MATCH_PAGE_LIMIT = 500;
  *
  * Uses the FTS index through book_match_pages (migration 0017) rather than an
  * ilike scan, so it costs the same whatever the library grows to, and matches
- * diacritic-insensitively the way the rest of search does.
+ * diacritic-insensitively the way the rest of search does. The search page's
+ * expander starts from the same call (app/search-actions.ts), which is what
+ * keeps its count equal to the counter here.
  */
 export async function fetchBookMatchPages(
   bookId: number,
@@ -68,7 +71,7 @@ export async function fetchBookMatchPages(
   });
   if (error) throw new Error(error.message);
   const pages = ((data as MatchPage[] | null) ?? []).filter((page) => page.hits > 0);
-  return { pages, capped: pages.length >= MATCH_PAGE_LIMIT };
+  return { pages, capped: matchPagesCapped(pages) };
 }
 
 /** Debounced by the caller. Anonymous readers never reach this. */

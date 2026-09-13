@@ -348,6 +348,24 @@ export default defineConfig({
       },
       {
         /**
+         * «بۇ كىتابتىكى بارلىق ئورۇنلارنى كۆرۈش» under a search result, held
+         * to the reader's ↑ ↓ counter on a word the seeded book writes only
+         * with tatweel (PROMPT-34). Anonymous, at every width, against the
+         * seeded book, so setup runs first.
+         */
+        name: `expander-${viewport.name}`,
+        testMatch: /search-expander\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
+        /**
          * What the browser asks Supabase about the reader, and how often
          * (PROMPT-28). Signed in as staff, because the round trips this is
          * about only happened for a reader with a session; the signed-out

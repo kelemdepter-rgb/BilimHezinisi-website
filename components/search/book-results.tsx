@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { Snippet } from "@/components/search/snippet";
-import { listBookMatchesAction, type BookMatch } from "@/app/search-actions";
+import { listBookMatchesAction, type BookMatchList } from "@/app/search-actions";
 import { MATCH_CLASS } from "@/lib/search/occurrences";
 import type { SearchHit } from "@/lib/search/books";
 
@@ -71,9 +71,7 @@ function readerHref(bookId: number, pageNo: number, term: string, matchIndex = 0
 }
 
 function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
-  const [expanded, setExpanded] = useState<BookMatch[] | null>(null);
-  const [truncated, setTruncated] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [expanded, setExpanded] = useState<BookMatchList | null>(null);
   const [pending, startTransition] = useTransition();
 
   function expand() {
@@ -82,10 +80,7 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
       return;
     }
     startTransition(async () => {
-      const result = await listBookMatchesAction({ bookId: group.bookId, query: term });
-      setFailed(result.failed);
-      setTruncated(result.truncated);
-      setExpanded(result.matches);
+      setExpanded(await listBookMatchesAction({ bookId: group.bookId, query: term }));
     });
   }
 
@@ -95,8 +90,11 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
     .filter((hit) => hit.page_no > 0)
     .sort((a, b) => a.page_no - b.page_no);
   const preview = pageHits.slice(0, PREVIEW_HITS);
-  const shown = expanded?.slice(0, EXPANDED_HITS) ?? [];
-  const remaining = (expanded?.length ?? 0) - shown.length;
+  const matches = expanded?.matches ?? [];
+  const shown = matches.slice(0, EXPANDED_HITS);
+  // Counted against the whole book, the way the reader's ↑ ↓ counter counts —
+  // not against the slice the action returned.
+  const remaining = (expanded?.total ?? 0) - shown.length;
 
   return (
     <>
@@ -148,21 +146,24 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
         </button>
       )}
 
-      {failed && (
+      {expanded?.failed && (
         <p role="alert" className="mt-2 text-[12.5px] text-ink3">
           بۇ كىتابنىڭ ئىچىنى ئاچقىلى بولمىدى.
         </p>
       )}
 
-      {expanded && expanded.length === 0 && !failed && (
+      {expanded && !expanded.failed && matches.length === 0 && (
         <p className="mt-2 text-[12.5px] text-ink3">باشقا ئورۇن تېپىلمىدى.</p>
       )}
 
-      {expanded && expanded.length > 0 && (
+      {expanded && matches.length > 0 && (
         <>
+          {/* The book's total, from the same book_match_pages answer the
+              reader's counter is built on — so the two numbers agree, and
+              «+» means the same floor on both. */}
           <p className="mt-2 text-[12px] text-ink3" data-testid="expanded-count">
-            بۇ كىتابتا {expanded.length}
-            {truncated ? "+" : ""} ئورۇندا بار
+            بۇ كىتابتا {expanded.total}
+            {expanded.capped ? "+" : ""} ئورۇندا بار
           </p>
           <ol className="mt-1 space-y-1" data-testid="expanded-matches">
             {shown.map((item) => (

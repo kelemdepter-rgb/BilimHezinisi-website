@@ -62,12 +62,21 @@ const PAGE_ARABIC =
 /** FTS matches the lexemes adjacently, but the literal phrase is not there. */
 const PAGE_PUNCTUATED = "ئۇ كىشىنى نامازغا، چاقىرىش ئۈچۈن ئەۋەتتى.";
 
+/**
+ * A word written ONLY with tatweel inside it — half the library's pages are
+ * set this way. A raw substring test on the stored text never finds the plain
+ * spelling here; the search expander used to narrow pages with exactly that
+ * test (PROMPT-34).
+ */
+const PAGE_STRETCHED = "بۇ بەتتە ئىـــمان دېگەن سۆز سوزۇپ يېزىلغان، يەنە بىر قېتىم ئىــمان.";
+
 /** What each seeded page holds, so parity is asserted against the real text. */
 const PAGES: Record<number, string> = {
   203: PAGE_203,
   204: PAGE_NO_PHRASE,
   205: PAGE_ARABIC,
   206: PAGE_PUNCTUATED,
+  207: PAGE_STRETCHED,
 };
 
 let db: PGlite;
@@ -140,8 +149,8 @@ beforeAll(async () => {
     select setval(pg_get_serial_sequence('public.books', 'id'), 1);
   `);
   await db.query(
-    `insert into public.book_pages (book_id, page_no, content) values (1,203,$1),(1,204,$2),(1,205,$3),(1,206,$4)`,
-    [PAGE_203, PAGE_NO_PHRASE, PAGE_ARABIC, PAGE_PUNCTUATED],
+    `insert into public.book_pages (book_id, page_no, content) values (1,203,$1),(1,204,$2),(1,205,$3),(1,206,$4),(1,207,$5)`,
+    [PAGE_203, PAGE_NO_PHRASE, PAGE_ARABIC, PAGE_PUNCTUATED, PAGE_STRETCHED],
   );
 });
 
@@ -254,6 +263,23 @@ describe("book_match_pages counts what the client marks", () => {
     ]);
     for (const row of rows.rows) {
       expect(row.hits).toBe(countOccurrences(PAGES[row.page_no], "چالايلى"));
+    }
+  });
+
+  it("finds a word from its plain spelling where the book stretches or vowels it", async () => {
+    // This is what the search expander is built on: the pages a raw substring
+    // test drops — tatweel inside the word, diacritics on the letters — are
+    // exactly the ones the reader's counter already counts.
+    for (const [q, page_no] of [
+      ["ئىمان", 207],
+      ["الحمد", 205],
+    ] as const) {
+      const rows = await db.query<{ page_no: number; hits: number }>(
+        `select page_no, hits from public.book_match_pages(1, $1, 500) order by page_no`,
+        [q],
+      );
+      expect(rows.rows, q).toEqual([{ page_no, hits: 2 }]);
+      expect(countOccurrences(PAGES[page_no], q), q).toBe(2);
     }
   });
 });

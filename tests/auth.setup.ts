@@ -21,6 +21,8 @@ import {
   SEED_NEEDLE_LATER_PAGE,
   SEED_PAGE_COUNT,
   SEED_PATH,
+  SEED_STRETCHED,
+  SEED_STRETCHED_PAGE,
   STAFF_STATE_PATH,
   freshPassword,
   hasStaffTestEnv,
@@ -214,6 +216,13 @@ setup("seed a published test book", async () => {
           ` ھەي بىلال، ${SEED_FRAGMENT_STEM} ${SEED_FRAGMENT_DECOYS[1]}! دېدى. ` +
           ` ئاندىن ${SEED_FRAGMENT_DECOYS[1]} دېگەن سۆز يالغۇز كەلدى. ${filler}`,
       };
+    }
+
+    // Half the library's pages stretch words with tatweel. This word is
+    // written ONLY that way, so finding it from its plain spelling proves the
+    // search results, the expander and the reader all normalize alike.
+    if (pageNo === SEED_STRETCHED_PAGE) {
+      return { book_id: book.id, page_no: pageNo, content: `${filler} بۇ يەردە ${SEED_STRETCHED} بار. ` };
     }
     return { book_id: book.id, page_no: pageNo, content: filler };
   });

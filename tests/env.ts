@@ -155,6 +155,19 @@ export const SEED_FRAGMENT_DECOYS = ["چالايلى", "چاقىر"] as const;
 export const SEED_FRAGMENT_COUNT = 2;
 
 /**
+ * A word the seeded book carries ONLY in its stretched spelling — tatweel
+ * (ـ, U+0640) inside it, the way half the library's pages are set. Searching
+ * the plain spelling must find it, and the expander under the result must
+ * list it: the raw `ilike` the expander used to narrow pages with saw the
+ * tatweel and answered «باشقا ئورۇن تېپىلمىدى» (PROMPT-34). Its own stem, so
+ * no count another spec relies on moves.
+ */
+export const SEED_STRETCHED = "كۈمۈشـــكۆۋرۈك";
+export const SEED_STRETCHED_PLAIN = SEED_STRETCHED.replaceAll("ـ", "");
+/** A page that carries none of the other needles. */
+export const SEED_STRETCHED_PAGE = 10;
+
+/**
  * A second seeded book, stored as Markdown. Two thirds of the real library is,
  * and that path rendered no highlights at all — following a search result
  * opened the right page with nothing marked on it.

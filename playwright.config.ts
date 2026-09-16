@@ -433,6 +433,25 @@ export default defineConfig({
       },
       {
         /**
+         * The single-book wizard when the connection drops mid-save
+         * (PROMPT-35). Writes real books of more than one page batch, cuts
+         * the network under them and reads the database back, so — like the
+         * batch project — it runs signed in as staff and removes what it made.
+         */
+        name: `wizard-${viewport.name}`,
+        testMatch: /upload-wizard\.spec\.ts/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
+        /**
          * The notebook's AI workspace, against the same fake endpoint. Signed
          * in as an ordinary reader, because notes are per-user and this spec
          * writes real ones and removes them again.

@@ -63,7 +63,9 @@ export async function createBookRow(
 
 /**
  * Insert pages in batches, reporting progress. Resumable: on failure the
- * caller can retry from `failedAtBatch` without re-sending earlier pages.
+ * error carries `failedAtIndex`, and the caller can retry from there without
+ * re-sending earlier pages. Every batch is an upsert on (book_id, page_no), so
+ * a batch the server applied but never acknowledged is safe to send again.
  */
 export async function insertPages(
   bookId: number,
@@ -90,6 +92,12 @@ export async function insertPages(
   }
 }
 
+/** The page index an `insertPages` failure stopped at, when it carries one. */
+export function failedPageIndex(error: unknown): number | null {
+  const index = (error as { failedAtIndex?: unknown } | null)?.failedAtIndex;
+  return typeof index === "number" ? index : null;
+}
+
 /**
  * Upload straight to Storage from the browser; returns the stored object path.
  * Covers are re-encoded to a small WebP first — they are the main egress cost.
@@ -112,10 +120,11 @@ export async function uploadToBucket(
 /**
  * How many pages the database actually holds for a book.
  *
- * The batch importer writes every book as a draft, then asks this, and only
- * publishes when the answer matches what it extracted. Without the check a
- * dropped connection halfway through a 300-page book would publish a third of
- * it, and nobody would notice until a reader hit the missing part.
+ * The batch importer and the upload wizard both write every book as a draft,
+ * then ask this, and only publish when the answer matches what they
+ * extracted. Without the check a dropped connection halfway through a
+ * 300-page book would publish a third of it, and nobody would notice until a
+ * reader hit the missing part.
  */
 export async function countStoredPages(bookId: number): Promise<number> {
   const supabase = createSupabaseBrowserClient();
@@ -143,7 +152,11 @@ export async function setBookPaths(
   if (error) throw new Error(error.message);
 }
 
-/** Clean rollback when the admin cancels or a save fails unrecoverably. */
+/**
+ * Clean rollback for a batch-imported book that could not be finished. The
+ * upload wizard removes its own partial book through `deleteBooksAction`
+ * instead, which also takes the row's Storage objects with it.
+ */
 export async function deletePartialBook(bookId: number): Promise<void> {
   const supabase = createSupabaseBrowserClient();
   await supabase.from("book_pages").delete().eq("book_id", bookId);

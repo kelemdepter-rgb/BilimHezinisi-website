@@ -1,7 +1,8 @@
 import { test as teardown } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
-import { BATCH_PREFIX, SEED_BOOK_HASH, SEED_MD_BOOK_HASH, hasStaffTestEnv, loadEnvLocal } from "./env";
+import { SEED_BOOK_HASH, SEED_MD_BOOK_HASH, hasStaffTestEnv, loadEnvLocal } from "./env";
 import { sweepTestAccounts } from "./fixtures/accounts";
+import { removePrefixedBooks } from "./fixtures/books";
 
 loadEnvLocal();
 
@@ -25,9 +26,10 @@ teardown("remove the test accounts and seeded book", async () => {
   await admin.from("books").delete().eq("file_hash", SEED_BOOK_HASH);
   await admin.from("books").delete().eq("file_hash", SEED_MD_BOOK_HASH);
 
-  // Books the batch-import spec wrote. It removes its own, but a run cut
-  // short partway through would otherwise leave real rows in the library.
-  await admin.from("books").delete().like("title", `${BATCH_PREFIX}%`);
+  // Books the batch-import and upload-wizard specs wrote, covers included.
+  // They remove their own, but a run cut short partway through would
+  // otherwise leave real rows in the library.
+  await removePrefixedBooks(admin);
 
   const removed = await sweepTestAccounts(admin);
   console.log(`removed ${removed} test account(s)`);

@@ -13,19 +13,22 @@ import {
 } from "@/lib/books/extract";
 import { MarkdownContent } from "@/components/reader/markdown-content";
 import {
+  countStoredPages,
   createBookRow,
-  deletePartialBook,
+  failedPageIndex,
   findDuplicate,
   insertPages,
   setBookPaths,
+  setBookStatus,
   storagePath,
   uploadToBucket,
   type DuplicateHit,
 } from "@/lib/books/save";
 import type { BookStatus, ExtractedBook } from "@/lib/books/types";
 import { flattenCategories } from "@/lib/categories";
+import { MSG, bookSaveFailureMessage, type ActionResult } from "@/lib/admin/messages";
 import type { Category } from "@/lib/types";
-import { revalidateLibraryAction } from "@/app/admin/books/actions";
+import { deleteBooksAction, revalidateLibraryAction } from "@/app/admin/books/actions";
 
 const STEPS = ["مەنبە", "ئوقۇش", "بەتلەر", "ئۇچۇرلار", "مۇقاۋا", "ساقلاش"] as const;
 type StepIndex = 0 | 1 | 2 | 3 | 4 | 5;
@@ -48,6 +51,23 @@ type Meta = {
   language: string;
   status: BookStatus;
 };
+
+/**
+ * How far a save got before it stopped, kept from the moment the book row
+ * exists. «قايتا سىناش» carries on from here — the same row, the first page
+ * not yet confirmed written, and which Storage objects are already recorded
+ * on the row — instead of creating a second book, which the unique index on
+ * `file_hash` would refuse anyway. «بىكار قىلىش» removes the row it names.
+ */
+type Checkpoint = {
+  bookId: number;
+  nextPageIndex: number;
+  coverDone: boolean;
+  originalDone: boolean;
+};
+
+/** A failure whose message was written for the admin and is shown as it is. */
+class SaveFailure extends Error {}
 
 export function UploadWizard({ categories }: { categories: Category[] }) {
   const router = useRouter();
@@ -77,6 +97,7 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
   const coverUrlRef = useRef<string | null>(null);
   const [keepOriginal, setKeepOriginal] = useState(false);
   const [saveProgress, setSaveProgress] = useState<{ done: number; total: number } | null>(null);
+  const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
   const [savedBookId, setSavedBookId] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const flatCategories = flattenCategories(categories);
@@ -187,50 +208,93 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
     }
   }
 
+  /**
+   * Draft → pages → cover and original → verify → the status the admin chose.
+   *
+   * The same order as the batch importer, for the same reason: a book is
+   * published only after its pages have been counted back out of the
+   * database, so a connection that drops halfway through can leave a draft
+   * behind but never a published book with pages missing. Called for the
+   * first attempt and for every «قايتا سىناش» alike — a retry picks up at the
+   * checkpoint the failed attempt left, inside the same row.
+   */
   async function save() {
     if (!extracted) return;
     setBusy(true);
     setError(null);
-    let bookId: number | null = null;
+    let bookId = checkpoint?.bookId ?? null;
+    let nextPageIndex = checkpoint?.nextPageIndex ?? 0;
+    let coverDone = checkpoint?.coverDone ?? false;
+    let originalDone = checkpoint?.originalDone ?? false;
     try {
-      bookId = await createBookRow(
-        {
-          title: meta.title.trim() || extracted.title,
-          author: meta.author.trim(),
-          categoryId: meta.categoryId ? Number(meta.categoryId) : null,
-          date: meta.date,
-          description: meta.description.trim(),
-          language: meta.language,
-          status: meta.status,
+      if (bookId === null) {
+        bookId = await createBookRow(
+          {
+            title: meta.title.trim() || extracted.title,
+            author: meta.author.trim(),
+            categoryId: meta.categoryId ? Number(meta.categoryId) : null,
+            date: meta.date,
+            description: meta.description.trim(),
+            language: meta.language,
+            // Always a draft first, whatever the admin chose. Their choice is
+            // applied at the end, once every page is known to be there.
+            status: "draft",
+          },
+          {
+            format: extracted.format,
+            fileHash: extracted.fileHash,
+            pageCount: pages.length,
+            contentFormat: extracted.contentFormat,
+          },
+        );
+        // Remembered the moment it exists, so a failure anywhere below can be
+        // retried into it or cancelled out of it.
+        setCheckpoint({ bookId, nextPageIndex, coverDone, originalDone });
+      }
+
+      setSaveProgress({ done: nextPageIndex, total: pages.length });
+      await insertPages(
+        bookId,
+        pages,
+        (done, total) => {
+          nextPageIndex = done;
+          setSaveProgress({ done, total });
         },
-        {
-          format: extracted.format,
-          fileHash: extracted.fileHash,
-          pageCount: pages.length,
-          contentFormat: extracted.contentFormat,
-        },
+        nextPageIndex,
       );
 
-      setSaveProgress({ done: 0, total: pages.length });
-      await insertPages(bookId, pages, (done, total) => setSaveProgress({ done, total }));
-
-      const paths: { cover_path?: string | null; original_file_path?: string | null } = {};
-      if (cover.blob) {
-        paths.cover_path = await uploadToBucket(
+      // Each object is recorded on the row as soon as it is uploaded, so
+      // «بىكار قىلىش» — which reads the row — finds and removes it.
+      if (cover.blob && !coverDone) {
+        const coverPath = await uploadToBucket(
           "covers",
           storagePath(bookId, cover.fileName ?? "cover.jpg", "cover"),
           cover.blob,
         );
+        await setBookPaths(bookId, { cover_path: coverPath });
+        coverDone = true;
       }
-      if (keepOriginal && current?.file && current.file.size > 0) {
-        paths.original_file_path = await uploadToBucket(
+      if (keepOriginal && current?.file && current.file.size > 0 && !originalDone) {
+        const originalPath = await uploadToBucket(
           "book-files",
           storagePath(bookId, current.file.name, "file"),
           current.file,
         );
+        await setBookPaths(bookId, { original_file_path: originalPath });
+        originalDone = true;
       }
-      if (Object.keys(paths).length > 0) await setBookPaths(bookId, paths);
 
+      const stored = await countStoredPages(bookId);
+      if (stored !== pages.length) {
+        // A batch was acknowledged but did not all land. The retry writes
+        // every page again — upserts, so nothing is doubled — and the book
+        // stays a draft until the count agrees.
+        nextPageIndex = 0;
+        throw new SaveFailure(MSG.pageCountMismatch(stored, pages.length));
+      }
+      if (meta.status === "published") await setBookStatus(bookId, "published");
+
+      setCheckpoint(null);
       setSavedBookId(bookId);
       // The book was written from this browser, so no Server Action has run and
       // nothing has told the cached library that it exists. Without this the
@@ -238,24 +302,36 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
       await revalidateLibraryAction().catch(() => undefined);
       router.refresh();
     } catch (caught) {
-      setError(
-        caught instanceof Error
-          ? `ساقلاش مەغلۇپ بولدى: ${caught.message}`
-          : "ساقلاش مەغلۇپ بولدى.",
-      );
-      // Leave the partial row in place so the admin can retry the page insert;
-      // "بىكار قىلىش" removes it cleanly.
-      if (bookId !== null) setSavedBookId(null);
+      const failedAt = failedPageIndex(caught);
+      if (failedAt !== null) nextPageIndex = failedAt;
+      if (bookId !== null) setCheckpoint({ bookId, nextPageIndex, coverDone, originalDone });
+      setError(caught instanceof SaveFailure ? caught.message : bookSaveFailureMessage(caught));
     } finally {
       setBusy(false);
     }
   }
 
-  async function cancelAndRollback() {
-    if (savedBookId !== null) {
+  /**
+   * Leave the wizard. A book that was begun and not finished goes with it —
+   * through the Server Action, so the role is re-checked on the server, the
+   * row's Storage objects are removed with it and the cached library is
+   * dropped. Offered only until the save succeeds: removing a saved book is
+   * what /admin/books is for.
+   */
+  async function cancel() {
+    if (checkpoint) {
       setBusy(true);
-      await deletePartialBook(savedBookId).catch(() => undefined);
+      const form = new FormData();
+      form.append("ids", String(checkpoint.bookId));
+      const result = await deleteBooksAction(form).catch(
+        (): ActionResult => ({ ok: false, error: MSG.unknown }),
+      );
       setBusy(false);
+      if (!result.ok) {
+        // The partial book is still there; say so rather than leave it behind.
+        setError(result.error);
+        return;
+      }
     }
     router.push("/admin/books");
   }
@@ -339,6 +415,7 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
           savedBookId={savedBookId}
           pageCount={pages.length}
           busy={busy}
+          canRetry={checkpoint !== null}
           onSave={save}
           onRetry={save}
         />
@@ -348,21 +425,27 @@ export function UploadWizard({ categories }: { categories: Category[] }) {
           content, per the Mobile Rules. */}
       <div className="safe-bottom safe-x fixed inset-x-0 bottom-0 z-20 border-t border-bd bg-bg2/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-2 px-3 py-3 sm:px-6">
-          <button
-            type="button"
-            className="hbtn"
-            data-testid="wizard-cancel"
-            onClick={cancelAndRollback}
-            disabled={busy}
-          >
-            بىكار قىلىش
-          </button>
-          <div className="flex items-center gap-2">
+          {/* Gone once the book is saved: the only thing left to do is finish,
+              and nothing in this bar may delete a saved book. */}
+          {savedBookId === null && (
+            <button
+              type="button"
+              className="hbtn"
+              data-testid="wizard-cancel"
+              onClick={cancel}
+              disabled={busy}
+            >
+              بىكار قىلىش
+            </button>
+          )}
+          <div className="ms-auto flex items-center gap-2">
             <button
               type="button"
               className="hbtn"
               data-testid="wizard-back"
-              disabled={step === 0 || busy || savedBookId !== null}
+              // Once the row exists the earlier steps describe a book that is
+              // already written; the way back is «بىكار قىلىش».
+              disabled={step === 0 || busy || checkpoint !== null || savedBookId !== null}
               onClick={() => setStep((s) => Math.max(0, s - 1) as StepIndex)}
             >
               <Icon name="undo" />
@@ -757,6 +840,7 @@ function CoverStep({
               type="file"
               accept="image/*"
               className="sr-only"
+              data-testid="cover-input"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) onPick(file);
@@ -793,6 +877,7 @@ function SaveStep({
   savedBookId,
   pageCount,
   busy,
+  canRetry,
   onSave,
   onRetry,
 }: {
@@ -800,6 +885,8 @@ function SaveStep({
   savedBookId: number | null;
   pageCount: number;
   busy: boolean;
+  /** A save was begun and did not finish; a retry carries on inside it. */
+  canRetry: boolean;
   onSave: () => void;
   onRetry: () => void;
 }) {
@@ -827,12 +914,18 @@ function SaveStep({
             </>
           )}
           <div className="mt-4 flex flex-wrap gap-2">
-            <button type="button" className="btn-am" disabled={busy} onClick={onSave}>
+            <button
+              type="button"
+              className="btn-am"
+              data-testid="save-now"
+              disabled={busy}
+              onClick={onSave}
+            >
               <Icon name="save" />
               ھازىر ساقلاش
             </button>
-            {progress && progress.done < progress.total && !busy && (
-              <button type="button" className="hbtn" onClick={onRetry}>
+            {canRetry && !busy && (
+              <button type="button" className="hbtn" data-testid="save-retry" onClick={onRetry}>
                 <Icon name="refresh" />
                 قايتا سىناش
               </button>

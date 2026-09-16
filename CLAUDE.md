@@ -153,6 +153,13 @@ here. The table is left in place because an applied migration is never edited ·
 - Covers (and the original file, only when the admin opts in — default OFF) upload
   DIRECTLY to Supabase Storage via signed upload URLs; extracted pages insert in
   batches (≤500 rows per request). Compute file_hash for duplicate detection.
+- **Draft first, publish last** — the wizard and the batch importer alike. The
+  row is created as a draft whatever status the admin chose, pages/cover/original
+  are written, `countStoredPages` must equal the extracted count, and only then is
+  the chosen status applied. A failed save is retried INTO THE SAME ROW (the
+  unique `file_hash` index refuses a second one); cancelling a failed save
+  removes the row through `deleteBooksAction`. Never create a `published` row
+  before its pages exist (PROMPT-35).
 - Covers are supplied manually or auto-generated as a styled placeholder; there is no
   PDF-first-page cover generation.
 

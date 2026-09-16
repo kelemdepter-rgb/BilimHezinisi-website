@@ -542,6 +542,138 @@ test.describe("asking for a book is no longer a page", () => {
   });
 });
 
+/* ── The shell's tap targets (PROMPT-36) ────────────────────────────────── */
+
+/**
+ * The three controls the 2026-09-11 audit measured under the 44 px the
+ * Mobile Rules require: the footer's «ھەققىدە» (36×20) and «مەخپىيەتلىك ۋە
+ * بىخەتەرلىك» (122×20), and the header's brand (120×30). Their boxes grew;
+ * nothing else did — the header row is still the 64 px it was measured at
+ * before the change, on every page and at every width, and the brand still
+ * gives up width first so a 360 px row keeps every control on the screen.
+ */
+const HEADER_ROW_HEIGHT = 64;
+
+/**
+ * Controls the audit's sweep did NOT name but this one does, found on
+ * 2026-09-16 and reported with PROMPT-36 rather than fixed by it. Each is
+ * excused by where it lives, so the sweep still guards every other control.
+ */
+const SHORT_ELSEWHERE = [
+  // «ھەممىسى» beside the new-books strip's heading: components/library/book-strip.tsx
+  '[data-testid="new-strip-more"]',
+  // The category trail above a book: app/books/[id]/page.tsx
+  'nav[aria-label="تۈر يولى"] a',
+  // The desktop search input is 43 px inside its 44 px pill: .sinput in app/globals.css
+  '[data-testid="header-search"]',
+];
+
+/**
+ * The audit's sweep: every visible link, button, input and select that is
+ * not part of running text, named when it is shorter than 44 px.
+ */
+async function shortControls(page: Page): Promise<string[]> {
+  return page.evaluate((excused) => {
+    const short: string[] = [];
+    for (const element of document.querySelectorAll<HTMLElement>("a, button, input, select")) {
+      if (element.closest("p, td")) continue;
+      if (excused.some((selector) => element.matches(selector))) continue;
+      const box = element.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) continue;
+      if (getComputedStyle(element).visibility === "hidden") continue;
+      if (box.height >= 44) continue;
+      const name =
+        element.getAttribute("data-testid") ??
+        element.getAttribute("aria-label") ??
+        element.textContent?.trim() ??
+        "";
+      short.push(
+        `<${element.tagName.toLowerCase()}> ${name.slice(0, 40)} ${Math.round(box.width)}×${Math.round(box.height)}`,
+      );
+    }
+    return short;
+  }, SHORT_ELSEWHERE);
+}
+
+/** Every header control's box, and whether it lies inside the viewport. */
+async function headerControlsOffScreen(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const off: string[] = [];
+    for (const element of document.querySelectorAll<HTMLElement>("header a, header button")) {
+      const box = element.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) continue;
+      if (box.left < 0 || box.right > window.innerWidth) {
+        const name = element.getAttribute("data-testid") ?? element.getAttribute("aria-label") ?? "";
+        off.push(`${name} ${Math.round(box.left)}..${Math.round(box.right)}`);
+      }
+    }
+    return off;
+  });
+}
+
+test.describe("the shell's tap targets", () => {
+  const pages = [
+    { name: "the library", path: () => "/" },
+    { name: "the About page", path: () => "/about" },
+    { name: "search", path: () => "/search" },
+    { name: "a book page", path: () => `/books/${readSeed()?.bookId}` },
+  ];
+
+  async function assertTapTargets(page: Page, where: string) {
+    const brand = page.getByRole("link", { name: "باش بەت — بىلىم خەزىنىسى" });
+    const about = page.getByTestId("about-link");
+    const privacy = page.getByTestId("privacy-link");
+    for (const [label, locator] of [
+      ["the brand", brand],
+      ["«ھەققىدە»", about],
+      ["«مەخپىيەتلىك ۋە بىخەتەرلىك»", privacy],
+    ] as const) {
+      const box = await locator.boundingBox();
+      expect(box, `${label} must have a box on ${where}`).not.toBeNull();
+      expect(box!.height, `${label} must be at least 44 px tall on ${where}`).toBeGreaterThanOrEqual(44);
+    }
+
+    const row = await page.locator("header > div").first().boundingBox();
+    expect(Math.round(row!.height), `the header row must not grow on ${where}`).toBe(
+      HEADER_ROW_HEIGHT,
+    );
+    expect(await headerControlsOffScreen(page), `every header control on screen on ${where}`).toEqual(
+      [],
+    );
+    await assertNoHorizontalOverflow(page);
+    expect(await shortControls(page), `no other control under 44 px on ${where}`).toEqual([]);
+  }
+
+  for (const { name, path } of pages) {
+    test(`${name}: the three targets are 44 px tall, the row is not, and the footer still navigates`, async ({
+      page,
+      viewport,
+    }) => {
+      test.skip(name === "a book page" && !readSeed(), "the setup project seeds the book");
+      await page.goto(path());
+      await expect(page.getByTestId("privacy-link")).toBeAttached();
+      await assertTapTargets(page, `${name} at ${viewport!.width} px`);
+
+      // The narrowest phone the Mobile Rules name.
+      await page.setViewportSize({ width: 360, height: 640 });
+      await assertTapTargets(page, `${name} at 360 px`);
+
+      // Down to the bottom, where the footer is, and back — nothing may have
+      // covered a footer link, and it must still take the reader somewhere.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForTimeout(250);
+      const target = path() === "/about" ? "privacy-link" : "about-link";
+      const link = page.getByTestId(target);
+      await expect(link).toBeInViewport();
+      expect(await topMostAt(page, link), "the footer link must not be covered").toBe(target);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(250);
+      await link.click();
+      await expect(page).toHaveURL(target === "about-link" ? /\/about$/ : /\/privacy$/);
+    });
+  }
+});
+
 /* ── Fonts we are allowed to serve ───────────────────────────────────────── */
 
 test.describe("the reader's font picker", () => {

@@ -14,6 +14,13 @@ import type { Category, SessionInfo } from "@/lib/types";
 import type { Theme } from "@/lib/theme";
 import brandMark from "@/public/brand.png";
 
+/**
+ * A footer link: one line of 13 px text inside a box a thumb can hit. The
+ * text alone was 20 px tall — the Mobile Rules ask for 44 — and the box is
+ * what grew, not the type.
+ */
+const FOOTER_LINK = "inline-flex min-h-11 items-center hover:text-am hover:underline";
+
 type AppShellProps = {
   theme: Theme | null;
   /**
@@ -111,8 +118,14 @@ export function AppShell({
           </button>
 
           {/* The brand is the one element allowed to shrink, so adding a nav
-              control can never push the row past 360 px. */}
-          <Link href="/" className="flex min-w-0 items-center gap-2.5" aria-label="باش بەت — بىلىم خەزىنىسى">
+              control can never push the row past 360 px. Its box is still
+              the full 44 px tap height — the row is 64 px, so that costs no
+              height and no width. */}
+          <Link
+            href="/"
+            className="flex min-h-11 min-w-0 items-center gap-2.5"
+            aria-label="باش بەت — بىلىم خەزىنىسى"
+          >
             <Image
               src={brandMark}
               alt=""
@@ -214,12 +227,14 @@ export function AppShell({
           <span>«بىلىم خەزىنىسى» — ئۇيغۇرچە ئېلكىتاب خەزىنىسى</span>
           {/* Licence and privacy pages have to be reachable from every page,
               which on a phone means the footer — the header is already at its
-              width limit at 360 px. */}
-          <nav className="flex flex-wrap items-center gap-x-4 gap-y-2" aria-label="سايت ئۇچۇرلىرى">
-            <Link href="/about" data-testid="about-link" className="hover:text-am hover:underline">
+              width limit at 360 px. Each link is a 44 px tap box around one
+              line of text, so there is no row gap: two wrapped lines already
+              hold 24 px of box between their texts. */}
+          <nav className="flex flex-wrap items-center gap-x-4" aria-label="سايت ئۇچۇرلىرى">
+            <Link href="/about" data-testid="about-link" className={FOOTER_LINK}>
               ھەققىدە
             </Link>
-            <Link href="/privacy" data-testid="privacy-link" className="hover:text-am hover:underline">
+            <Link href="/privacy" data-testid="privacy-link" className={FOOTER_LINK}>
               مەخپىيەتلىك ۋە بىخەتەرلىك
             </Link>
             <Suspense fallback={<AccountLinkSkeleton signedIn={looksSignedIn} />}>
@@ -555,7 +570,7 @@ function AccountLink({ sessionPromise }: { sessionPromise: Promise<SessionInfo |
   const session = use(sessionPromise);
   if (!session) return null;
   return (
-    <Link href="/my/account" data-testid="account-link" className="hover:text-am hover:underline">
+    <Link href="/my/account" data-testid="account-link" className={FOOTER_LINK}>
       ھېساباتىم
     </Link>
   );

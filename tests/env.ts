@@ -122,6 +122,13 @@ export const BATCH_PREFIX = "e2eToplam";
 export const SEED_PATH = "tests/.auth/seed.json";
 export const SEED_BOOK_TITLE = "__e2e_kitab__ سىناق كىتابى";
 export const SEED_BOOK_HASH = "__e2e_book_hash__";
+/**
+ * The author both seeded books are filed under. Their page,
+ * `/authors/${encodeURIComponent(SEED_AUTHOR)}`, exists for as long as the
+ * seed does — the URL segment is ug_normalize(author), and this name is its
+ * own normal form.
+ */
+export const SEED_AUTHOR = "سىناق ئاپتور";
 /** A word placed on a known page so search results can be asserted exactly. */
 export const SEED_NEEDLE = "ئالتۇنكۆۋرۈك";
 export const SEED_NEEDLE_PAGE = 3;
@@ -189,11 +196,17 @@ export function readMarkdownSeed(): { bookId: number } | null {
   }
 }
 
-export function readSeed(): { bookId: number } | null {
+/**
+ * The seeded book, and the category the setup project filed it under —
+ * `null` when the library had no categories to choose from.
+ */
+export type Seed = { bookId: number; categoryId: number | null };
+
+export function readSeed(): Seed | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { readFileSync } = require("node:fs") as typeof import("node:fs");
-    return JSON.parse(readFileSync(SEED_PATH, "utf8")) as { bookId: number };
+    return JSON.parse(readFileSync(SEED_PATH, "utf8")) as Seed;
   } catch {
     return null;
   }

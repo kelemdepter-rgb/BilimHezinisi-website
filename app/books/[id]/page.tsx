@@ -6,6 +6,7 @@ import { Icon } from "@/components/icons";
 import { DownloadBook } from "@/components/books/download-book";
 import { ShareButton } from "@/components/books/share-button";
 import { BookCover } from "@/components/library/book-cover";
+import { Trail } from "@/components/library/trail";
 import { getCategories, getSessionInfo } from "@/lib/data";
 import {
   categoryTrail,
@@ -110,19 +111,10 @@ export default async function BookDetailPage({ params }: PageProps<"/books/[id]"
       )}
 
       {trail.length > 0 && (
-        <nav aria-label="تۈر يولى" className="mb-4 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink3">
-          <Link href="/" className="hover:text-ink">
-            كۇتۇپخانا
-          </Link>
-          {trail.map((category) => (
-            <span key={category.id} className="flex items-center gap-1.5">
-              <span aria-hidden="true">‹</span>
-              <Link href={`/?cat=${category.id}`} className="hover:text-ink">
-                {category.name}
-              </Link>
-            </span>
-          ))}
-        </nav>
+        <Trail
+          label="تۈر يولى"
+          crumbs={trail.map((category) => ({ href: `/?cat=${category.id}`, label: category.name }))}
+        />
       )}
 
       <div className="grid gap-5 lg:grid-cols-[220px_1fr]">

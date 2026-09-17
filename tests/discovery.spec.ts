@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { SEED_BOOK_TITLE, hasStaffTestEnv, loadEnvLocal } from "./env";
+import { SEED_AUTHOR, SEED_BOOK_TITLE, hasStaffTestEnv, loadEnvLocal } from "./env";
 
 loadEnvLocal();
 
@@ -10,9 +10,6 @@ test.skip(!hasStaffTestEnv(), "Supabase env not configured");
  *
  * Anonymous by default — every one of these has to work with no account.
  */
-
-/** The author the setup project seeds its book under. */
-const SEED_AUTHOR = "سىناق ئاپتور";
 
 async function assertNoHorizontalOverflow(page: Page) {
   const metrics = await page.evaluate(() => ({

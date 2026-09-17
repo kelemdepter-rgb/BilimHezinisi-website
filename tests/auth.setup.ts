@@ -6,6 +6,7 @@ import {
   ACCOUNTS_PATH,
   READER_STATE_PATH,
   RUN_ID,
+  SEED_AUTHOR,
   SEED_BOOK_HASH,
   SEED_BOOK_TITLE,
   SEED_FRAGMENT_DECOYS,
@@ -167,16 +168,30 @@ setup("seed a published test book", async () => {
 
   await admin.from("books").delete().eq("file_hash", SEED_BOOK_HASH);
 
+  // The first category of the tree, so the book's page carries a category
+  // trail — trust.spec.ts measures its links. A library with no categories
+  // seeds the book without one, and that spec says so when it skips the
+  // trail.
+  const { data: category, error: categoryError } = await admin
+    .from("categories")
+    .select("id")
+    .order("sort_order", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (categoryError) throw new Error(`could not read the categories: ${categoryError.message}`);
+  const categoryId = (category as { id: number } | null)?.id ?? null;
+
   const { data: book, error } = await admin
     .from("books")
     .insert({
       title: SEED_BOOK_TITLE,
-      author: "سىناق ئاپتور",
+      author: SEED_AUTHOR,
       status: "published",
       file_hash: SEED_BOOK_HASH,
       format: "TXT",
       language: "ug",
       page_count: SEED_PAGE_COUNT,
+      category_id: categoryId,
       description: "بۇ Playwright سىنىقى ئۈچۈن قوشۇلغان ۋاقىتلىق كىتاب.",
     })
     .select("id")
@@ -230,7 +245,7 @@ setup("seed a published test book", async () => {
   if (pageError) throw new Error(`could not seed pages: ${pageError.message}`);
 
   mkdirSync(dirname(SEED_PATH), { recursive: true });
-  writeFileSync(SEED_PATH, JSON.stringify({ bookId: book.id }), "utf8");
+  writeFileSync(SEED_PATH, JSON.stringify({ bookId: book.id, categoryId }), "utf8");
 });
 
 /**
@@ -256,7 +271,7 @@ setup("seed a published Markdown book", async () => {
     .from("books")
     .insert({
       title: SEED_MD_BOOK_TITLE,
-      author: "سىناق ئاپتور",
+      author: SEED_AUTHOR,
       status: "published",
       file_hash: SEED_MD_BOOK_HASH,
       format: "DOCX",

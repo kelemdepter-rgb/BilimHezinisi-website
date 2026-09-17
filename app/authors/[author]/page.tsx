@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { BookGrid, parsePageParam } from "@/components/library/book-grid";
+import { Trail } from "@/components/library/trail";
 import { getCategories } from "@/lib/data";
 import { AUTHOR_BOOKS_PAGE_SIZE, booksByAuthor } from "@/lib/authors";
 import { coverUrlMap } from "@/lib/library";
@@ -58,15 +58,10 @@ export default async function AuthorPage({
 
   return (
     <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
-      <nav aria-label="يول" className="mb-4 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink3">
-        <Link href="/" className="hover:text-ink">
-          كۇتۇپخانا
-        </Link>
-        <span aria-hidden="true">‹</span>
-        <Link href="/authors" className="hover:text-ink" data-testid="authors-breadcrumb">
-          ئاپتورلار
-        </Link>
-      </nav>
+      <Trail
+        label="يول"
+        crumbs={[{ href: "/authors", label: "ئاپتورلار", testId: "authors-breadcrumb" }]}
+      />
 
       <h1 className="flex items-center gap-2.5 text-xl font-bold" data-testid="author-name">
         <Icon name="feather" className="ic-lg text-am" />

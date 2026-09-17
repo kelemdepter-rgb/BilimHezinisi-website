@@ -59,10 +59,14 @@ export function BookStrip({
           </p>
         )}
         {moreHref && (
+          /* A 44 px tap box around one line of 12.5 px text (the Mobile
+             Rules). The heading centres against it, so the row is taller by
+             the difference; the link's own type, colour and place have not
+             moved. */
           <Link
             href={moreHref}
             data-testid={`${testId}-more`}
-            className="ms-auto text-[12.5px] font-semibold text-am hover:underline"
+            className="ms-auto inline-flex min-h-11 items-center text-[12.5px] font-semibold text-am hover:underline"
           >
             {moreLabel ?? "ھەممىسى"}
           </Link>

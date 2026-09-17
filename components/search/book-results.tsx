@@ -99,9 +99,12 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
   return (
     <>
       <h2 className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        {/* A 44 px tap box around the title (the Mobile Rules). The author
+            still sits on the title's baseline: an inline-flex box's baseline
+            is its text's. */}
         <Link
           href={`/books/${group.bookId}`}
-          className="text-[15px] font-bold text-ink hover:underline"
+          className="inline-flex min-h-11 items-center text-[15px] font-bold text-ink hover:underline"
           data-testid="search-book-title"
         >
           {group.title}
@@ -109,13 +112,17 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
         {group.author && <span className="text-[12.5px] text-ink3">{group.author}</span>}
       </h2>
 
+      {/* Each row is one 28 px line inside 8 px of padding above and below
+          — 44 px, the tap target the Mobile Rules ask for — and a wrapped
+          row on a phone is simply taller. Not `min-h-11`: the page chip has
+          no height of its own and would stretch to fill it. */}
       <ul className="mt-2 space-y-1.5">
         {preview.map((hit) => (
           <li key={hit.page_no}>
             <Link
               href={readerHref(group.bookId, hit.page_no, term)}
               data-testid="search-result"
-              className="flex gap-2 rounded-[var(--radius)] px-2 py-1.5 hover:bg-bg2"
+              className="flex gap-2 rounded-[var(--radius)] px-2 py-2 hover:bg-bg2"
             >
               <PageChip pageNo={hit.page_no} />
               <span className="min-w-0 text-[13.5px] leading-7 text-ink2">
@@ -171,7 +178,7 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
                 <Link
                   href={readerHref(group.bookId, item.pageNo, term, item.matchIndex)}
                   data-testid="expanded-match"
-                  className="flex gap-2 rounded-[var(--radius)] px-2 py-1.5 hover:bg-bg2"
+                  className="flex gap-2 rounded-[var(--radius)] px-2 py-2 hover:bg-bg2"
                 >
                   <PageChip pageNo={item.pageNo} />
                   <span className="min-w-0 text-[13px] leading-7 text-ink2">

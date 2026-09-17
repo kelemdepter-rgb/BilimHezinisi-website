@@ -1,8 +1,10 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 import {
   READER_SETTINGS_KEY,
+  SEED_AUTHOR,
+  SEED_NEEDLE,
   STAFF_STATE_PATH,
   freshPassword,
   hasStaffTestEnv,
@@ -542,7 +544,7 @@ test.describe("asking for a book is no longer a page", () => {
   });
 });
 
-/* ── The shell's tap targets (PROMPT-36) ────────────────────────────────── */
+/* ── The shell's tap targets (PROMPT-36, PROMPT-37) ─────────────────────── */
 
 /**
  * The three controls the 2026-09-11 audit measured under the 44 px the
@@ -551,33 +553,24 @@ test.describe("asking for a book is no longer a page", () => {
  * nothing else did — the header row is still the 64 px it was measured at
  * before the change, on every page and at every width, and the brand still
  * gives up width first so a 360 px row keeps every control on the screen.
+ *
+ * PROMPT-37 did the same for what a wider sweep found on 2026-09-17:
+ * «ھەممىسى» on the new-books strip (19 px), the trails above a book and an
+ * author (19 px), the search input inside the header's pill and the phone's
+ * panel (43 px), and on a results page the book title (22.5 px) and a
+ * one-line row (40 px). The sweep below has excused nothing since.
  */
 const HEADER_ROW_HEIGHT = 64;
-
-/**
- * Controls the audit's sweep did NOT name but this one does, found on
- * 2026-09-16 and reported with PROMPT-36 rather than fixed by it. Each is
- * excused by where it lives, so the sweep still guards every other control.
- */
-const SHORT_ELSEWHERE = [
-  // «ھەممىسى» beside the new-books strip's heading: components/library/book-strip.tsx
-  '[data-testid="new-strip-more"]',
-  // The category trail above a book: app/books/[id]/page.tsx
-  'nav[aria-label="تۈر يولى"] a',
-  // The desktop search input is 43 px inside its 44 px pill: .sinput in app/globals.css
-  '[data-testid="header-search"]',
-];
 
 /**
  * The audit's sweep: every visible link, button, input and select that is
  * not part of running text, named when it is shorter than 44 px.
  */
 async function shortControls(page: Page): Promise<string[]> {
-  return page.evaluate((excused) => {
+  return page.evaluate(() => {
     const short: string[] = [];
     for (const element of document.querySelectorAll<HTMLElement>("a, button, input, select")) {
       if (element.closest("p, td")) continue;
-      if (excused.some((selector) => element.matches(selector))) continue;
       const box = element.getBoundingClientRect();
       if (box.width === 0 || box.height === 0) continue;
       if (getComputedStyle(element).visibility === "hidden") continue;
@@ -592,7 +585,107 @@ async function shortControls(page: Page): Promise<string[]> {
       );
     }
     return short;
-  }, SHORT_ELSEWHERE);
+  });
+}
+
+/** Every box a locator matches is at least 44 px tall — and it matches something. */
+async function assertTapBoxes(locator: Locator, label: string, where: string) {
+  const heights = await locator.evaluateAll((nodes) =>
+    nodes.map((node) => node.getBoundingClientRect().height),
+  );
+  expect(heights.length, `${label} must render on ${where}`).toBeGreaterThan(0);
+  for (const height of heights) {
+    expect(height, `${label} must be at least 44 px tall on ${where}`).toBeGreaterThanOrEqual(44);
+  }
+}
+
+/**
+ * Tap boxes that grew must not have grown into each other: no two of the
+ * controls a selector matches may share a pixel. Touching edges are fine.
+ */
+async function assertNoOverlap(page: Page, selector: string, label: string, where: string) {
+  const overlaps = await page.evaluate((selector) => {
+    const boxes = [...document.querySelectorAll<HTMLElement>(selector)]
+      .map((element) => ({
+        name: element.getAttribute("data-testid") ?? element.textContent?.trim().slice(0, 30) ?? "",
+        box: element.getBoundingClientRect(),
+      }))
+      .filter(({ box }) => box.width > 0 && box.height > 0);
+    const found: string[] = [];
+    for (let i = 0; i < boxes.length; i += 1) {
+      for (let j = i + 1; j < boxes.length; j += 1) {
+        const a = boxes[i].box;
+        const b = boxes[j].box;
+        if (a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom) {
+          found.push(`${boxes[i].name} ∩ ${boxes[j].name}`);
+        }
+      }
+    }
+    return found;
+  }, selector);
+  expect(overlaps, `${label} must not overlap on ${where}`).toEqual([]);
+}
+
+/**
+ * A trail above a book or an author: «كۇتۇپخانا», then a link per step. Every
+ * link is a 44 px box, and the boxes do not run into each other.
+ */
+async function assertTrail(page: Page, navLabel: string, where: string) {
+  const links = page.locator(`nav[aria-label="${navLabel}"] a`);
+  await expect(links.first()).toHaveText("كۇتۇپخانا");
+  expect(await links.count(), `the «${navLabel}» trail must lead somewhere on ${where}`).toBeGreaterThanOrEqual(2);
+  await assertTapBoxes(links, `the «${navLabel}» trail's links`, where);
+  await assertNoOverlap(page, `nav[aria-label="${navLabel}"] a`, `the «${navLabel}» trail's links`, where);
+}
+
+/**
+ * The search box in the header: the pill from md up, and below it the panel
+ * the magnifier opens. Its INPUT is what the 2026-09-11 audit missed — it
+ * counted the 46 px pill around the 43 px input. The panel sits in the
+ * header's own flow, so it pushes the page down rather than lying over it.
+ */
+async function assertHeaderSearch(page: Page, where: string) {
+  if (page.viewportSize()!.width >= 768) {
+    await assertTapBoxes(page.getByTestId("header-search"), "the header's search input", where);
+    return;
+  }
+  const opener = page.getByRole("button", { name: "ئىزدەش رامكىسىنى ئېچىش" });
+  await opener.click();
+  const input = page.getByTestId("header-search-mobile");
+  await expect(input).toBeVisible();
+  await assertTapBoxes(input, "the phone panel's search input", where);
+  // Measured at the top of the page, where the row beneath the panel is —
+  // scrolled down, the sticky header covers whatever has gone past it.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  const header = (await page.locator("header").first().boundingBox())!;
+  const main = (await page.locator("main").first().boundingBox())!;
+  expect(main.y, `the search panel must not cover the page on ${where}`).toBeGreaterThanOrEqual(
+    header.y + header.height - 1,
+  );
+  expect(await shortControls(page), `no control under 44 px with the panel open on ${where}`).toEqual(
+    [],
+  );
+  await opener.click();
+  await expect(input).toHaveCount(0);
+}
+
+/**
+ * A results page: the book title above each group, every preview row, and —
+ * once the first group is unrolled — every expanded row. Unrolling is left
+ * alone when an earlier pass at another width already did it.
+ */
+async function assertResults(page: Page, where: string) {
+  const group = '[data-testid="search-book-group"]';
+  await assertTapBoxes(page.getByTestId("search-book-title"), "a result's book title", where);
+  await assertTapBoxes(page.getByTestId("search-result"), "a preview row", where);
+  const expander = page.getByTestId("expand-book-matches").first();
+  if ((await expander.getAttribute("aria-expanded")) !== "true") await expander.click();
+  await expect(page.getByTestId("expanded-match").first()).toBeVisible();
+  await assertTapBoxes(page.getByTestId("expanded-match"), "an expanded row", where);
+  await assertNoOverlap(page, `${group} a, ${group} button`, "a result group's controls", where);
+  expect(await shortControls(page), `no control under 44 px with a group expanded on ${where}`).toEqual(
+    [],
+  );
 }
 
 /** Every header control's box, and whether it lies inside the viewport. */
@@ -612,11 +705,41 @@ async function headerControlsOffScreen(page: Page): Promise<string[]> {
 }
 
 test.describe("the shell's tap targets", () => {
-  const pages = [
-    { name: "the library", path: () => "/" },
+  /**
+   * Each page, and what it alone has to prove beyond the shell: the strip's
+   * «ھەممىسى» on the library, the trail on the author's page, the title and
+   * the rows on a results page. The book page's trail has its own test
+   * below, because a library without categories has none to measure.
+   */
+  const pages: {
+    name: string;
+    path: () => string;
+    extra?: (page: Page, where: string) => Promise<void>;
+  }[] = [
+    {
+      name: "the library",
+      path: () => "/",
+      extra: (page, where) => assertTapBoxes(page.getByTestId("new-strip-more"), "«ھەممىسى»", where),
+    },
     { name: "the About page", path: () => "/about" },
     { name: "search", path: () => "/search" },
     { name: "a book page", path: () => `/books/${readSeed()?.bookId}` },
+    {
+      name: "an author page",
+      path: () => `/authors/${encodeURIComponent(SEED_AUTHOR)}`,
+      extra: async (page, where) => {
+        await assertTrail(page, "يول", where);
+        await expect(page.locator('nav[aria-label="يول"] a').last()).toHaveAttribute(
+          "data-testid",
+          "authors-breadcrumb",
+        );
+      },
+    },
+    {
+      name: "a search with results",
+      path: () => `/search?q=${encodeURIComponent(SEED_NEEDLE)}`,
+      extra: assertResults,
+    },
   ];
 
   async function assertTapTargets(page: Page, where: string) {
@@ -642,10 +765,11 @@ test.describe("the shell's tap targets", () => {
     );
     await assertNoHorizontalOverflow(page);
     expect(await shortControls(page), `no other control under 44 px on ${where}`).toEqual([]);
+    await assertHeaderSearch(page, where);
   }
 
-  for (const { name, path } of pages) {
-    test(`${name}: the three targets are 44 px tall, the row is not, and the footer still navigates`, async ({
+  for (const { name, path, extra } of pages) {
+    test(`${name}: every target is 44 px tall, the row is not, and the footer still navigates`, async ({
       page,
       viewport,
     }) => {
@@ -653,10 +777,12 @@ test.describe("the shell's tap targets", () => {
       await page.goto(path());
       await expect(page.getByTestId("privacy-link")).toBeAttached();
       await assertTapTargets(page, `${name} at ${viewport!.width} px`);
+      await extra?.(page, `${name} at ${viewport!.width} px`);
 
       // The narrowest phone the Mobile Rules name.
       await page.setViewportSize({ width: 360, height: 640 });
       await assertTapTargets(page, `${name} at 360 px`);
+      await extra?.(page, `${name} at 360 px`);
 
       // Down to the bottom, where the footer is, and back — nothing may have
       // covered a footer link, and it must still take the reader somewhere.
@@ -672,6 +798,29 @@ test.describe("the shell's tap targets", () => {
       await expect(page).toHaveURL(target === "about-link" ? /\/about$/ : /\/privacy$/);
     });
   }
+
+  /**
+   * The category trail above a book. The setup project files the seeded book
+   * under the first category of the tree so this page has one; a library
+   * with no categories cannot, and then the author page's trail — the same
+   * component — is the one measured above.
+   */
+  test("a book page: the category trail's links are 44 px tall", async ({ page, viewport }) => {
+    const seed = readSeed();
+    test.skip(!seed, "the setup project seeds the book");
+    test.skip(
+      seed!.categoryId == null,
+      "the library has no categories, so the seeded book has no trail — the author page's trail stands in",
+    );
+
+    await page.goto(`/books/${seed!.bookId}`);
+    await expect(page.getByTestId("privacy-link")).toBeAttached();
+    await assertTrail(page, "تۈر يولى", `a book page at ${viewport!.width} px`);
+    // The trail folds on a narrow phone; folded rows must not overlap either.
+    await page.setViewportSize({ width: 360, height: 640 });
+    await assertTrail(page, "تۈر يولى", "a book page at 360 px");
+    await assertNoHorizontalOverflow(page);
+  });
 });
 
 /* ── Fonts we are allowed to serve ───────────────────────────────────────── */

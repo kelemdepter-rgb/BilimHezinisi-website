@@ -177,6 +177,10 @@ here. The table is left in place because an applied migration is never edited ·
 - Every feature is tested at 375×667 AND 390×844 AND 1280×800 with Playwright before
   it is called done (assert: no horizontal overflow; key controls visible & clickable
   after scroll down+up).
+- The sign-in and registration specs (`auth-flow-*` projects) run against a FAKE
+  Supabase (`tests/fixtures/supabase-mock.ts`, through a second dev server on :3300
+  with fixed DNS answers) — never the real project, which they would otherwise
+  fill with lockouts, signups and emails.
 
 ## Security / DO-NOT-TOUCH
 - `SUPABASE_SERVICE_ROLE_KEY` is server-only: never sent to the client, never logged,
@@ -197,6 +201,28 @@ here. The table is left in place because an applied migration is never edited ·
   mail nobody can read (`example.com`), and are swept by the `bh-e2e-` prefix at
   the start and end of every run. Never commit a password
   (`tests/unit/test-account-hygiene.test.ts` fails if one comes back).
+- **Sign-in and registration: three failed attempts, then an hour's lock**
+  (PROMPT-38). Counted in Postgres (`auth_attempts`, migration 0026) under an
+  HMAC of form + IP + a random device cookie (`bh_dev`), with an IP-only backstop
+  at ten an hour — **never by email address**, or anyone could lock a stranger
+  out. The table and its `auth_attempt_*` functions are service-role ONLY,
+  reached from the Server Actions through `lib/supabase/admin.ts`, and the
+  actions fail open when they are unreachable. The rules live in
+  `lib/auth/attempts.ts`; `lib/rate-limit.ts` is only the outer burst brake and
+  must never trip before the third failure. **Password recovery is never counted
+  and never locked.**
+- **Addresses under Chinese (PRC) jurisdiction are refused** — `.cn`/`.hk`/`.mo`,
+  their internationalised forms, PRC mail providers, and domains whose every MX
+  is PRC-hosted — on register, login, forgot-password and resend. The one
+  editable list is `lib/auth/blocked-email-domains.ts`; Taiwan and everyone else
+  stay allowed. DNS checks fail open.
+- Nothing may reveal whether an address is registered: «resend the confirmation»
+  answers the same for every address, whatever Supabase says. What a reader
+  typed crosses a redirect in short-lived httpOnly cookies (`lib/auth/flash.ts`),
+  never in the URL.
+- `app/(auth)` deliberately has no `loading.tsx`: a loading boundary streams the
+  form into a hidden element that only JavaScript reveals, and the sign-in forms
+  must work without it.
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
@@ -298,6 +324,12 @@ put a bill on the owner and make us the custodian of other people's secrets.
   hits `/api/health`, which is the keep-alive. There is **no upgrade, ever** — "free
   tier permanently" is a constraint, not a phase: the usage panel on `/admin`
   («ھەقسىز بوشلۇق ئەھۋالى») shows the headroom, and the library stays inside it.
+- Auth email (confirmation, password reset) goes out through the owner's own Gmail
+  as custom SMTP in the Supabase dashboard — the only sender allowed, no other mail
+  vendor. Its App password is typed by him into that dashboard field and exists
+  nowhere else: never in the repo, `.env*`, a log or a chat. Authentication → Rate
+  Limits holds email at 20 an hour, because Gmail stops an account that sends more
+  than 500 a day (20 × 24 = 480).
 - Gemini costs the owner **nothing, by construction**: there is no server-side key and
   no AI server route, so no request the site makes is billable to anyone. A reader who
   wants the paid-only model enables billing on their OWN Google account; the site never

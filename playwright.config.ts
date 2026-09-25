@@ -1,5 +1,12 @@
 import { defineConfig, type Project } from "@playwright/test";
-import { CRON_TEST_SECRET, STAFF_STATE_PATH, loadEnvLocal } from "./tests/env";
+import {
+  CRON_TEST_SECRET,
+  MOCK_ANON_KEY,
+  MOCK_SERVICE_KEY,
+  MOCK_SUPABASE_URL,
+  STAFF_STATE_PATH,
+  loadEnvLocal,
+} from "./tests/env";
 
 loadEnvLocal();
 
@@ -29,6 +36,17 @@ const DEV_URL = `http://localhost:${DEV_PORT}`;
 
 /** Where the production build for the offline specs is served. */
 const PROD_URL = "http://localhost:3100";
+
+/**
+ * Where the sign-in and registration specs run (tests/auth-flows.spec.ts):
+ * a second dev server whose Supabase is the fake in tests/fixtures/
+ * supabase-mock.ts. Those specs lock people out, register strangers and ask
+ * for emails — none of which may ever happen in the real project — and they
+ * exercise Server Actions, whose calls to Supabase leave from the Next server
+ * where the browser's `page.route` cannot reach them.
+ */
+const MOCK_PORT = "3300";
+const MOCK_URL = `http://localhost:${MOCK_PORT}`;
 
 /**
  * A distinct caller address per project, per run.
@@ -543,6 +561,25 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Registering and signing in: three chances then an hour's lock, the
+         * Chinese-jurisdiction block, typo suggestions, truthful waits, resend
+         * and password recovery while locked out (PROMPT-38). Against the
+         * fake-Supabase dev server only — never the real project — so it needs
+         * no setup, and every test starts from a clean fake.
+         */
+        name: `auth-flow-${viewport.name}`,
+        testMatch: /auth-flows\.spec\.ts/,
+        use: {
+          baseURL: MOCK_URL,
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,
@@ -575,6 +612,28 @@ export default defineConfig({
       url: PROD_URL,
       reuseExistingServer: !process.env.CI,
       timeout: 300_000,
+    },
+    {
+      /**
+       * The fake-Supabase dev server for the auth-flow projects. Its own
+       * output directory, so it runs beside the ordinary dev server; every
+       * Supabase variable overridden, so it cannot reach the real project;
+       * and fixed DNS answers for a handful of test domains
+       * (tests/fixtures/dns-stub.mjs). The fake itself is started by the spec.
+       */
+      command: `npx next dev --port ${MOCK_PORT}`,
+      url: MOCK_URL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 180_000,
+      env: {
+        NEXT_DIST_DIR: ".next-mock",
+        NEXT_PUBLIC_SUPABASE_URL: MOCK_SUPABASE_URL,
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: MOCK_ANON_KEY,
+        SUPABASE_SERVICE_ROLE_KEY: MOCK_SERVICE_KEY,
+        ADMIN_EMAIL: "bh-e2e-admin@example.com",
+        SITE_URL: MOCK_URL,
+        NODE_OPTIONS: "--import=./tests/fixtures/dns-stub.mjs",
+      },
     },
   ],
 });

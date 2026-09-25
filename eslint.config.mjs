@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     // The production build the offline Playwright specs are served from
     // (next.config.ts distDir); machine-generated, exactly like .next.
     ".next-e2e/**",
+    // The dev server the sign-in and registration specs run against a fake
+    // Supabase (playwright.config.ts); machine-generated too.
+    ".next-mock/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

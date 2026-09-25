@@ -70,3 +70,5 @@ next-env.d.ts
 
 # Production build used by the offline Playwright specs
 .next-e2e/
+# Dev server the sign-in/registration specs run against a fake Supabase
+.next-mock/

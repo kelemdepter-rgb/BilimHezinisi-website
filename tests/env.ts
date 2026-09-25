@@ -213,6 +213,17 @@ export function readSeed(): Seed | null {
 }
 
 /**
+ * The fake Supabase the sign-in and registration specs run against
+ * (tests/fixtures/supabase-mock.ts), and the keys its dev server is started
+ * with. They open nothing anywhere: the fake accepts any key, and only uses
+ * these two to tell the service role from everyone else.
+ */
+export const MOCK_SUPABASE_PORT = 54329;
+export const MOCK_SUPABASE_URL = `http://127.0.0.1:${MOCK_SUPABASE_PORT}`;
+export const MOCK_ANON_KEY = "bh-e2e-mock-anon-key";
+export const MOCK_SERVICE_KEY = "bh-e2e-mock-service-role-key";
+
+/**
  * The cron token the Playwright servers run with when .env.local has none.
  *
  * /api/health is what stops the free Supabase project pausing after ~7 idle

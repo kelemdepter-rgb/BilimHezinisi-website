@@ -15,8 +15,12 @@ export const metadata: Metadata = {
 };
 
 const CONTACT = "kelemdepter@gmail.com";
-/** The owner's own date, set with the copy; not touched by a later edit. */
-const UPDATED = "2026-يىلى 9- ئاينىڭ 3- كۈنى";
+/**
+ * The owner's date format, spaces and all. Moved on only when the policy
+ * itself changes, because section 6 promises readers exactly that: last on
+ * 2026-09-25, when he approved the sign-in and Gmail sentences (PROMPT-38).
+ */
+const UPDATED = "2026-يىلى 9- ئاينىڭ 25- كۈنى";
 
 /**
  * The owner wrote this page himself; the wording below is his, pasted rather
@@ -95,6 +99,17 @@ export default function PrivacyPage() {
           بۇ ئۇچۇرلار پەقەت ئۆزىڭىزگىلا كۆرۈنىدۇ. ساندانىمىزدا قۇر دەرىجىلىك بىخەتەرلىك قائىدىسى
           (RLS) يولغا قويۇلغان بولۇپ، ھېچكىم سىزنىڭ شەخسىي خاتىرىلىرىڭىزنى ئوقۇيالمايدۇ.
         </p>
+        <p>
+          كىرىش ۋە تىزىمدىن ئۆتۈش بەتلىرىدە بىر سائەت ئىچىدە ئۈچ قېتىم مەغلۇپ بولغان ئۇرۇنۇش شۇ
+          بەتنى بىر سائەت توسىدۇ. بۇنى ھېسابلاش ئۈچۈن مەغلۇپ بولغان ئۇرۇنۇشلارنىڭ سانى ئوقۇغىلى
+          بولمايدىغان شەكىلدە (hash) تەخمىنەن بىر كۈن ساقلىنىدۇ؛ ئۇنىڭدا ئېلخەت ئادرېسىڭىز، IP
+          ئادرېسىڭىز ۋە پارولىڭىز يوق. بۇ ساناق ئۈچۈن، جەدۋەلنى يوللىغىنىڭىزدا تور كۆرگۈچىڭىزگە
+          ئىختىيارىي بىر نومۇردىن باشقا ھېچنەرسە يېزىلمىغان كىچىك بىر <code>cookie</code> قويۇلىدۇ.
+        </p>
+        <p>
+          جەدۋەلگە يازغان ئېلخەت ئادرېسىڭىز ۋە ئىسمىڭىز (پارولىڭىز ئەمەس) قايتا يېزىپ
+          ئولتۇرماسلىقىڭىز ئۈچۈن 15 مىنۇتقىچە <code>cookie</code> دا ساقلىنىدۇ.
+        </p>
 
         <h2>
           <Icon name="globe" className="text-am" />
@@ -108,6 +123,10 @@ export default function PrivacyPage() {
           <li>
             <strong>ساندان ۋە ھۆججەت:</strong> ئابونت ئۇچۇرلىرى ۋە كىتاب مۇقاۋىلىرى Supabase دە
             ساقلىنىدۇ.
+          </li>
+          <li>
+            <strong>ئېلخەت:</strong> ھېسابات جەزملەش خېتى ۋە پارولنى يېڭىلاش خېتى Gmail ئارقىلىق
+            ئەۋەتىلىدۇ.
           </li>
         </ul>
         <p>

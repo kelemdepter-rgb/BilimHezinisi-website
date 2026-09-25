@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
+import { BLOCKED_MESSAGE } from "@/lib/auth/messages";
 import { requestPasswordResetAction } from "../actions";
 
 export const metadata: Metadata = {
@@ -12,8 +13,9 @@ const ERRORS: Record<string, string> = {
   empty: "ئېلخەت ئادرېسىڭىزنى كىرگۈزۈڭ.",
   rate_limit: "ئۇرۇنۇش سانى كۆپىيىپ كەتتى. بىر سائەتتىن كېيىن قايتا سىناڭ.",
   email_limit: "ھازىر ئېلخەت ئەۋەتىش چېكى توشۇپ قالدى. بىردەم كۈتۈپ قايتا سىناڭ.",
-  provider_off:
-    "ئېلخەت ئەۋەتىش Supabase دا ئېتىۋېتىلگەن. Authentication → Sign In / Providers → Email بۆلىكىدىن ئۇنى ئېچىڭ.",
+  // What the owner has to switch back on goes to the server log, not here.
+  provider_off: "ھازىر ئېلخەت ئەۋەتكىلى بولمايدۇ. كېيىنرەك قايتا سىناڭ.",
+  blocked: BLOCKED_MESSAGE,
   config: "سايت تېخى ساندانغا ئۇلانمىغان. باشقۇرغۇچى تەڭشىگەندىن كېيىن قايتا سىناڭ.",
   link_failed:
     "ئۇلانما ئىشلىمىدى. ئۇنى ئۆزىڭىز تەلەپ قىلغان شۇ تور كۆرگۈچتە ئېچىڭ، ياكى تۆۋەندە يېڭى ئۇلانما تەلەپ قىلىڭ.",

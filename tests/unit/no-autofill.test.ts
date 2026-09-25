@@ -180,7 +180,9 @@ describe("autofill still works where it should", () => {
    */
   it.each([
     ["app/(auth)/login/page.tsx", ['autoComplete="email"', 'autoComplete="current-password"']],
-    ["app/(auth)/register/page.tsx", ['autoComplete="name"', 'autoComplete="email"', 'autoComplete="new-password"']],
+    ["app/(auth)/register/page.tsx", ['autoComplete="name"', 'autoComplete="new-password"']],
+    // The sign-up form's email field, with its typo check, since PROMPT-38.
+    ["components/auth/register-email-field.tsx", ['autoComplete="email"']],
     ["app/(auth)/forgot-password/page.tsx", ['autoComplete="email"']],
     ["app/(auth)/reset-password/page.tsx", ['autoComplete="new-password"']],
   ])("%s keeps its identity tokens", (file, expected) => {

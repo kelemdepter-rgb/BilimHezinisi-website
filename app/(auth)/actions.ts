@@ -1,11 +1,37 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import type { AuthError } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureAdminBootstrap } from "@/lib/auth/bootstrap";
+import { attemptsFor, type Attempts } from "@/lib/auth/attempts";
+import {
+  COMMON_DOMAINS,
+  isBlockedJurisdiction,
+  parseEmail,
+  suggestDomain,
+  withDomain,
+  type ParsedEmail,
+} from "@/lib/auth/email";
+import { checkMailDomain } from "@/lib/auth/email-dns";
+import {
+  clearLoginDraft,
+  clearRegisterDraft,
+  clearSentTo,
+  markResent,
+  writeLoginDraft,
+  writeRegisterDraft,
+  writeSentTo,
+} from "@/lib/auth/flash";
+import {
+  resetOutcome,
+  signInOutcome,
+  signUpOutcome,
+  updatePasswordOutcome,
+  type AuthOutcome,
+} from "@/lib/auth/reasons";
 import {
   PASSWORD_RESET_RULE,
+  RESEND_RULE,
   SIGN_IN_RULE,
   SIGN_UP_RULE,
   callerKey,
@@ -17,94 +43,237 @@ import { absoluteUrl } from "@/lib/seo";
 const RESET_PATH = "/reset-password";
 
 /**
- * Supabase auth error code → query key understood by the login/register
- * pages. Anything unmapped falls back to a generic message, so the real
- * reason is logged server-side to keep it diagnosable.
+ * One line in the server log (Vercel → Logs) for the owner. Only a reason and,
+ * at most, the address's domain — never the address, an IP, a password or a
+ * token.
  */
-const SIGN_UP_REASONS: Record<string, string> = {
-  user_already_exists: "exists",
-  email_exists: "exists",
-  email_address_invalid: "bad_email",
-  weak_password: "short",
-  signup_disabled: "disabled",
-  email_provider_disabled: "provider_off",
-  over_email_send_rate_limit: "email_limit",
-  over_request_rate_limit: "rate_limit",
-};
-
-const SIGN_IN_REASONS: Record<string, string> = {
-  invalid_credentials: "credentials",
-  email_not_confirmed: "unconfirmed",
-  email_provider_disabled: "provider_off",
-  over_request_rate_limit: "rate_limit",
-};
-
-function reasonFor(error: AuthError, table: Record<string, string>, fallback: string) {
-  const mapped = error.code ? table[error.code] : undefined;
-  if (!mapped) {
-    // Never log tokens or passwords — only the provider's own error fields.
-    console.error("[auth] unmapped error", {
-      code: error.code,
-      status: error.status,
-      message: error.message,
-    });
-  }
-  return mapped ?? fallback;
+function logAuth(where: string, outcome: AuthOutcome, domain?: string): void {
+  if (!outcome.log) return;
+  console.error(`[auth] ${where}: ${outcome.log}${domain ? ` (domain ${domain})` : ""}`);
 }
 
-export async function signInAction(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "");
-  if (!email || !password) redirect("/login?xata=empty");
-
-  // Turned away before the request reaches Supabase at all.
-  if (isRateLimited(`signin:${await callerKey()}`, SIGN_IN_RULE)) {
-    redirect("/login?xata=rate_limit");
-  }
-
-  const supabase = await createSupabaseServerClient();
-  if (!supabase) redirect("/login?xata=config");
-
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error || !data.user) {
-    redirect(`/login?xata=${error ? reasonFor(error, SIGN_IN_REASONS, "failed") : "failed"}`);
-  }
-
-  await ensureAdminBootstrap(data.user.id, data.user.email);
-  redirect("/");
+/**
+ * What DNS says, for the checks that need it. The familiar providers are
+ * known to exist and known not to be PRC-hosted, so most readers never wait
+ * on a lookup at all.
+ */
+async function mailDomainVerdict(parsed: ParsedEmail) {
+  return COMMON_DOMAINS.includes(parsed.domain) ? "ok" : checkMailDomain(parsed.domain);
 }
 
+/* ── Registration ─────────────────────────────────────────────────────────── */
+
+/**
+ * The checks run in this order (PROMPT-38 B4), and nothing before the
+ * Supabase call can spend an email:
+ *
+ *   1. the in-process burst brake     5. blocked jurisdiction, by name
+ *   2. the three-chances lock          6. DNS: does the domain exist, and is
+ *   3. empty fields, short password       its mail PRC-hosted?
+ *   4. the address's syntax            7. a probable typo of a common domain
+ *                                      8. Supabase
+ *
+ * A locked person is answered at step 2, before any lookup or Supabase call.
+ * Steps 4–6 and Supabase's own `email_address_invalid` and `exists` are
+ * failed attempts; a suggestion, a wait, a rate limit and a server fault are
+ * not. Where 6 and 7 meet — a probable typo whose domain cannot receive mail —
+ * the suggestion comes first, and only a reader who keeps the domain is
+ * refused.
+ */
 export async function signUpAction(formData: FormData) {
-  const email = String(formData.get("email") ?? "").trim();
+  const typed = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const displayName = String(formData.get("display_name") ?? "").trim();
-  if (!email || !password) redirect("/register?xata=empty");
-  if (password.length < 6) redirect("/register?xata=short");
+  const displayName = String(formData.get("display_name") ?? "").trim().slice(0, 60);
+  const keptDomain = String(formData.get("keep_domain") ?? "");
 
-  // Each signup costs an email send, which is the scarcest thing here.
-  if (isRateLimited(`signup:${await callerKey()}`, SIGN_UP_RULE)) {
-    redirect("/register?xata=rate_limit");
+  /** Back to the form with the message — and with what was typed, bar the password. */
+  const back = async (reason: string, extra = "") => {
+    await writeRegisterDraft({ email: typed.slice(0, 254), name: displayName });
+    redirect(`/register?xata=${reason}${extra}`);
+  };
+
+  if (isRateLimited(`signup:${await callerKey()}`, SIGN_UP_RULE)) return back("rate_limit");
+
+  const tries = await attemptsFor("register");
+  if (await tries.locked()) return back("locked");
+
+  /** A failed attempt: counted, and the third one answers with the lock. */
+  const refuse = async (reason: string) => back((await tries.fail()) ? "locked" : reason);
+
+  if (!typed || !password) return back("empty");
+  if (password.length < 6) return back("short");
+
+  const parsed = parseEmail(typed);
+  if (!parsed) return refuse("bad_email");
+  if (isBlockedJurisdiction(parsed.domain)) return refuse("blocked");
+
+  const dns = await mailDomainVerdict(parsed);
+  if (dns === "blocked") return refuse("blocked");
+
+  // A probable typo is shown before anything is sent, and only once: the
+  // reader who taps «keep» comes back with keep_domain set. It is offered
+  // BEFORE "this domain cannot receive mail" on purpose: `gmal.com` has no
+  // mail servers either, and the reader deserves «gmail.com دېمەكچىمۇ؟» — as
+  // the browser already says to anyone with JavaScript — not a spent chance.
+  const suggestion = suggestDomain(parsed.domain);
+  if (suggestion && keptDomain !== parsed.domain) {
+    await writeRegisterDraft({ email: typed, name: displayName, suggestion });
+    redirect("/register");
   }
+  if (dns === "undeliverable") return refuse("bad_email");
 
   const supabase = await createSupabaseServerClient();
-  if (!supabase) redirect("/register?xata=config");
+  if (!supabase) return back("config");
 
   const { data, error } = await supabase.auth.signUp({
-    email,
+    email: parsed.email,
     password,
     options: { data: { display_name: displayName } },
   });
   if (error) {
-    redirect(`/register?xata=${reasonFor(error, SIGN_UP_REASONS, "failed")}`);
+    const outcome = signUpOutcome(error);
+    logAuth("sign-up", outcome, parsed.domain);
+    if (outcome.counts) return refuse(outcome.reason);
+    return back(outcome.reason, outcome.reason === "wait" ? `&s=${outcome.seconds}` : "");
   }
 
+  await clearRegisterDraft();
   if (data.session && data.user) {
     // Email confirmation disabled — signed in immediately.
     await ensureAdminBootstrap(data.user.id, data.user.email);
     redirect("/");
   }
-  // Email confirmation enabled — a verification link was sent.
+  // Email confirmation enabled — a link was sent. The page says where to.
+  await writeSentTo({ email: parsed.email, name: displayName });
   redirect("/login?uqtur=confirm");
+}
+
+/**
+ * The two buttons under a typo suggestion, for a browser without
+ * JavaScript: «use the suggested domain» or «keep what I typed». Either way
+ * the form comes back filled in and nothing is sent yet; with JavaScript the
+ * same buttons act in place and never reach these. The suggestion is worked
+ * out again here rather than taken from the form.
+ *
+ * One action per button, not one action reading the button's name: React
+ * gives a button whose formAction is a Server Action the action's id as its
+ * name when it renders the page, so a `choice` field would never arrive.
+ */
+async function chooseSuggestion(formData: FormData, choice: "accept" | "keep") {
+  const typed = String(formData.get("email") ?? "").trim().slice(0, 254);
+  const name = String(formData.get("display_name") ?? "").trim().slice(0, 60);
+
+  const parsed = parseEmail(typed);
+  const suggestion = parsed ? suggestDomain(parsed.domain) : null;
+  if (parsed && suggestion && choice === "accept") {
+    await writeRegisterDraft({ email: withDomain(typed, suggestion), name });
+  } else if (parsed && choice === "keep") {
+    await writeRegisterDraft({ email: typed, name, kept: parsed.domain });
+  } else {
+    await writeRegisterDraft({ email: typed, name });
+  }
+  redirect("/register");
+}
+
+export async function acceptSuggestionAction(formData: FormData) {
+  return chooseSuggestion(formData, "accept");
+}
+
+export async function keepSuggestionAction(formData: FormData) {
+  return chooseSuggestion(formData, "keep");
+}
+
+/* ── Signing in ───────────────────────────────────────────────────────────── */
+
+export async function signInAction(formData: FormData) {
+  const typed = String(formData.get("email") ?? "").trim();
+  const password = String(formData.get("password") ?? "");
+
+  const back = async (reason: string) => {
+    await writeLoginDraft(typed.slice(0, 254));
+    redirect(`/login?xata=${reason}`);
+  };
+
+  // Turned away before the request reaches Supabase at all.
+  if (isRateLimited(`signin:${await callerKey()}`, SIGN_IN_RULE)) return back("rate_limit");
+
+  const tries = await attemptsFor("login");
+  if (await tries.locked()) return back("locked");
+
+  const refuse = async (reason: string) => back((await tries.fail()) ? "locked" : reason);
+
+  if (!typed || !password) return back("empty");
+
+  const parsed = parseEmail(typed);
+  if (!parsed) return refuse("bad_email");
+  if (isBlockedJurisdiction(parsed.domain)) return refuse("blocked");
+  // An account that exists can only be on a domain that exists, so the
+  // lookup here asks one thing: is its mail PRC-hosted?
+  if ((await mailDomainVerdict(parsed)) === "blocked") return refuse("blocked");
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return back("config");
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: parsed.email,
+    password,
+  });
+  if (error || !data.user) {
+    const outcome: AuthOutcome = error ? signInOutcome(error) : { reason: "failed" };
+    logAuth("sign-in", outcome, parsed.domain);
+    if (outcome.counts) return refuse(outcome.reason);
+    return back(outcome.reason);
+  }
+
+  await tries.clear();
+  await clearLoginDraft();
+  await clearSentTo();
+  await ensureAdminBootstrap(data.user.id, data.user.email);
+  redirect("/");
+}
+
+/**
+ * Send the confirmation email again (PROMPT-38 B7).
+ *
+ * The answer is the same whatever happened — sent, already confirmed, no such
+ * account, or Supabase's own per-address wait — because each of those says
+ * something about THIS address, and the button must not become a way to ask
+ * the site who is registered here. Supabase answers "no such user" and
+ * "already confirmed" with the same empty success itself; its wait and its
+ * email allowance only ever come back for an address with an unconfirmed
+ * account, so they are logged, not shown. Only what is true of every address
+ * alike is put on the page: a broken or blocked address, and our own brake.
+ * Not one of the three failed attempts, either way.
+ */
+export async function resendConfirmationAction(formData: FormData) {
+  const typed = String(formData.get("email") ?? "").trim();
+  const back = (reason: string) => redirect(`/login?xata=${reason}&resend=1`);
+
+  if (isRateLimited(`resend:${await callerKey()}`, RESEND_RULE)) return back("rate_limit");
+  if (!typed) return back("empty_resend");
+
+  const parsed = parseEmail(typed);
+  if (!parsed) return back("bad_email");
+  if (isBlockedJurisdiction(parsed.domain)) return back("blocked");
+  const dns = await mailDomainVerdict(parsed);
+  if (dns === "blocked") return back("blocked");
+  if (dns === "undeliverable") return back("bad_email");
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return back("config");
+
+  // No emailRedirectTo, exactly as signUpAction: both links land on the
+  // project's Site URL, so a resent link behaves as the first one did.
+  const { error } = await supabase.auth.resend({ type: "signup", email: parsed.email });
+  if (error) {
+    const outcome = signUpOutcome(error);
+    const log = outcome.log ?? `${outcome.reason} (${error.code ?? "?"}), answered as sent`;
+    logAuth("resend", { ...outcome, log }, parsed.domain);
+    if (outcome.reason === "rate_limit") return back("rate_limit");
+  }
+
+  await markResent();
+  redirect("/login?uqtur=resent");
 }
 
 export async function signOutAction() {
@@ -113,19 +282,7 @@ export async function signOutAction() {
   redirect("/");
 }
 
-const RESET_REASONS: Record<string, string> = {
-  email_address_invalid: "bad_email",
-  over_email_send_rate_limit: "email_limit",
-  over_request_rate_limit: "rate_limit",
-  email_provider_disabled: "provider_off",
-};
-
-const UPDATE_PASSWORD_REASONS: Record<string, string> = {
-  weak_password: "short",
-  same_password: "same",
-  session_not_found: "expired",
-  over_request_rate_limit: "rate_limit",
-};
+/* ── Password recovery — unchanged, and never locked ─────────────────────── */
 
 /**
  * Send a password-recovery email.
@@ -134,6 +291,11 @@ const UPDATE_PASSWORD_REASONS: Record<string, string> = {
  * account: anything else turns this form into a way to ask the site which of
  * a list of emails are registered here. Supabase's own response does not
  * distinguish either, so nothing but our own redirect could leak it.
+ *
+ * The three-chances lock never applies here. PROMPT-38 added exactly one
+ * thing: an address under the Chinese-jurisdiction block is told the rule and
+ * sent nothing — which says something about the domain, public by design,
+ * and nothing about whether an account exists.
  *
  * The link lands on /auth/callback, which exchanges the code for a session
  * and forwards to /reset-password — the only place the new password is set.
@@ -146,20 +308,35 @@ export async function requestPasswordResetAction(formData: FormData) {
     redirect("/forgot-password?xata=rate_limit");
   }
 
+  const parsed = parseEmail(email);
+  if (
+    parsed &&
+    (isBlockedJurisdiction(parsed.domain) || (await mailDomainVerdict(parsed)) === "blocked")
+  ) {
+    redirect("/forgot-password?xata=blocked");
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) redirect("/forgot-password?xata=config");
 
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed?.email ?? email, {
     redirectTo: absoluteUrl(`/auth/callback?next=${encodeURIComponent(RESET_PATH)}`),
   });
 
   // Only failures that say nothing about THIS address are surfaced.
-  if (error && (error.code === "over_email_send_rate_limit" || error.code === "email_provider_disabled")) {
-    redirect(`/forgot-password?xata=${reasonFor(error, RESET_REASONS, "failed")}`);
+  if (error) {
+    const outcome = resetOutcome(error);
+    logAuth("password reset", outcome, parsed?.domain);
+    if (outcome.reason !== "sent") redirect(`/forgot-password?xata=${outcome.reason}`);
   }
-  if (error) reasonFor(error, RESET_REASONS, "failed"); // logs the unmapped ones
 
   redirect("/forgot-password?uqtur=sent");
+}
+
+/** Forget this person's failed attempts on both forms. */
+async function forgetFailures(): Promise<void> {
+  const counters: Attempts[] = await Promise.all([attemptsFor("login"), attemptsFor("register")]);
+  await Promise.all(counters.map((counter) => counter.clear()));
 }
 
 /**
@@ -182,8 +359,13 @@ export async function updatePasswordAction(formData: FormData) {
 
   const { error: updateError } = await supabase.auth.updateUser({ password });
   if (updateError) {
-    redirect(`${RESET_PATH}?xata=${reasonFor(updateError, UPDATE_PASSWORD_REASONS, "failed")}`);
+    const outcome = updatePasswordOutcome(updateError);
+    logAuth("password change", outcome);
+    redirect(`${RESET_PATH}?xata=${outcome.reason}`);
   }
+
+  // Whoever just proved they own the account starts afresh on both forms.
+  await forgetFailures();
 
   // updateUser keeps the session, so they are already signed in with the new
   // password — no second trip through the login form.

@@ -2,17 +2,25 @@ import "server-only";
 import { headers } from "next/headers";
 
 /**
- * A small fixed-window limiter for the auth actions.
+ * A small fixed-window limiter: the outer burst brake in front of the auth
+ * actions and the other endpoints below.
  *
- * Deliberately in-process: the alternative, a Postgres counter, would mean an
- * unauthenticated visitor could make the site write a row on every guess —
- * turning the defence into its own abuse vector on a 500 MB free tier. This
- * costs nothing and holds per server instance.
+ * In-process, so it costs nothing and holds per server instance. It counts
+ * EVERY request, successes included, and stops a burst from one address
+ * before it reaches the network at all — which is what keeps Vercel's
+ * function budget and Supabase's allowances intact.
  *
- * It is not the only guard, and does not pretend to be: Supabase Auth applies
- * its own limits centrally (the `over_request_rate_limit` code the actions
- * already handle). This one stops a burst from one address before it reaches
- * the network at all, which is what keeps Vercel's function budget intact.
+ * It is not the three-chances rule. «Three failed attempts, then an hour's
+ * lock» on /login and /register has to hold across every instance at once,
+ * so it lives in Postgres (lib/auth/attempts.ts, migration 0026) and counts
+ * failures only. It writes at most one row per hashed key, only on a failed
+ * attempt, and its own per-address backstop stops writing once an address is
+ * locked — so an unauthenticated visitor cannot use it to fill the 500 MB free
+ * tier either. The auth rules here are set so they can never trip before that
+ * rule's third failure (tests/unit/auth-attempts.test.ts holds them to it).
+ *
+ * Supabase Auth applies its own limits centrally too (the
+ * `over_request_rate_limit` code the actions handle).
  */
 
 type Window = { count: number; resetAt: number };
@@ -29,10 +37,27 @@ function sweep(now: number) {
 
 export type RateLimitRule = { limit: number; windowMs: number };
 
-/** Sign-in: enough for a forgetful person, far short of a password guesser. */
+/**
+ * Sign-in: enough for a forgetful person, far short of a password guesser.
+ * The third wrong password locks the form for an hour anyway
+ * (lib/auth/attempts.ts); this only brakes a burst.
+ */
 export const SIGN_IN_RULE: RateLimitRule = { limit: 8, windowMs: 10 * 60_000 };
-/** Sign-up: each one costs an email send, so it is tighter. */
-export const SIGN_UP_RULE: RateLimitRule = { limit: 4, windowMs: 60 * 60_000 };
+/**
+ * Sign-up: each success costs an email send, so it is tighter than sign-in —
+ * but it counts successes too, and must leave room for a whole honest hour:
+ * a registration, a server-side typo suggestion with JavaScript off, and the
+ * three failed attempts the owner's rule allows, before it ever says no. Six,
+ * raised from four for exactly that (PROMPT-38).
+ */
+export const SIGN_UP_RULE: RateLimitRule = { limit: 6, windowMs: 60 * 60_000 };
+/**
+ * Resending the confirmation email: another send per request, and on the
+ * sign-in page, where it answers the same whether or not the address has an
+ * account. A reader waiting for a link needs one or two; the page itself
+ * holds the button back for a minute after each.
+ */
+export const RESEND_RULE: RateLimitRule = { limit: 3, windowMs: 15 * 60_000 };
 /**
  * Password reset: also an email send, and the one endpoint that will happily
  * mail a stranger on request. Someone who genuinely forgot their password

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sweepAttempts } from "@/lib/auth/attempts";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   SEARCH_HEALTH_KEY,
@@ -31,6 +32,10 @@ export const maxDuration = 45;
  * `search_health` setting for /admin. Whole-library search had been failing
  * for every reader without an account before anyone noticed (2026-09-11);
  * this is what notices next time, without a second cron.
+ *
+ * And it sweeps the failed-attempt counter (lib/auth/attempts.ts): rows a
+ * day past their window and lock are removed. Vercel Hobby allows no second
+ * cron, so housekeeping rides along here.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -73,10 +78,14 @@ export async function GET(request: Request) {
       .upsert({ key: SEARCH_HEALTH_KEY, value: searchHealth, is_public: false }, { onConflict: "key" });
   }
 
+  // Like the self-check, this never decides the cron's answer.
+  const sweptAttempts = await sweepAttempts();
+
   return NextResponse.json(
     {
       ok: true,
       at: new Date().toISOString(),
+      sweptAttempts,
       search:
         searchHealth &&
         Object.fromEntries(

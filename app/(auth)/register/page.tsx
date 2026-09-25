@@ -2,20 +2,35 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { OfflineFormNotice } from "@/components/pwa/offline-form-notice";
 import { Icon } from "@/components/icons";
-import { signUpAction } from "../actions";
+import { RegisterEmailField } from "@/components/auth/register-email-field";
+import { readRegisterDraft, readSentTo } from "@/lib/auth/flash";
+import {
+  BLOCKED_MESSAGE,
+  EMAIL_CAP_MESSAGE,
+  LOCKED_MESSAGE,
+  readWaitSeconds,
+  waitMessage,
+} from "@/lib/auth/messages";
+import { acceptSuggestionAction, keepSuggestionAction, signUpAction } from "../actions";
 
 export const metadata: Metadata = { title: "تىزىمدىن ئۆتۈش" };
 
+/**
+ * No message here tells a reader to change a setting they cannot reach: what
+ * the owner has to fix (the email allowance, the email provider switch) goes
+ * to the server log instead (PROMPT-38 B6).
+ */
 const ERRORS: Record<string, string> = {
   empty: "ئېلخەت ۋە پارولنى تولۇق كىرگۈزۈڭ.",
   short: "پارول كەم دېگەندە 6 ھەرپ بولسۇن.",
   exists: "بۇ ئېلخەت بىلەن بۇرۇن تىزىمدىن ئۆتۈلگەن. كىرىش بېتىنى ئىشلىتىڭ.",
   bad_email: "بۇ ئېلخەت ئادرېسى قوبۇل قىلىنمىدى. ھەقىقىي ئېلخەت ئادرېسى كىرگۈزۈڭ.",
+  blocked: BLOCKED_MESSAGE,
+  locked: LOCKED_MESSAGE,
   disabled: "ھازىر يېڭى ھېسابات ئېچىش ئېتىۋېتىلگەن.",
-  provider_off:
-    "ئېلخەت بىلەن كىرىش ئۇسۇلى Supabase دا ئېتىۋېتىلگەن. Authentication → Sign In / Providers → Email بۆلىكىدىن ئۇنى ئېچىڭ.",
-  email_limit:
-    "جەزملەش ئېلخېتى ئەۋەتىش چېكىدىن ئېشىپ كەتتى. Supabase تەڭشىكىدىن «Confirm email» نى ئېتىۋەتسىڭىز ئېلخەت ھاجەتسىز بولىدۇ، بولمىسا بىر سائەت كۈتۈڭ.",
+  provider_off: "ھازىر ئېلخەت بىلەن تىزىمدىن ئۆتكىلى بولمايدۇ. كېيىنرەك قايتا سىناڭ.",
+  email_limit: EMAIL_CAP_MESSAGE,
+  send_failed: "جەزملەش خېتىنى ھازىر بۇ ئادرېسقا ئەۋەتكىلى بولمىدى. بىرئاز ۋاقىتتىن كېيىن قايتا سىناڭ.",
   rate_limit: "ئۇرۇنۇش سانى كۆپىيىپ كەتتى. بىردەم كۈتۈپ قايتا سىناڭ.",
   config: "سايت تېخى ساندانغا ئۇلانمىغان. باشقۇرغۇچى تەڭشىگەندىن كېيىن قايتا سىناڭ.",
   failed: "تىزىمدىن ئۆتۈش مەغلۇپ بولدى. سەل تۇرۇپ قايتا سىناڭ.",
@@ -23,7 +38,20 @@ const ERRORS: Record<string, string> = {
 
 export default async function RegisterPage({ searchParams }: PageProps<"/register">) {
   const params = await searchParams;
-  const xata = typeof params.xata === "string" ? ERRORS[params.xata] : undefined;
+  const code = typeof params.xata === "string" ? params.xata : undefined;
+  const xata =
+    code === "wait" ? waitMessage(readWaitSeconds(params.s) ?? 60) : code ? ERRORS[code] : undefined;
+
+  /**
+   * What the reader typed last, bar the password — kept in a short-lived
+   * cookie by the action, never in the URL. «ئادرېس خاتا بولسا…» on the
+   * sign-in page arrives with ?fix=1 and fills the form from where the
+   * confirmation email went instead.
+   */
+  const draft = await readRegisterDraft();
+  const sent = params.fix === "1" ? await readSentTo() : null;
+  const email = sent?.email ?? draft?.email ?? "";
+  const displayName = sent?.name ?? draft?.name ?? "";
 
   return (
     <div className="mx-auto w-full max-w-md px-4 py-8 sm:py-12">
@@ -37,9 +65,22 @@ export default async function RegisterPage({ searchParams }: PageProps<"/registe
         </p>
 
         {xata && (
-          <p role="alert" className="mt-4 rounded-[var(--radius)] border border-bd2 bg-ab2 px-3.5 py-3 text-[13px] leading-6 text-ink">
-            {xata}
-          </p>
+          <div
+            role="alert"
+            data-testid="auth-error"
+            className="mt-4 rounded-[var(--radius)] border border-bd2 bg-ab2 px-3.5 py-3 text-[13px] leading-6 text-ink"
+          >
+            <p data-testid="auth-error-text">{xata}</p>
+            {code === "locked" && (
+              <Link
+                href="/login"
+                data-testid="locked-login-link"
+                className="inline-flex min-h-11 items-center font-semibold text-am underline"
+              >
+                كىرىش بېتىگە ئۆتۈش
+              </Link>
+            )}
+          </div>
         )}
 
         <form action={signUpAction} className="mt-5 space-y-4">
@@ -52,20 +93,18 @@ export default async function RegisterPage({ searchParams }: PageProps<"/registe
               maxLength={60}
               autoComplete="name"
               placeholder="مەسىلەن: ئالىم"
+              defaultValue={displayName}
             />
           </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[13px] font-semibold text-ink2">ئېلخەت ئادرېسى</span>
-            <input
-              className="field"
-              type="email"
-              name="email"
-              required
-              dir="ltr"
-              autoComplete="email"
-              placeholder="siz@example.com"
-            />
-          </label>
+          <RegisterEmailField
+            // A new draft is a new field: remount rather than keep stale state.
+            key={`${email}|${draft?.suggestion ?? ""}|${draft?.kept ?? ""}`}
+            defaultEmail={email}
+            initialSuggestion={sent ? null : (draft?.suggestion ?? null)}
+            initialKept={sent ? "" : (draft?.kept ?? "")}
+            acceptAction={acceptSuggestionAction}
+            keepAction={keepSuggestionAction}
+          />
           <label className="block">
             <span className="mb-1.5 block text-[13px] font-semibold text-ink2">پارول (كەم دېگەندە 6 ھەرپ)</span>
             <input

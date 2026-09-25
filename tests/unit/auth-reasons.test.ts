@@ -115,10 +115,18 @@ describe("signing in", () => {
   });
 });
 
-describe("password recovery keeps its old answers", () => {
-  it("surfaces only the two failures it always did", () => {
-    expect(resetOutcome(projectCap)).toEqual({ reason: "email_limit" });
+describe("password recovery", () => {
+  it("still says so when the project's email allowance is spent, and logs it", () => {
+    expect(resetOutcome(projectCap)).toMatchObject({
+      reason: "email_limit",
+      log: expect.stringContaining("allowance"),
+    });
     expect(resetOutcome({ code: "email_provider_disabled" }).reason).toBe("provider_off");
+  });
+
+  it("answers Supabase's per-address wait like a success — only a registered address ever gets one", () => {
+    expect(resetOutcome(perAddress(55))).toEqual({ reason: "sent" });
+    expect(resetOutcome(perAddress(3))).toEqual({ reason: "sent" });
   });
 
   it("answers everything else like a success", () => {

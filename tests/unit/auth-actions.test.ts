@@ -356,10 +356,15 @@ describe("password recovery is never locked", () => {
     expect(await counterRows()).toBe(0);
   });
 
-  it("keeps its old answers to Supabase's errors", async () => {
+  it("answers Supabase's errors without saying whether the address has an account", async () => {
     auth.resetPasswordForEmail.mockResolvedValueOnce(refused("over_email_send_rate_limit", "email rate limit exceeded", 429));
     expect(await run(requestPasswordResetAction, { email: "a@gmail.com" })).toBe("/forgot-password?xata=email_limit");
     auth.resetPasswordForEmail.mockResolvedValueOnce(refused("email_address_invalid"));
+    expect(await run(requestPasswordResetAction, { email: "a@gmail.com" })).toBe("/forgot-password?uqtur=sent");
+    // The wait Supabase imposes only on a registered address: the same answer as anyone.
+    auth.resetPasswordForEmail.mockResolvedValueOnce(
+      refused("over_email_send_rate_limit", "For security purposes, you can only request this after 52 seconds.", 429),
+    );
     expect(await run(requestPasswordResetAction, { email: "a@gmail.com" })).toBe("/forgot-password?uqtur=sent");
   });
 });

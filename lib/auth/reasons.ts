@@ -54,6 +54,10 @@ function unmapped(error: AuthErrorLike): AuthOutcome {
   };
 }
 
+/** For the owner, when the project's hourly email allowance is spent. */
+const EMAIL_CAP_LOG =
+  "the project-wide email allowance is used up (over_email_send_rate_limit with no wait) — Authentication → Rate Limits";
+
 /**
  * `over_email_send_rate_limit` means two different things, and the reader
  * deserves to know which: Supabase's per-address window between two emails
@@ -63,10 +67,7 @@ function unmapped(error: AuthErrorLike): AuthOutcome {
 function emailLimit(error: AuthErrorLike): AuthOutcome {
   const seconds = waitSecondsFrom(error.message);
   if (seconds !== null) return { reason: "wait", seconds };
-  return {
-    reason: "email_limit",
-    log: "the project-wide email allowance is used up (over_email_send_rate_limit with no wait) — Authentication → Rate Limits",
-  };
+  return { reason: "email_limit", log: EMAIL_CAP_LOG };
 }
 
 const PROVIDER_OFF_LOG =
@@ -115,15 +116,23 @@ export function signInOutcome(error: AuthErrorLike): AuthOutcome {
 }
 
 /**
- * Password recovery, exactly as before PROMPT-38 apart from where the
- * dashboard hint went: two failures are put on the page, and everything else
- * is answered with the same «if this address has an account…» as a success
+ * Password recovery: two failures are put on the page, and everything else is
+ * answered with the same «if this address has an account…» as a success
  * (`sent`) — the unfamiliar ones logged, as they always were.
+ *
+ * Supabase's per-address wait is one of the "everything else", on the owner's
+ * decision (2026-09-25). Supabase answers an address with no account with an
+ * empty success and never makes it wait, so saying "wait" for the second
+ * request in a minute told whoever asked that the address IS registered.
+ * «A link was sent» is true there too: one went a moment ago. The project's
+ * hourly cap still says so, and is logged: a reader then really gets no
+ * email, and telling them otherwise would leave them waiting for nothing.
  */
 export function resetOutcome(error: AuthErrorLike): AuthOutcome {
   switch (error.code) {
     case "over_email_send_rate_limit":
-      return { reason: "email_limit" };
+      if (waitSecondsFrom(error.message) !== null) return { reason: "sent" };
+      return { reason: "email_limit", log: EMAIL_CAP_LOG };
     case "email_provider_disabled":
       return { reason: "provider_off", log: PROVIDER_OFF_LOG };
     case "email_address_invalid":

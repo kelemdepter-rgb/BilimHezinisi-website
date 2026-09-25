@@ -292,10 +292,13 @@ export async function signOutAction() {
  * a list of emails are registered here. Supabase's own response does not
  * distinguish either, so nothing but our own redirect could leak it.
  *
- * The three-chances lock never applies here. PROMPT-38 added exactly one
- * thing: an address under the Chinese-jurisdiction block is told the rule and
- * sent nothing — which says something about the domain, public by design,
- * and nothing about whether an account exists.
+ * The three-chances lock never applies here. PROMPT-38 added one thing: an
+ * address under the Chinese-jurisdiction block is told the rule and sent
+ * nothing — which says something about the domain, public by design, and
+ * nothing about whether an account exists. And it closed one leak, on the
+ * owner's word: Supabase's wait between two emails to one address is only
+ * ever imposed on a registered address, so it is now answered like a success
+ * too (lib/auth/reasons.ts, resetOutcome).
  *
  * The link lands on /auth/callback, which exchanges the code for a session
  * and forwards to /reset-password — the only place the new password is set.

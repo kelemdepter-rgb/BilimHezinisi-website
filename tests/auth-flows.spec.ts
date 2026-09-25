@@ -374,6 +374,23 @@ test.describe("password recovery", () => {
     expect(mock.callsTo("recover")).toHaveLength(2);
   });
 
+  test("a second request within the minute gets the same answer as a stranger's address", async ({
+    page,
+  }) => {
+    mock.addUser("twice@gmail.com", freshPassword());
+    // What Supabase says only for an address that HAS an account, asked twice.
+    mock.failNext("recover", {
+      status: 429,
+      code: "over_email_send_rate_limit",
+      message: "For security purposes, you can only request this after 52 seconds.",
+    });
+    await page.goto("/forgot-password");
+    await page.getByTestId("reset-email").fill("twice@gmail.com");
+    await page.getByTestId("reset-submit").click();
+    await expect(page.getByTestId("reset-sent")).toBeVisible();
+    await expect(page.getByTestId("reset-error")).toHaveCount(0);
+  });
+
   test("an address under Chinese jurisdiction is told the rule and sent nothing", async ({ page }) => {
     await page.goto("/forgot-password");
     await page.getByTestId("reset-email").fill("a@foxmail.com");

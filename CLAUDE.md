@@ -214,8 +214,9 @@ here. The table is left in place because an applied migration is never edited ·
 - **Addresses under Chinese (PRC) jurisdiction are refused** — `.cn`/`.hk`/`.mo`,
   their internationalised forms, PRC mail providers, and domains whose every MX
   is PRC-hosted — on register, login, forgot-password and resend. The one
-  editable list is `lib/auth/blocked-email-domains.ts`; Taiwan and everyone else
-  stay allowed. DNS checks fail open.
+  editable list is `lib/auth/blocked-email-domains.ts` (the database's copy,
+  which the sign-up hook reads, follows it — see the domain lists below);
+  Taiwan and everyone else stay allowed. DNS checks fail open.
 - Nothing may reveal whether an address is registered: «resend the confirmation»
   answers the same for every address, whatever Supabase says. What a reader
   typed crosses a redirect in short-lived httpOnly cookies (`lib/auth/flash.ts`),
@@ -223,6 +224,50 @@ here. The table is left in place because an applied migration is never edited ·
 - `app/(auth)` deliberately has no `loading.tsx`: a loading boundary streams the
   form into a hidden element that only JavaScript reveals, and the sign-in forms
   must work without it.
+- **Fake accounts are refused in the database as well as the forms**
+  (PROMPT-39): the anon key is public, so anyone can call `/auth/v1/signup`
+  and skip the site. The Before User Created hook
+  `public.hook_before_user_created` (migration 0027; security definer,
+  `search_path = ''`, executable by `supabase_auth_admin` only; switched on by
+  the owner in Authentication → Hooks) answers `bh:registration_paused`,
+  `bh:blocked` or `bh:disposable`, which `lib/auth/reasons.ts` maps to the
+  Uyghur messages. Auth calls it only for a NEW user on a public path — never
+  for the admin API, which is how the suite makes its `bh-e2e-` accounts.
+  Never put IP logic in the hook, and never lower Supabase's per-IP limit.
+- **The domain lists are TypeScript first, database second.**
+  `lib/auth/blocked-email-domains.ts` and `lib/auth/disposable-domains.ts` —
+  the vendored CC0 list `disposable-domains.list.ts` (refreshed by
+  `node --use-system-ca scripts/update-disposable-domains.mjs`) plus an
+  allowlist of real providers that always wins — are the source;
+  `node --use-system-ca scripts/sync-auth-domains.mjs --apply` rewrites
+  `supabase/seed/auth_domains.sql` and replaces the database's copies.
+  `tests/unit/auth-domains-sync.test.ts` fails until the seed matches, and the
+  /admin card warns while the database differs. Throwaway addresses are
+  refused on register (counted) and resend (not counted), never on login or
+  recovery; a probable typo is offered first, because the list names typo
+  domains such as `gmial.com`.
+- **Form bots**: /register, /forgot-password and «resend» — never /login —
+  carry a honeypot (`bh_note`) and a signed page-made time (`bh_ts`,
+  `lib/auth/bot-check.ts`). Under 2 s, over 2 h, missing or forged → the one
+  generic «بەتنى يېڭىلاپ، قايتا سىناڭ.»; only a filled honeypot on /register
+  counts as a failure. A spec that submits one of these forms calls
+  `waitForFormAge` (`tests/fixtures/auth-pages.ts`) first. No CAPTCHA of any
+  kind.
+- **The pause and the brake** both answer `bh:registration_paused`. The pause
+  is the public `settings.registration_paused`, flipped only from the admin's
+  «ھېسابات بىخەتەرلىكى» card on /admin (re-verified server-side, two taps to
+  turn on); while it is on, /register shows the notice instead of the form and
+  sign-up and resend refuse — sign-in, recovery, confirmation, reading and
+  search carry on. The brake is computed, never written: 30 or more
+  UNCONFIRMED accounts created in the last hour (`auth_signup_brake_limit`),
+  so confirmed admin-API accounts can never trip it, and it lifts by itself.
+- **The unconfirmed sweep** in /api/health deletes readers never confirmed
+  after 7 days — never the admin, an uploader or ADMIN_EMAIL; at most 200 a
+  day; the log holds the count only. It runs on the production deployment
+  alone (`VERCEL_ENV === "production"`): local servers, the suite's included,
+  talk to the real project and call that route. It is OFF until the owner
+  switches it on in the card (`settings.unconfirmed_sweep_enabled`); never
+  switch it on on the owner's behalf.
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +

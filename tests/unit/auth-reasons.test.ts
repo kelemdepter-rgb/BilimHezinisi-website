@@ -107,6 +107,36 @@ describe("registration", () => {
   });
 });
 
+describe("the Before User Created hook's refusals (PROMPT-39 A)", () => {
+  /**
+   * Supabase passes the hook's message through as the error's message; the
+   * code is its generic `unknown` for a 4xx (or absent from older clients).
+   */
+  const hook = (message: string, code?: string) => ({ code, status: 400, message });
+
+  it("blocked and disposable are failed attempts, as the same checks on our own form are", () => {
+    for (const code of [undefined, "unknown"]) {
+      expect(signUpOutcome(hook("bh:blocked", code))).toEqual({ reason: "blocked", counts: true });
+      expect(signUpOutcome(hook("bh:disposable", code))).toEqual({ reason: "disposable", counts: true });
+    }
+  });
+
+  it("a pause — the owner's switch or the automatic brake — is not", () => {
+    expect(signUpOutcome(hook("bh:registration_paused", "unknown"))).toEqual({ reason: "paused" });
+  });
+
+  it("a hook that fails outright is an unmapped failure, logged", () => {
+    const outcome = signUpOutcome({
+      code: "unexpected_failure",
+      status: 500,
+      message: "Error running hook URI: pg-functions://postgres/public/hook_before_user_created",
+    });
+    expect(outcome.reason).toBe("failed");
+    expect(outcome.counts).toBeUndefined();
+    expect(outcome.log).toContain("unexpected_failure");
+  });
+});
+
 describe("signing in", () => {
   it("a wrong password is a failed attempt; an unconfirmed address is not", () => {
     expect(signInOutcome({ code: "invalid_credentials" })).toEqual({ reason: "credentials", counts: true });

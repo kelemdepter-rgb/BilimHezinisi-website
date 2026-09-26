@@ -22,6 +22,25 @@ export const BLOCKED_MESSAGE = "خىتاي تەۋەلىكىدىكى email بىل
 export const RESENT_MESSAGE =
   "ئەگەر بۇ ئادرېس بىلەن تىزىملاتقان بولسىڭىز، جەزملەش خېتى قايتا ئەۋەتىلدى. ساندۇق ۋە spam قىسقۇچىنى تەكشۈرۈڭ.";
 
+/**
+ * A form bot was caught (the honeypot was filled, the form came back faster
+ * than a person types, or its signed timestamp was missing, forged or hours
+ * old). Deliberately generic: it says nothing about the address, and a
+ * person who sees it — a very fast autofill — simply presses again.
+ */
+export const BOT_MESSAGE = "بەتنى يېڭىلاپ، قايتا سىناڭ.";
+
+/** A throwaway (disposable) email address, refused at registration. */
+export const DISPOSABLE_MESSAGE =
+  "ۋاقىتلىق (بىر قېتىملىق) ئېلخەت ئادرېسى قوبۇل قىلىنمايدۇ. ئۆزىڭىز دائىم ئىشلىتىدىغان ئېلخەتنى كىرگۈزۈڭ.";
+
+/**
+ * Registration paused — by the owner's switch on /admin, or by the automatic
+ * brake; a reader is told the same either way.
+ */
+export const PAUSED_MESSAGE =
+  "يېڭى ھېسابات ئېچىش ۋاقىتلىق توختىتىلدى. كىتاب ئوقۇش ۋە ئىزدەش ئادەتتىكىدەك ئىشلەۋېرىدۇ. بىرئازدىن كېيىن قايتا سىناڭ.";
+
 /** The project's hourly allowance of confirmation emails is used up. */
 export const EMAIL_CAP_MESSAGE =
   "ھازىر جەزملەش خېتى ئەۋەتىش سانى ۋاقىتلىق توشۇپ قالدى. بىرئاز ۋاقىتتىن كېيىن قايتا سىناڭ.";

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
-import { BLOCKED_MESSAGE } from "@/lib/auth/messages";
+import { BotFields } from "@/components/auth/bot-fields";
+import { BLOCKED_MESSAGE, BOT_MESSAGE } from "@/lib/auth/messages";
 import { requestPasswordResetAction } from "../actions";
 
 export const metadata: Metadata = {
@@ -16,6 +17,7 @@ const ERRORS: Record<string, string> = {
   // What the owner has to switch back on goes to the server log, not here.
   provider_off: "ھازىر ئېلخەت ئەۋەتكىلى بولمايدۇ. كېيىنرەك قايتا سىناڭ.",
   blocked: BLOCKED_MESSAGE,
+  bot: BOT_MESSAGE,
   config: "سايت تېخى ساندانغا ئۇلانمىغان. باشقۇرغۇچى تەڭشىگەندىن كېيىن قايتا سىناڭ.",
   link_failed:
     "ئۇلانما ئىشلىمىدى. ئۇنى ئۆزىڭىز تەلەپ قىلغان شۇ تور كۆرگۈچتە ئېچىڭ، ياكى تۆۋەندە يېڭى ئۇلانما تەلەپ قىلىڭ.",
@@ -89,6 +91,7 @@ export default async function ForgotPasswordPage({
               data-testid="reset-email"
             />
           </label>
+          <BotFields />
           <button type="submit" className="btn-am w-full" data-testid="reset-submit">
             ئۇلانما ئەۋەتىش
           </button>

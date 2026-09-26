@@ -170,6 +170,39 @@ describe("no field anywhere asks for money, an address or a telephone", () => {
   });
 });
 
+describe("the form-bot honeypot is never offered to autofill", () => {
+  /**
+   * A browser or password manager that filled the hidden field would make a
+   * person look like a bot (PROMPT-39 B, lib/auth/bot-check.ts). So its name
+   * means nothing to autofill, and the input carries every «leave me alone»
+   * marker the search box does.
+   */
+  it("has a name no browser or password manager recognises", () => {
+    const name = /HONEYPOT_FIELD = "([^"]+)"/.exec(read("lib/auth/bot-check.ts"))?.[1] ?? "";
+    expect(name).not.toBe("");
+    const RECOGNISED = [
+      "mail", "name", "user", "login", "pass", "phone", "tel", "address", "url",
+      "web", "site", "company", "org", "city", "zip", "country", "card",
+    ];
+    const tokens = name.toLowerCase().split(/[-_\s.]+/);
+    expect(tokens.filter((token) => RECOGNISED.some((word) => token.includes(word)))).toEqual([]);
+  });
+
+  it("is switched off for browsers and password managers, and kept out of the tab order", () => {
+    const input = tagContaining(read("components/auth/bot-fields.tsx"), "input", "name={HONEYPOT_FIELD}");
+    for (const attribute of [
+      'autoComplete="off"',
+      "tabIndex={-1}",
+      "data-1p-ignore",
+      'data-lpignore="true"',
+      "data-bwignore",
+      'data-form-type="other"',
+    ]) {
+      expect(input, `the honeypot must carry ${attribute}`).toContain(attribute);
+    }
+  });
+});
+
 describe("autofill still works where it should", () => {
   /**
    * Deliberately the mirror image of the rest of this file. Someone tightening

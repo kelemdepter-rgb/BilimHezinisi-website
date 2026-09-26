@@ -73,7 +73,24 @@ function emailLimit(error: AuthErrorLike): AuthOutcome {
 const PROVIDER_OFF_LOG =
   "email sign-in is switched off (email_provider_disabled) — Authentication → Sign In / Providers → Email";
 
+/**
+ * The Before User Created hook's refusals (migration 0027). Supabase passes
+ * the hook's message through as the error's message, under nothing more
+ * telling than its generic `unknown` code, so the message is what is
+ * matched. Blocked and disposable are failed attempts, as the same checks in
+ * our own form are; a pause is not.
+ */
+function hookOutcome(message: string | undefined): AuthOutcome | null {
+  if (!message) return null;
+  if (message.includes("bh:blocked")) return { reason: "blocked", counts: true };
+  if (message.includes("bh:disposable")) return { reason: "disposable", counts: true };
+  if (message.includes("bh:registration_paused")) return { reason: "paused" };
+  return null;
+}
+
 export function signUpOutcome(error: AuthErrorLike): AuthOutcome {
+  const refusedByHook = hookOutcome(error.message);
+  if (refusedByHook) return refusedByHook;
   switch (error.code) {
     case "user_already_exists":
     case "email_exists":

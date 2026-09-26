@@ -12,6 +12,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
  * or Supabase call, nothing before the Supabase call spends an email, only
  * the listed outcomes count as failed attempts, password recovery is never
  * locked, and nothing private reaches a log line.
+ *
+ * And PROMPT-39's additions: the form-bot checks, the pause switch, the
+ * disposable-address list and the Before User Created hook's refusals — each
+ * on the forms it belongs to and on no other.
  */
 
 const state = vi.hoisted(() => ({
@@ -21,6 +25,8 @@ const state = vi.hoisted(() => ({
   mx: new Map<string, unknown>(),
   supabase: null as unknown,
   admin: null as unknown,
+  /** settings.registration_paused, as an anonymous read of it would answer. */
+  paused: false,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -42,6 +48,15 @@ vi.mock("next/headers", () => ({
 
 vi.mock("@/lib/supabase/server", () => ({ createSupabaseServerClient: async () => state.supabase }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: () => state.admin }));
+vi.mock("@/lib/cache", () => ({
+  cachedClient: () => ({
+    from: () => ({
+      select: () => ({
+        eq: () => ({ maybeSingle: async () => ({ data: { value: state.paused }, error: null }) }),
+      }),
+    }),
+  }),
+}));
 
 vi.mock("node:dns/promises", () => ({
   Resolver: class {
@@ -71,6 +86,7 @@ import {
   signUpAction,
   updatePasswordAction,
 } from "@/app/(auth)/actions";
+import { FORM_TOKEN_FIELD, HONEYPOT_FIELD, issueFormToken } from "@/lib/auth/bot-check";
 import { decodeFlash } from "@/lib/auth/flash";
 import { resetRateLimits } from "@/lib/rate-limit";
 
@@ -91,8 +107,18 @@ function refused(code: string, message = code, status = 400): AuthResult {
   return { data: { user: null, session: null }, error: { code, message, status } };
 }
 
+/** A page made this long ago, as a person who took their time would submit it. */
+const madeAgo = (ms: number) => issueFormToken(Date.now() - ms);
+
+/**
+ * What a browser sends: the fields, plus the two hidden ones every
+ * email-sending form carries — an empty honeypot and a page made five
+ * seconds ago. A test overrides either by naming it.
+ */
 function form(fields: Record<string, string>): FormData {
   const data = new FormData();
+  data.set(HONEYPOT_FIELD, "");
+  data.set(FORM_TOKEN_FIELD, madeAgo(5_000));
   for (const [name, value] of Object.entries(fields)) data.set(name, value);
   return data;
 }
@@ -148,6 +174,7 @@ beforeEach(async () => {
   await db.exec("delete from public.auth_attempts");
   resetRateLimits();
   state.cookies.clear();
+  state.paused = false;
   state.dnsLookups.length = 0;
   state.mx.clear();
   state.ip = `203.0.113.${Math.floor(Math.random() * 250) + 1}`;
@@ -203,8 +230,19 @@ describe("registration, in order", () => {
     expect(JSON.stringify(draft)).not.toContain(PASSWORD);
 
     // «Keep it» — the typed domain goes to Supabase as typed.
-    expect(await register("name@gmial.com", { keep_domain: "gmial.com" })).toBe("/login?uqtur=confirm");
-    expect(auth.signUp).toHaveBeenCalledWith(expect.objectContaining({ email: "name@gmial.com" }));
+    expect(await register("name@outlok.com")).toBe("/register");
+    expect(await register("name@outlok.com", { keep_domain: "outlok.com" })).toBe("/login?uqtur=confirm");
+    expect(auth.signUp).toHaveBeenCalledWith(expect.objectContaining({ email: "name@outlok.com" }));
+  });
+
+  it("a typo on the disposable list is offered the fix first; kept, it is refused", async () => {
+    // gmial.com is listed: a typo domain that catches other people's mail.
+    expect(await register("name@gmial.com")).toBe("/register");
+    expect(await counterRows(), "a suggestion is not a failed attempt").toBe(0);
+    expect(await register("name@gmial.com", { keep_domain: "gmial.com" })).toBe("/register?xata=disposable");
+    expect(await counterRows()).toBe(2);
+    expect(state.dnsLookups).toEqual([]);
+    expect(auth.signUp).not.toHaveBeenCalled();
   });
 
   it("a typo whose domain cannot receive mail is offered the fix first; kept, it is refused", async () => {
@@ -390,6 +428,168 @@ describe("resending the confirmation", () => {
     expect(await run(resendConfirmationAction, { email: "ok@gmail.com" })).toBe("/login?uqtur=resent");
     expect(await run(resendConfirmationAction, { email: "ok@gmail.com" })).toBe("/login?xata=rate_limit&resend=1");
     expect(auth.resend).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the form-bot checks (PROMPT-39 B)", () => {
+  const TRAP = { [HONEYPOT_FIELD]: "https://spam.example/offer" };
+
+  it("a filled honeypot on /register is answered generically, counted, and reaches nothing", async () => {
+    expect(await register("reader@gmail.com", TRAP)).toBe("/register?xata=bot");
+    expect(await counterRows(), "one failed attempt").toBe(2);
+    expect(auth.signUp).not.toHaveBeenCalled();
+    expect(state.dnsLookups).toEqual([]);
+  });
+
+  it("three filled honeypots lock that device out of registering for the hour", async () => {
+    for (let i = 0; i < 3; i += 1) expect(await register("reader@gmail.com", TRAP)).toBe("/register?xata=bot");
+    expect(await register("reader@gmail.com")).toBe("/register?xata=locked");
+    expect(auth.signUp).not.toHaveBeenCalled();
+  });
+
+  it("a form sent under two seconds after its page was made is asked again, never counted", async () => {
+    expect(await register("reader@gmail.com", { [FORM_TOKEN_FIELD]: madeAgo(400) })).toBe("/register?xata=bot");
+    expect(await counterRows()).toBe(0);
+    expect(auth.signUp).not.toHaveBeenCalled();
+
+    // The same person, pressing again on the page that came back.
+    expect(await register("reader@gmail.com", { [FORM_TOKEN_FIELD]: madeAgo(2_100) })).toBe(
+      "/login?uqtur=confirm",
+    );
+    expect(auth.signUp).toHaveBeenCalledTimes(1);
+  });
+
+  it("a stale, missing, forged or tampered timestamp is asked again, never counted", async () => {
+    const [issued, signature] = madeAgo(5_000).split(".");
+    const cases = [
+      madeAgo(2 * 60 * 60 * 1000 + 60_000), // a page left open past two hours
+      "", // no timestamp at all
+      issued, // no signature
+      `${Number(issued) - 10_000}.${signature}`, // the time moved, the signature kept
+      `${issued}.${signature.slice(0, -2)}xx`, // the signature changed
+      `${Date.now() + 5 * 60_000}.${signature}`, // from the future
+    ];
+    for (const token of cases) {
+      expect(await register("reader@gmail.com", { [FORM_TOKEN_FIELD]: token }), token).toBe("/register?xata=bot");
+    }
+    expect(await counterRows()).toBe(0);
+    expect(auth.signUp).not.toHaveBeenCalled();
+  });
+
+  it("guards password recovery without counting or saying anything about the address", async () => {
+    expect(await run(requestPasswordResetAction, { email: "reader@gmail.com", ...TRAP })).toBe(
+      "/forgot-password?xata=bot",
+    );
+    expect(
+      await run(requestPasswordResetAction, { email: "reader@gmail.com", [FORM_TOKEN_FIELD]: madeAgo(300) }),
+    ).toBe("/forgot-password?xata=bot");
+    expect(auth.resetPasswordForEmail).not.toHaveBeenCalled();
+    expect(await counterRows()).toBe(0);
+
+    expect(await run(requestPasswordResetAction, { email: "reader@gmail.com" })).toBe("/forgot-password?uqtur=sent");
+  });
+
+  it("guards the resend button the same way", async () => {
+    expect(await run(resendConfirmationAction, { email: "reader@gmail.com", ...TRAP })).toBe(
+      "/login?xata=bot&resend=1",
+    );
+    expect(auth.resend).not.toHaveBeenCalled();
+    expect(await counterRows()).toBe(0);
+  });
+
+  it("leaves signing in alone — it sends no email and has its own lock", async () => {
+    expect(
+      await run(signInAction, { email: "reader@gmail.com", password: PASSWORD, ...TRAP, [FORM_TOKEN_FIELD]: "" }),
+    ).toBe("/login?xata=credentials");
+    expect(auth.signInWithPassword).toHaveBeenCalledTimes(1);
+  });
+
+  it("logs a bot as a reason code only", async () => {
+    await register("leaky@gmail.com", TRAP);
+    await register("leaky@gmail.com", { [FORM_TOKEN_FIELD]: madeAgo(100) });
+    expect(logged).toEqual(["[auth] register: bot:honeypot", "[auth] register: bot:too_fast"]);
+  });
+});
+
+describe("pausing registration (PROMPT-39 D)", () => {
+  it("refuses a new account and a resend, sending nothing and counting nothing", async () => {
+    state.paused = true;
+    expect(await register("reader@gmail.com")).toBe("/register?xata=paused");
+    expect(await run(resendConfirmationAction, { email: "reader@gmail.com" })).toBe("/login?xata=paused&resend=1");
+    expect(auth.signUp).not.toHaveBeenCalled();
+    expect(auth.resend).not.toHaveBeenCalled();
+    expect(await counterRows()).toBe(0);
+  });
+
+  it("keeps signing in, password recovery and a new password working", async () => {
+    state.paused = true;
+    auth.signInWithPassword.mockResolvedValueOnce(ok({ user: { id: "u1", email: "reader@gmail.com" } }));
+    expect(await signIn("reader@gmail.com")).toBe("/");
+    expect(await run(requestPasswordResetAction, { email: "reader@gmail.com" })).toBe("/forgot-password?uqtur=sent");
+    expect(await run(updatePasswordAction, { password: NEW_PASSWORD, confirm: NEW_PASSWORD })).toBe(
+      "/my/account?uqtur=password_changed",
+    );
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it("lifts the moment the switch is off", async () => {
+    state.paused = true;
+    expect(await register("reader@gmail.com")).toBe("/register?xata=paused");
+    state.paused = false;
+    expect(await register("reader@gmail.com")).toBe("/login?uqtur=confirm");
+  });
+});
+
+describe("disposable addresses (PROMPT-39 C)", () => {
+  it("are refused on /register as a failed attempt, before any lookup or Supabase call", async () => {
+    expect(await register("someone@guerrillamail.com")).toBe("/register?xata=disposable");
+    expect(await counterRows()).toBe(2);
+    expect(await register("someone@eu.guerrillamail.com")).toBe("/register?xata=disposable");
+    expect(state.dnsLookups).toEqual([]);
+    expect(auth.signUp).not.toHaveBeenCalled();
+  });
+
+  it("are refused by the resend button without counting", async () => {
+    expect(await run(resendConfirmationAction, { email: "someone@yopmail.com" })).toBe(
+      "/login?xata=disposable&resend=1",
+    );
+    expect(auth.resend).not.toHaveBeenCalled();
+    expect(await counterRows()).toBe(0);
+  });
+
+  it("are never refused where an existing account is concerned: signing in and recovery", async () => {
+    expect(await signIn("someone@guerrillamail.com")).toBe("/login?xata=credentials");
+    expect(auth.signInWithPassword).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "someone@guerrillamail.com" }),
+    );
+    expect(await run(requestPasswordResetAction, { email: "someone@guerrillamail.com" })).toBe(
+      "/forgot-password?uqtur=sent",
+    );
+    expect(auth.resetPasswordForEmail).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the Before User Created hook's refusals (PROMPT-39 A)", () => {
+  /** What Supabase returns when the hook refuses: the hook's own message, and its generic code. */
+  const hookRefused = (message: string): AuthResult => ({
+    data: { user: null, session: null },
+    error: { code: "unknown", message, status: 400 },
+  });
+
+  it("maps blocked and disposable to their messages, and counts both", async () => {
+    auth.signUp
+      .mockResolvedValueOnce(hookRefused("bh:blocked"))
+      .mockResolvedValueOnce(hookRefused("bh:disposable"))
+      .mockResolvedValueOnce(hookRefused("bh:disposable"));
+    expect(await register("a@gmail.com")).toBe("/register?xata=blocked");
+    expect(await register("b@gmail.com")).toBe("/register?xata=disposable");
+    expect(await register("c@gmail.com"), "the third refusal is the lock").toBe("/register?xata=locked");
+  });
+
+  it("maps a pause or the automatic brake to the paused message, without counting", async () => {
+    auth.signUp.mockResolvedValue(hookRefused("bh:registration_paused"));
+    for (let i = 0; i < 4; i += 1) expect(await register("a@gmail.com")).toBe("/register?xata=paused");
+    expect(await counterRows()).toBe(0);
   });
 });
 

@@ -2,9 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { OfflineFormNotice } from "@/components/pwa/offline-form-notice";
+import { BotFields } from "@/components/auth/bot-fields";
 import { ResendButton } from "@/components/auth/resend-button";
 import { readLoginDraft, readSentTo, resendSecondsLeft } from "@/lib/auth/flash";
-import { BLOCKED_MESSAGE, LOCKED_MESSAGE, RESENT_MESSAGE } from "@/lib/auth/messages";
+import {
+  BLOCKED_MESSAGE,
+  BOT_MESSAGE,
+  DISPOSABLE_MESSAGE,
+  LOCKED_MESSAGE,
+  PAUSED_MESSAGE,
+  RESENT_MESSAGE,
+} from "@/lib/auth/messages";
 import { resendConfirmationAction, signInAction } from "../actions";
 
 export const metadata: Metadata = { title: "كىرىش" };
@@ -15,6 +23,10 @@ const ERRORS: Record<string, string> = {
   credentials: "ئېلخەت ياكى پارول خاتا. قايتا سىناڭ.",
   bad_email: "بۇ ئېلخەت ئادرېسى قوبۇل قىلىنمىدى. ھەقىقىي ئېلخەت ئادرېسى كىرگۈزۈڭ.",
   blocked: BLOCKED_MESSAGE,
+  // The resend form's own refusals.
+  disposable: DISPOSABLE_MESSAGE,
+  bot: BOT_MESSAGE,
+  paused: PAUSED_MESSAGE,
   locked: LOCKED_MESSAGE,
   unconfirmed: "ئېلخېتىڭىز تېخى جەزملەنمىگەن. ساندۇقىڭىزدىكى جەزملەش ئۇلانمىسىنى بېسىڭ.",
   rate_limit: "ئۇرۇنۇش سانى كۆپىيىپ كەتتى. بىردەم كۈتۈپ قايتا سىناڭ.",
@@ -127,6 +139,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
                 />
               </label>
             )}
+            <BotFields />
             <OfflineFormNotice>
               <ResendButton secondsLeft={secondsLeft} />
             </OfflineFormNotice>

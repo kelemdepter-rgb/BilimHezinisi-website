@@ -3,7 +3,10 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ensureAdminBootstrap } from "@/lib/auth/bootstrap";
+import { isRegistrationPaused } from "@/lib/auth/account-security";
 import { attemptsFor, type Attempts } from "@/lib/auth/attempts";
+import { checkBotFields, type BotVerdict } from "@/lib/auth/bot-check";
+import { isDisposableDomain } from "@/lib/auth/disposable-domains";
 import {
   COMMON_DOMAINS,
   isBlockedJurisdiction,
@@ -53,6 +56,16 @@ function logAuth(where: string, outcome: AuthOutcome, domain?: string): void {
 }
 
 /**
+ * The bot checks' verdict, logged as a reason code and nothing else. Stale
+ * tokens are ordinary (a page left open for hours) and are not logged.
+ */
+function botVerdict(form: string, formData: FormData): BotVerdict {
+  const verdict = checkBotFields(formData);
+  if (verdict === "honeypot" || verdict === "too_fast") console.warn(`[auth] ${form}: bot:${verdict}`);
+  return verdict;
+}
+
+/**
  * What DNS says, for the checks that need it. The familiar providers are
  * known to exist and known not to be PRC-hosted, so most readers never wait
  * on a lookup at all.
@@ -64,21 +77,24 @@ async function mailDomainVerdict(parsed: ParsedEmail) {
 /* ── Registration ─────────────────────────────────────────────────────────── */
 
 /**
- * The checks run in this order (PROMPT-38 B4), and nothing before the
- * Supabase call can spend an email:
+ * The checks run in this order (PROMPT-38 B4, PROMPT-39), and nothing before
+ * the Supabase call can spend an email:
  *
- *   1. the in-process burst brake     5. blocked jurisdiction, by name
- *   2. the three-chances lock          6. DNS: does the domain exist, and is
- *   3. empty fields, short password       its mail PRC-hosted?
- *   4. the address's syntax            7. a probable typo of a common domain
- *                                      8. Supabase
+ *   1. the in-process burst brake      7. blocked jurisdiction, by name
+ *   2. the bot checks: honeypot,       8. a probable typo of a common domain
+ *      then the signed timestamp       9. a disposable (throwaway) domain
+ *   3. registration paused?           10. DNS: does the domain exist, and is
+ *   4. the three-chances lock              its mail PRC-hosted?
+ *   5. empty fields, short password   11. Supabase — whose Before User Created
+ *   6. the address's syntax               hook repeats 3, 7 and 9 for anyone
+ *                                         who skips this form
  *
- * A locked person is answered at step 2, before any lookup or Supabase call.
- * Steps 4–6 and Supabase's own `email_address_invalid` and `exists` are
- * failed attempts; a suggestion, a wait, a rate limit and a server fault are
- * not. Where 6 and 7 meet — a probable typo whose domain cannot receive mail —
- * the suggestion comes first, and only a reader who keeps the domain is
- * refused.
+ * A bot costs nothing past step 2 but the honeypot's own count; a locked
+ * person is answered at step 4, before any lookup or Supabase call. The
+ * honeypot, steps 6, 7, 9 and 10, and Supabase's own `email_address_invalid`,
+ * `exists` and the hook's blocked/disposable refusals are failed attempts; a
+ * too-fast or stale form, a pause, a suggestion, a wait, a rate limit and a
+ * server fault are not.
  */
 export async function signUpAction(formData: FormData) {
   const typed = String(formData.get("email") ?? "").trim();
@@ -94,6 +110,16 @@ export async function signUpAction(formData: FormData) {
 
   if (isRateLimited(`signup:${await callerKey()}`, SIGN_UP_RULE)) return back("rate_limit");
 
+  const bot = botVerdict("register", formData);
+  if (bot === "honeypot") {
+    // No person ever sees the field, so a bot filling it locks itself out.
+    await (await attemptsFor("register")).fail();
+    return back("bot");
+  }
+  if (bot !== "ok") return back("bot");
+
+  if (await isRegistrationPaused()) return back("paused");
+
   const tries = await attemptsFor("register");
   if (await tries.locked()) return back("locked");
 
@@ -107,19 +133,24 @@ export async function signUpAction(formData: FormData) {
   if (!parsed) return refuse("bad_email");
   if (isBlockedJurisdiction(parsed.domain)) return refuse("blocked");
 
-  const dns = await mailDomainVerdict(parsed);
-  if (dns === "blocked") return refuse("blocked");
-
   // A probable typo is shown before anything is sent, and only once: the
   // reader who taps «keep» comes back with keep_domain set. It is offered
-  // BEFORE "this domain cannot receive mail" on purpose: `gmal.com` has no
-  // mail servers either, and the reader deserves «gmail.com دېمەكچىمۇ؟» — as
-  // the browser already says to anyone with JavaScript — not a spent chance.
+  // BEFORE the disposable list and DNS on purpose. The list names the typo
+  // domains that catch other people's misdirected mail — `gmial.com`,
+  // `hotmial.com` and some thirty more — and `gmal.com` has no mail servers
+  // at all; a reader who slipped deserves «gmail.com دېمەكچىمۇ؟» — as the
+  // browser already says to anyone with JavaScript — not a spent chance.
+  // Only a reader who keeps such a domain is refused.
   const suggestion = suggestDomain(parsed.domain);
   if (suggestion && keptDomain !== parsed.domain) {
     await writeRegisterDraft({ email: typed, name: displayName, suggestion });
     redirect("/register");
   }
+
+  if (isDisposableDomain(parsed.domain)) return refuse("disposable");
+
+  const dns = await mailDomainVerdict(parsed);
+  if (dns === "blocked") return refuse("blocked");
   if (dns === "undeliverable") return refuse("bad_email");
 
   const supabase = await createSupabaseServerClient();
@@ -242,19 +273,23 @@ export async function signInAction(formData: FormData) {
  * "already confirmed" with the same empty success itself; its wait and its
  * email allowance only ever come back for an address with an unconfirmed
  * account, so they are logged, not shown. Only what is true of every address
- * alike is put on the page: a broken or blocked address, and our own brake.
- * Not one of the three failed attempts, either way.
+ * alike is put on the page: a broken, blocked or disposable address, a form
+ * bot, a pause, and our own brake. Not one of the three failed attempts,
+ * either way.
  */
 export async function resendConfirmationAction(formData: FormData) {
   const typed = String(formData.get("email") ?? "").trim();
   const back = (reason: string) => redirect(`/login?xata=${reason}&resend=1`);
 
   if (isRateLimited(`resend:${await callerKey()}`, RESEND_RULE)) return back("rate_limit");
+  if (botVerdict("resend", formData) !== "ok") return back("bot");
+  if (await isRegistrationPaused()) return back("paused");
   if (!typed) return back("empty_resend");
 
   const parsed = parseEmail(typed);
   if (!parsed) return back("bad_email");
   if (isBlockedJurisdiction(parsed.domain)) return back("blocked");
+  if (isDisposableDomain(parsed.domain)) return back("disposable");
   const dns = await mailDomainVerdict(parsed);
   if (dns === "blocked") return back("blocked");
   if (dns === "undeliverable") return back("bad_email");
@@ -300,6 +335,10 @@ export async function signOutAction() {
  * ever imposed on a registered address, so it is now answered like a success
  * too (lib/auth/reasons.ts, resetOutcome).
  *
+ * PROMPT-39 put the form-bot checks in front (lib/auth/bot-check.ts): a bot
+ * gets a generic «try again», which says nothing about the address and is
+ * never counted. A person's answer is exactly what it was.
+ *
  * The link lands on /auth/callback, which exchanges the code for a session
  * and forwards to /reset-password — the only place the new password is set.
  */
@@ -310,6 +349,8 @@ export async function requestPasswordResetAction(formData: FormData) {
   if (isRateLimited(`reset:${await callerKey()}`, PASSWORD_RESET_RULE)) {
     redirect("/forgot-password?xata=rate_limit");
   }
+
+  if (botVerdict("password reset", formData) !== "ok") redirect("/forgot-password?xata=bot");
 
   const parsed = parseEmail(email);
   if (

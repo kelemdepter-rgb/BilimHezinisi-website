@@ -1,10 +1,10 @@
 # Third-Party Notices — بىلىم خەزىنىسى (Bilim Hezinisi), web edition
 
-This site serves third-party fonts, texts and software libraries. Each item
+This site serves third-party fonts, texts, data and software libraries. Each item
 below is redistributed under the licence stated for it. The MIT licence in
 `LICENSE` applies only to the original source code of this project.
 
-Last reviewed: 2026-08-19
+Last reviewed: 2026-09-26
 
 ---
 
@@ -96,7 +96,7 @@ Stored in the `quran_ayas` table, seeded by `scripts/seed-quran.mjs`.
 
 ---
 
-## 3. Language data
+## 3. Language data and lists
 
 ### Uyghur spell-check word list
 Served file: `public/spellcheck/uyghur-dict.bin`,
@@ -114,6 +114,19 @@ Served file: `public/spellcheck/uyghur-dict.bin`,
 algorithm by Wolf Garbe (<https://github.com/wolfgarbe/SymSpell>), MIT
 License. The implementation is this project's own; the algorithm is the
 borrowed part.
+
+### Disposable-email domain list
+Vendored file: `lib/auth/disposable-domains.list.ts` (server-only — it never
+reaches a browser), copied into the database's `auth_disposable_domains` by
+`scripts/sync-auth-domains.mjs`.
+
+- From **disposable-email-domains** —
+  <https://github.com/disposable-email-domains/disposable-email-domains>,
+  CC0 1.0 Universal (public domain dedication). The commit and the date it was
+  fetched are recorded at the top of the file by
+  `scripts/update-disposable-domains.mjs`, which is how it is refreshed.
+- Used to refuse throwaway addresses at registration. This project adds an
+  allowlist of real providers that always wins (`lib/auth/disposable-domains.ts`).
 
 ---
 

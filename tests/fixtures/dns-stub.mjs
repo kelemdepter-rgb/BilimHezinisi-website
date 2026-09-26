@@ -30,6 +30,12 @@ const TABLE = new Map([
   ["no-such-domain.test", { resolveMx: "ENOTFOUND", resolve4: "ENOTFOUND", resolve6: "ENOTFOUND" }],
   // A company domain whose mail is received outside the PRC.
   ["company.test", { resolveMx: [{ exchange: "aspmx.l.google.com", priority: 1 }] }],
+  // One slip from outlook.com, but receiving mail and on no list: a typo a
+  // reader may deliberately keep.
+  ["outlok.com", { resolveMx: [{ exchange: "mx.outlok.com", priority: 10 }] }],
+  // A throwaway-address service, for the one place it is looked up: signing
+  // in to an account made before the list existed.
+  ["guerrillamail.com", { resolveMx: [{ exchange: "mx.guerrillamail.com", priority: 10 }] }],
 ]);
 
 const prototype = dns.promises.Resolver.prototype;

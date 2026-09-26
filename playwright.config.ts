@@ -564,12 +564,15 @@ export default defineConfig({
         /**
          * Registering and signing in: three chances then an hour's lock, the
          * Chinese-jurisdiction block, typo suggestions, truthful waits, resend
-         * and password recovery while locked out (PROMPT-38). Against the
+         * and password recovery while locked out (PROMPT-38); and the guards
+         * against fake accounts — form bots, throwaway addresses, the
+         * database's own hook, the pause switch, the automatic brake and the
+         * /admin security card (PROMPT-39, signup-guards.spec.ts). Against the
          * fake-Supabase dev server only — never the real project — so it needs
          * no setup, and every test starts from a clean fake.
          */
         name: `auth-flow-${viewport.name}`,
-        testMatch: /auth-flows\.spec\.ts/,
+        testMatch: /(auth-flows|signup-guards)\.spec\.ts/,
         use: {
           baseURL: MOCK_URL,
           browserName: "chromium" as const,

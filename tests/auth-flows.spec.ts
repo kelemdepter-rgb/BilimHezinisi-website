@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 import { randomInt } from "node:crypto";
 import {
   BLOCKED_MESSAGE,
@@ -9,6 +9,17 @@ import {
   waitMessage,
 } from "../lib/auth/messages";
 import { freshPassword } from "./env";
+import {
+  assertNoHorizontalOverflow,
+  assertTappable,
+  blurUntilSuggested,
+  fillRegistration,
+  register,
+  registerButton,
+  signIn,
+  submit,
+  waitForFormAge,
+} from "./fixtures/auth-pages";
 import { SupabaseMock } from "./fixtures/supabase-mock";
 
 /**
@@ -27,6 +38,11 @@ import { SupabaseMock } from "./fixtures/supabase-mock";
  * DNS answers for the few test domains that need a lookup come from
  * tests/fixtures/dns-stub.mjs; the familiar providers (gmail.com, …) are
  * never looked up at all.
+ *
+ * Every form that sends email is also guarded against bots since PROMPT-39
+ * (tests/signup-guards.spec.ts), and turns away a form sent back within
+ * two seconds of its page being made; the specs here are people, so they
+ * wait that out (waitForFormAge) before submitting one.
  */
 
 const mock = new SupabaseMock();
@@ -52,95 +68,6 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-/* ── helpers ──────────────────────────────────────────────────────────────── */
-
-async function assertNoHorizontalOverflow(page: Page) {
-  const metrics = await page.evaluate(() => ({
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
-  }));
-  expect(metrics.scrollWidth, "page must not scroll horizontally").toBeLessThanOrEqual(
-    metrics.innerWidth + 1,
-  );
-}
-
-/**
- * The control is on screen, at least 44 px tall, and it is what a tap at its
- * centre would reach — no fixed bar, no overlay on top of it. Checked at the
- * top of the page and again after scrolling to the bottom and back.
- */
-async function assertTappable(page: Page, control: Locator, label: string) {
-  for (const pass of ["as loaded", "after scrolling down and back up"]) {
-    if (pass !== "as loaded") {
-      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-      await page.waitForTimeout(150);
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForTimeout(150);
-    }
-    await control.scrollIntoViewIfNeeded();
-    await expect(control, `${label} ${pass}`).toBeVisible();
-    const box = (await control.boundingBox())!;
-    expect(box.height, `${label} must be at least 44 px tall`).toBeGreaterThanOrEqual(44);
-    const reached = await control.evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      return hit !== null && (hit === element || element.contains(hit));
-    });
-    expect(reached, `${label} must not be covered ${pass}`).toBe(true);
-  }
-  await assertNoHorizontalOverflow(page);
-}
-
-async function fillRegistration(page: Page, email: string, name = "سىناق") {
-  await page.locator('input[name="display_name"]').fill(name);
-  await page.getByTestId("register-email").fill(email);
-  await page.locator('input[name="password"]').fill(freshPassword());
-}
-
-function registerButton(page: Page) {
-  return page.getByRole("button", { name: "تىزىمدىن ئۆتۈش", exact: true });
-}
-
-/**
- * Click a submit button and wait until the Server Action has answered.
- *
- * Not optional: the answer carries the device cookie the counter keys on, and
- * a test that navigates on before it has arrived throws the cookie away — the
- * next attempt then looks like a brand-new device, and "three chances" quietly
- * becomes three per attempt.
- */
-async function submit(page: Page, button: Locator) {
-  await Promise.all([
-    page.waitForResponse(
-      (response) => response.request().method() === "POST" && new URL(response.url()).port === "3300",
-    ),
-    button.click(),
-  ]);
-}
-
-async function register(page: Page, email: string) {
-  await page.goto("/register");
-  await fillRegistration(page, email);
-  await submit(page, registerButton(page));
-}
-
-async function signIn(page: Page, email: string, password: string) {
-  await page.goto("/login");
-  await page.locator('form:has(input[name="password"]) input[name="email"]').fill(email);
-  await page.locator('input[name="password"]').fill(password);
-  await submit(page, page.getByRole("button", { name: "كىرىش", exact: true }));
-}
-
-/** The typo notice appears on leaving the field — once React is listening. */
-async function blurUntilSuggested(page: Page) {
-  const field = page.getByTestId("register-email");
-  await expect(async () => {
-    await field.focus();
-    await field.blur();
-    await expect(page.getByTestId("email-suggestion")).toBeVisible({ timeout: 1500 });
-  }).toPass({ timeout: 20_000 });
-}
-
 /* ── registering ──────────────────────────────────────────────────────────── */
 
 test.describe("registering", () => {
@@ -161,6 +88,7 @@ test.describe("registering", () => {
     await expect(page.getByTestId("email-suggestion")).toHaveCount(0);
     expect(mock.callsTo("signup"), "nothing is sent while the reader decides").toHaveLength(0);
 
+    await waitForFormAge(page);
     await submit(page, registerButton(page));
     await expect(page).toHaveURL(/\/login\?uqtur=confirm/, { timeout: 15_000 });
     await expect(page.getByTestId("sent-to")).toHaveText("name@gmail.com");
@@ -169,7 +97,10 @@ test.describe("registering", () => {
 
   test("keeping what was typed works too, and submitting waits for the choice", async ({ page }) => {
     await page.goto("/register");
-    await fillRegistration(page, "name@gmial.com");
+    // outlok.com, not gmial.com: that one is on the throwaway list, and kept
+    // it is refused (signup-guards.spec.ts).
+    await fillRegistration(page, "name@outlok.com");
+    await waitForFormAge(page);
     // Straight to the button, without leaving the field first.
     await expect(async () => {
       await registerButton(page).click();
@@ -182,11 +113,12 @@ test.describe("registering", () => {
     // The server may have re-rendered the form on the way (no password kept).
     const password = page.locator('input[name="password"]');
     if (!(await password.inputValue())) await password.fill(freshPassword());
+    await waitForFormAge(page);
     await submit(page, registerButton(page));
 
     await expect(page).toHaveURL(/\/login\?uqtur=confirm/, { timeout: 15_000 });
-    await expect(page.getByTestId("sent-to")).toHaveText("name@gmial.com");
-    expect(mock.callsTo("signup").map((call) => call.body.email)).toEqual(["name@gmial.com"]);
+    await expect(page.getByTestId("sent-to")).toHaveText("name@outlok.com");
+    expect(mock.callsTo("signup").map((call) => call.body.email)).toEqual(["name@outlok.com"]);
   });
 
   for (const address of ["a@qq.com", "a@x.com.cn"]) {
@@ -200,6 +132,7 @@ test.describe("registering", () => {
         await expect(page.getByTestId("email-blocked")).toHaveText(BLOCKED_MESSAGE, { timeout: 1500 });
       }).toPass({ timeout: 20_000 });
       // …and refused by the server, which is the check that counts.
+      await waitForFormAge(page);
       await submit(page, registerButton(page));
       await expect(page.getByTestId("auth-error-text")).toHaveText(BLOCKED_MESSAGE);
       expect(mock.callsTo("signup")).toHaveLength(0);
@@ -227,6 +160,7 @@ test.describe("registering", () => {
     await page.goto("/register");
     await fillRegistration(page, "teacher@company.test");
     await page.getByTestId("register-email").blur();
+    await waitForFormAge(page);
     await submit(page, registerButton(page));
     await expect(page).toHaveURL(/\/login\?uqtur=confirm/, { timeout: 15_000 });
     expect(mock.callsTo("signup")).toHaveLength(1);
@@ -300,7 +234,7 @@ test.describe("signing in", () => {
     const email = "reader@gmail.com";
     const oldPassword = freshPassword();
     const newPassword = freshPassword();
-    mock.addUser(email, oldPassword);
+    await mock.addUser(email, oldPassword);
 
     for (let attempt = 1; attempt <= 3; attempt += 1) {
       await signIn(page, email, `${oldPassword}-wrong`);
@@ -321,6 +255,7 @@ test.describe("signing in", () => {
     await page.getByTestId("locked-forgot-link").click();
     await expect(page).toHaveURL(/\/forgot-password$/);
     await page.getByTestId("reset-email").fill(email);
+    await waitForFormAge(page);
     await page.getByTestId("reset-submit").click();
     await expect(page.getByTestId("reset-sent")).toBeVisible();
     expect(mock.callsTo("recover")).toHaveLength(1);
@@ -348,7 +283,7 @@ test.describe("signing in", () => {
   test("a success clears the count", async ({ page }) => {
     const email = "clear@gmail.com";
     const password = freshPassword();
-    mock.addUser(email, password);
+    await mock.addUser(email, password);
     await signIn(page, email, `${password}-wrong`);
     await signIn(page, email, `${password}-wrong`);
     await signIn(page, email, password);
@@ -361,11 +296,12 @@ test.describe("signing in", () => {
 
 test.describe("password recovery", () => {
   test("answers the same whether or not the address has an account", async ({ page }) => {
-    mock.addUser("known@gmail.com", freshPassword());
+    await mock.addUser("known@gmail.com", freshPassword());
     const answers: string[] = [];
     for (const email of ["known@gmail.com", "unknown@gmail.com"]) {
       await page.goto("/forgot-password");
       await page.getByTestId("reset-email").fill(email);
+      await waitForFormAge(page);
       await page.getByTestId("reset-submit").click();
       await expect(page.getByTestId("reset-sent")).toBeVisible();
       answers.push(await page.getByTestId("reset-sent").innerText());
@@ -377,7 +313,7 @@ test.describe("password recovery", () => {
   test("a second request within the minute gets the same answer as a stranger's address", async ({
     page,
   }) => {
-    mock.addUser("twice@gmail.com", freshPassword());
+    await mock.addUser("twice@gmail.com", freshPassword());
     // What Supabase says only for an address that HAS an account, asked twice.
     mock.failNext("recover", {
       status: 429,
@@ -386,6 +322,7 @@ test.describe("password recovery", () => {
     });
     await page.goto("/forgot-password");
     await page.getByTestId("reset-email").fill("twice@gmail.com");
+    await waitForFormAge(page);
     await page.getByTestId("reset-submit").click();
     await expect(page.getByTestId("reset-sent")).toBeVisible();
     await expect(page.getByTestId("reset-error")).toHaveCount(0);
@@ -394,6 +331,7 @@ test.describe("password recovery", () => {
   test("an address under Chinese jurisdiction is told the rule and sent nothing", async ({ page }) => {
     await page.goto("/forgot-password");
     await page.getByTestId("reset-email").fill("a@foxmail.com");
+    await waitForFormAge(page);
     await page.getByTestId("reset-submit").click();
     await expect(page.getByTestId("reset-error")).toHaveText(BLOCKED_MESSAGE);
     expect(mock.callsTo("recover")).toHaveLength(0);
@@ -440,6 +378,7 @@ test.describe("resending the confirmation email", () => {
     await assertTappable(page, page.getByTestId("reregister-link"), "«ئادرېس خاتا بولسا…»");
     await assertTappable(page, page.getByTestId("resend-submit"), "the resend button");
 
+    await waitForFormAge(page);
     await page.getByTestId("resend-submit").click();
     await expect(page.getByTestId("auth-notice")).toContainText(RESENT_MESSAGE);
     const countdown = page.getByTestId("resend-countdown");
@@ -459,6 +398,7 @@ test.describe("resending the confirmation email", () => {
     const other = await stranger.newPage();
     await other.goto("/login?uqtur=confirm");
     await other.getByTestId("resend-email").fill("nobody@gmail.com");
+    await waitForFormAge(other);
     await other.getByTestId("resend-submit").click();
     await expect(other.getByTestId("auth-notice-text")).toHaveText(RESENT_MESSAGE);
     await expect(page.getByTestId("auth-notice-text")).toHaveText(RESENT_MESSAGE);
@@ -480,6 +420,7 @@ test.describe("resending the confirmation email", () => {
     });
     await page.goto("/login?uqtur=confirm");
     await page.getByTestId("resend-email").fill("pending@gmail.com");
+    await waitForFormAge(page);
     await page.getByTestId("resend-submit").click();
     await expect(page.getByTestId("auth-notice")).toContainText(RESENT_MESSAGE);
     await expect(page.getByTestId("auth-error")).toHaveCount(0);
@@ -487,9 +428,10 @@ test.describe("resending the confirmation email", () => {
 
   test("offered again when signing in finds the address unconfirmed", async ({ page }) => {
     const password = freshPassword();
-    mock.addUser("unconfirmed@gmail.com", password, false);
+    await mock.addUser("unconfirmed@gmail.com", password, false);
     await signIn(page, "unconfirmed@gmail.com", password);
     await expect(page.getByTestId("auth-error")).toContainText("جەزملەنمىگەن");
+    await waitForFormAge(page);
     await page.getByTestId("resend-submit").click();
     await expect(page.getByTestId("auth-notice")).toContainText(RESENT_MESSAGE);
     expect(mock.callsTo("resend").map((call) => call.body.email)).toEqual(["unconfirmed@gmail.com"]);
@@ -568,6 +510,7 @@ test.describe("with JavaScript switched off", () => {
     await expect(page.getByTestId("email-suggestion")).toHaveCount(0);
 
     await page.locator('input[name="password"]').fill(freshPassword());
+    await waitForFormAge(page);
     await submit(page, registerButton(page));
     await expect(page).toHaveURL(/\/login\?uqtur=confirm/, { timeout: 15_000 });
     await expect(page.getByTestId("sent-to")).toHaveText("name@gmail.com");
@@ -584,6 +527,7 @@ test.describe("with JavaScript switched off", () => {
     // Keeping a domain that cannot receive mail is refused — and counted.
     await submit(page, page.getByTestId("suggestion-keep"));
     await page.locator('input[name="password"]').fill(freshPassword());
+    await waitForFormAge(page);
     await submit(page, registerButton(page));
     await expect(page.getByTestId("auth-error-text")).toContainText("قوبۇل قىلىنمىدى");
     expect(await mock.counterRows()).toBe(2);
@@ -591,14 +535,15 @@ test.describe("with JavaScript switched off", () => {
   });
 
   test("«keep it» works, and so do the other messages", async ({ page }) => {
-    await register(page, "name@gmial.com");
+    await register(page, "name@outlok.com");
     await page.getByTestId("suggestion-keep").click();
     await expect(page.getByTestId("email-suggestion")).toHaveCount(0);
-    await expect(page.getByTestId("register-email")).toHaveValue("name@gmial.com");
+    await expect(page.getByTestId("register-email")).toHaveValue("name@outlok.com");
     await page.locator('input[name="password"]').fill(freshPassword());
+    await waitForFormAge(page);
     await submit(page, registerButton(page));
     await expect(page).toHaveURL(/\/login\?uqtur=confirm/, { timeout: 15_000 });
-    expect(mock.callsTo("signup").map((call) => call.body.email)).toEqual(["name@gmial.com"]);
+    expect(mock.callsTo("signup").map((call) => call.body.email)).toEqual(["name@outlok.com"]);
 
     await register(page, "a@qq.com");
     await expect(page.getByTestId("auth-error-text")).toHaveText(BLOCKED_MESSAGE);
@@ -612,7 +557,7 @@ test.describe("with JavaScript switched off", () => {
   test("sign-in keeps the address after a wrong password, and resend still answers", async ({
     page,
   }) => {
-    mock.addUser("kept@gmail.com", freshPassword());
+    await mock.addUser("kept@gmail.com", freshPassword());
     await signIn(page, "kept@gmail.com", freshPassword());
     await expect(page.getByTestId("auth-error-text")).toHaveText("ئېلخەت ياكى پارول خاتا. قايتا سىناڭ.");
     await expect(page.locator('form:has(input[name="password"]) input[name="email"]')).toHaveValue(
@@ -622,6 +567,7 @@ test.describe("with JavaScript switched off", () => {
 
     await page.goto("/login?uqtur=confirm");
     await page.getByTestId("resend-email").fill("kept@gmail.com");
+    await waitForFormAge(page);
     await page.getByTestId("resend-submit").click();
     await expect(page.getByTestId("auth-notice")).toContainText(RESENT_MESSAGE);
     // No countdown without script — the button simply stays usable.

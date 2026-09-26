@@ -12,6 +12,7 @@ import {
   readSeed,
   testEmail,
 } from "./env";
+import { waitForFormAge } from "./fixtures/auth-pages";
 
 loadEnvLocal();
 
@@ -967,6 +968,8 @@ test.describe("password recovery", () => {
     // An address that certainly has no account here — so nothing is actually
     // sent, and the free tier's email allowance is not spent on a test.
     await page.getByTestId("reset-email").fill(testEmail(`nobody-${Date.now()}`));
+    // The form turns away a submission faster than a person types (PROMPT-39).
+    await waitForFormAge(page);
     await page.getByTestId("reset-submit").click();
 
     const notice = page.getByTestId("reset-sent");
@@ -990,12 +993,17 @@ test.describe("password recovery", () => {
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       await page.goto("/forgot-password");
       await page.getByTestId("reset-email").fill(testEmail(`burst-${attempt}`));
+      await waitForFormAge(page);
       await page.getByTestId("reset-submit").click();
       await expect(page.getByTestId("reset-sent").or(page.getByTestId("reset-error"))).toBeVisible({
         timeout: 20_000,
       });
     }
-    await expect(page.getByTestId("reset-error")).toBeVisible();
+    // The limiter's own words — not the form-bot check's, which would pass
+    // this test for the wrong reason.
+    await expect(page.getByTestId("reset-error")).toHaveText(
+      "ئۇرۇنۇش سانى كۆپىيىپ كەتتى. بىر سائەتتىن كېيىن قايتا سىناڭ.",
+    );
     await expect(page.getByTestId("reset-sent")).toHaveCount(0);
   });
 

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
+import { AccountSecurityCard } from "@/components/admin/account-security-card";
 import { UsagePanel } from "@/components/admin/usage-panel";
+import { getAccountSecurityReport } from "@/lib/auth/account-security";
 import { getAdminCounts, getSessionInfo } from "@/lib/data";
 import { getUsageReport } from "@/lib/usage";
 import type { Role } from "@/lib/types";
@@ -17,7 +19,10 @@ export default async function AdminDashboardPage() {
   if (!session) redirect("/login");
 
   const counts = await getAdminCounts();
-  const usage = session.role === "admin" ? await getUsageReport() : null;
+  const [usage, security] =
+    session.role === "admin"
+      ? await Promise.all([getUsageReport(), getAccountSecurityReport()])
+      : [null, null];
 
   return (
     <>
@@ -37,6 +42,17 @@ export default async function AdminDashboardPage() {
 
       {/* Free-tier gauge is admin-only: an uploader manages books, not limits. */}
       {session.role === "admin" && usage && <UsagePanel report={usage} />}
+
+      {/* Who may open an account, and what an attack looks like: admin-only too. */}
+      {session.role === "admin" && security && (
+        security.available ? (
+          <AccountSecurityCard report={security} />
+        ) : (
+          <p className="paper mt-5 p-5 text-[13px] leading-7 text-ink2" data-testid="security-card-unavailable">
+            ھېسابات بىخەتەرلىكى ئۇچۇرى ھازىرچە يوق — ساندانغا 0027 نومۇرلۇق ئۆزگەرتىش تېخى كىرگۈزۈلمىگەن بولۇشى مۇمكىن.
+          </p>
+        )
+      )}
 
       <div className="mt-5 flex flex-wrap gap-3">
         <Link href="/admin/books/new" className="btn-am">

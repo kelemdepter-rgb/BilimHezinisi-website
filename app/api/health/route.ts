@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sweepUnconfirmedAccounts } from "@/lib/auth/account-security";
 import { sweepAttempts } from "@/lib/auth/attempts";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
@@ -33,9 +34,11 @@ export const maxDuration = 45;
  * for every reader without an account before anyone noticed (2026-09-11);
  * this is what notices next time, without a second cron.
  *
- * And it sweeps the failed-attempt counter (lib/auth/attempts.ts): rows a
- * day past their window and lock are removed. Vercel Hobby allows no second
- * cron, so housekeeping rides along here.
+ * And it sweeps: the failed-attempt counter (lib/auth/attempts.ts), rows a
+ * day past their window and lock; and — on the production deployment only,
+ * once the owner has switched it on in /admin — accounts never confirmed
+ * after 7 days (lib/auth/account-security.ts, at most 200 a day). Vercel
+ * Hobby allows no second cron, so housekeeping rides along here.
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -78,14 +81,20 @@ export async function GET(request: Request) {
       .upsert({ key: SEARCH_HEALTH_KEY, value: searchHealth, is_public: false }, { onConflict: "key" });
   }
 
-  // Like the self-check, this never decides the cron's answer.
+  // Like the self-check, these never decide the cron's answer. Deleting
+  // accounts is the deployed production site's job alone: a server started on
+  // a developer's machine — the Playwright suite starts two, and calls this
+  // route — talks to the same project through .env.local, and must never
+  // delete anyone.
   const sweptAttempts = await sweepAttempts();
+  const sweptAccounts = process.env.VERCEL_ENV === "production" ? await sweepUnconfirmedAccounts() : null;
 
   return NextResponse.json(
     {
       ok: true,
       at: new Date().toISOString(),
       sweptAttempts,
+      sweptAccounts,
       search:
         searchHealth &&
         Object.fromEntries(

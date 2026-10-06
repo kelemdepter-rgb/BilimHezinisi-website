@@ -194,3 +194,80 @@ describe("the admin panel", () => {
     expect(html).toMatch(/data-testid="search-health"[^>]*data-level="unknown"/);
   });
 });
+
+/**
+ * "Busy" — every search slot in use (migration 0028, PROMPT-40) — is the
+ * database refusing politely under load, not search breaking. The check asks
+ * once more after a pause, and only a second "busy" is recorded, as its own
+ * state: never as a failure, never as a false alarm on /admin.
+ */
+describe("a busy database", () => {
+  const BUSY = { code: "PT429", message: "bh:search_busy" };
+
+  it("is asked once more, and the second answer is the one kept", async () => {
+    let answers = 0;
+    const { client, calls } = fakeClient(async () => (answers++ === 0 ? BUSY : null));
+    const health = await runSearchHealthCheck(client, { busyPauseMs: 1 });
+    expect(calls.map((call) => call.fn)).toEqual(["search_books", "search_books", "search_books", "book_match_pages"]);
+    expect(health.common).toMatchObject({ ok: true, code: null });
+    expect(health.common.busy).toBeFalsy();
+  });
+
+  it("twice in a row is recorded as busy — not as an error", async () => {
+    const { client } = fakeClient(async (call) => (call.fn === "search_books" && call.args.q === "ناماز" ? BUSY : null));
+    const health = await runSearchHealthCheck(client, { busyPauseMs: 1 });
+    expect(health.common).toMatchObject({ ok: false, code: "busy", busy: true });
+    expect(health.nowhere).toMatchObject({ ok: true });
+  });
+
+  it("is reported on its own quieter level, and a real failure still outranks it", () => {
+    const busyHealth: SearchHealth = {
+      ...healthy,
+      common: { ok: false, ms: 4, code: "busy", at: healthy.common.at, busy: true },
+    };
+    const busy = summarizeSearchHealth(busyHealth);
+    expect(busy.level).toBe("busy");
+    expect(busy.text).toContain("ئالدىراش");
+    expect(busy.text).toContain("خاتالىق ئەمەس");
+
+    const failing = summarizeSearchHealth({
+      ...busyHealth,
+      nowhere: { ok: false, ms: 3102, code: "57014", at: healthy.nowhere.at },
+    });
+    expect(failing.level).toBe("warning");
+    expect(failing.text).toContain("57014");
+  });
+
+  it("survives the round trip through the settings table, and old records read as not busy", () => {
+    const stored = JSON.parse(
+      JSON.stringify({ ...healthy, common: { ok: false, ms: 4, code: "busy", at: healthy.common.at, busy: true } }),
+    );
+    expect(parseSearchHealth(stored)?.common.busy).toBe(true);
+    expect(parseSearchHealth(JSON.parse(JSON.stringify(healthy)))?.nowhere.busy).toBeFalsy();
+  });
+
+  it("shows on /admin as its own line, not the warning", () => {
+    const html = renderToStaticMarkup(
+      createElement(UsagePanel, {
+        report: {
+          available: true,
+          dbBytes: 60 * 1024 * 1024,
+          storageBytes: 20 * 1024 * 1024,
+          dbLevel: "normal",
+          storageLevel: "normal",
+          books: 50,
+          pages: 17601,
+          bytesPerBook: 1024 * 1024,
+          remainingBooks: 400,
+          lastPing: "2026-10-06T06:00:00.000Z",
+          searchHealth: {
+            ...healthy,
+            common: { ok: false, ms: 4, code: "busy", at: healthy.common.at, busy: true },
+          },
+        } as UsageReport,
+      }),
+    );
+    expect(html).toMatch(/data-testid="search-health"[^>]*data-level="busy"/);
+    expect(html).not.toContain("⚠");
+  });
+});

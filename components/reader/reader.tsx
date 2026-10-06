@@ -29,6 +29,7 @@ import {
 import { flattenMatches, positionOf, stepPosition } from "@/lib/reader/matches";
 import type { ContentFormat } from "@/lib/books/types";
 import { rememberOfflineBook } from "@/lib/pwa/offline-books";
+import { SEARCH_BUSY_TEXT, isSearchBusy } from "@/lib/search/busy";
 import {
   addBookmark,
   addNote,
@@ -437,7 +438,11 @@ export function Reader({
         if (jumpToMatch === null || jumpToPage === null) return;
         setFindIndex(positionOf(found, jumpToPage, jumpToMatch));
       })
-      .catch(() => undefined);
+      // Every search slot in use (migration 0028): say so, calmly — the
+      // highlight on this page still stands, and the find box asks again.
+      .catch((cause: unknown) => {
+        if (isSearchBusy(cause as Error)) setError(SEARCH_BUSY_TEXT);
+      });
   }, [bookId, highlight, jumpToMatch, jumpToPage]);
 
   const goToPage = useCallback(
@@ -598,11 +603,13 @@ export function Reader({
       setMatchPages(found);
       setMatchesCapped(capped);
       if (found[0]) await goToPage(found[0].page_no);
-    } catch {
+    } catch (cause) {
       setError(
-        offline()
-          ? "ئىزدەش ئۈچۈن تور ئۇلىنىشى كېرەك."
-          : "كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.",
+        isSearchBusy(cause as Error)
+          ? SEARCH_BUSY_TEXT
+          : offline()
+            ? "ئىزدەش ئۈچۈن تور ئۇلىنىشى كېرەك."
+            : "كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.",
       );
     }
   }

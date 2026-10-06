@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { hasSupabaseEnv } from "@/lib/env";
+import { isSearchBusy } from "@/lib/search/busy";
 
 /**
  * The daily search self-check.
@@ -41,10 +42,28 @@ export type SearchHealthName = (typeof SEARCH_HEALTH_NAMES)[number];
 export type SearchHealthCheck = {
   ok: boolean;
   ms: number;
-  /** The Postgres SQLSTATE (e.g. 57014), "aborted" past the call timeout, or null when ok. */
+  /**
+   * The Postgres SQLSTATE (e.g. 57014), "aborted" past the call timeout,
+   * "busy" when every search slot was in use, or null when ok.
+   */
   code: string | null;
   at: string;
+  /**
+   * Every search slot was in use (migration 0028) on the call AND on its one
+   * retry. Its own state, not a failure: the database refused politely, which
+   * is what it is meant to do while many people search. Absent on records
+   * written before PROMPT-40, which read as false.
+   */
+  busy?: boolean;
 };
+
+/**
+ * How long to wait before asking once more after a "busy". A slot is held
+ * for one search — well under a second on most words, the 3 s statement
+ * timeout at worst — so two seconds is usually enough for one to come free,
+ * and short enough for the route's time budget (app/api/health/route.ts).
+ */
+export const SEARCH_HEALTH_BUSY_PAUSE_MS = 2_000;
 
 export type SearchHealth = Record<SearchHealthName, SearchHealthCheck>;
 
@@ -61,7 +80,7 @@ export type SearchHealthClient = {
     fn: "search_books" | "book_match_pages",
     args: Record<string, unknown>,
     signal: AbortSignal,
-  ): Promise<{ code?: string | null } | null>;
+  ): Promise<{ code?: string | null; message?: string | null } | null>;
 };
 
 /**
@@ -89,15 +108,14 @@ export function anonymousSearchHealthClient(): SearchHealthClient | null {
     },
     async call(fn, args, signal) {
       const { error } = await supabase.rpc(fn, args).abortSignal(signal);
-      return error ? { code: error.code } : null;
+      return error ? { code: error.code, message: error.message } : null;
     },
   };
 }
 
-async function timeCall(
-  run: (signal: AbortSignal) => Promise<{ code?: string | null } | null>,
-  timeoutMs: number,
-): Promise<SearchHealthCheck> {
+type Run = (signal: AbortSignal) => Promise<{ code?: string | null; message?: string | null } | null>;
+
+async function timeCall(run: Run, timeoutMs: number): Promise<SearchHealthCheck> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = Date.now();
@@ -106,6 +124,7 @@ async function timeCall(
     const error = await run(controller.signal);
     const ms = Date.now() - started;
     if (!error) return { ok: true, ms, code: null, at };
+    if (isSearchBusy(error)) return { ok: false, ms, code: "busy", at, busy: true };
     return { ok: false, ms, code: controller.signal.aborted ? "aborted" : error.code || "error", at };
   } catch {
     return {
@@ -120,23 +139,39 @@ async function timeCall(
 }
 
 /**
+ * One call; if every slot was in use, one pause and one more try. A single
+ * "busy" says only that somebody else was searching at 06:00 — reporting it
+ * as a failure would be a false alarm — so the second answer is the one kept,
+ * busy or not.
+ */
+async function measure(run: Run, timeoutMs: number, busyPauseMs: number): Promise<SearchHealthCheck> {
+  const first = await timeCall(run, timeoutMs);
+  if (!first.busy) return first;
+  await new Promise((resolve) => setTimeout(resolve, busyPauseMs));
+  return timeCall(run, timeoutMs);
+}
+
+/**
  * The three calls, one after another, each on its own clock — three
  * measurements a reader would recognise, not three searches racing each
  * other for the free tier's shared CPU.
  */
 export async function runSearchHealthCheck(
   client: SearchHealthClient,
-  options: { timeoutMs?: number } = {},
+  options: { timeoutMs?: number; busyPauseMs?: number } = {},
 ): Promise<SearchHealth> {
   const timeoutMs = options.timeoutMs ?? SEARCH_HEALTH_CALL_TIMEOUT_MS;
+  const busyPauseMs = options.busyPauseMs ?? SEARCH_HEALTH_BUSY_PAUSE_MS;
 
-  const common = await timeCall(
+  const common = await measure(
     (signal) => client.call("search_books", { q: COMMON_WORD, category_id: null, lim: 1, off: 0 }, signal),
     timeoutMs,
+    busyPauseMs,
   );
-  const nowhere = await timeCall(
+  const nowhere = await measure(
     (signal) => client.call("search_books", { q: NOWHERE_WORD, category_id: null, lim: 1, off: 0 }, signal),
     timeoutMs,
+    busyPauseMs,
   );
 
   let largest: number | null = null;
@@ -148,9 +183,10 @@ export async function runSearchHealthCheck(
   const navigator =
     largest === null
       ? { ok: false, ms: 0, code: "no-book", at: new Date().toISOString() }
-      : await timeCall(
+      : await measure(
           (signal) => client.call("book_match_pages", { book_id: largest, q: COMMON_WORD, lim: 500 }, signal),
           timeoutMs,
+          busyPauseMs,
         );
 
   return { common, nowhere, navigator };
@@ -164,9 +200,9 @@ export function parseSearchHealth(value: unknown): SearchHealth | null {
   for (const name of SEARCH_HEALTH_NAMES) {
     const check = record[name];
     if (!check || typeof check !== "object") return null;
-    const { ok, ms, code, at } = check as Record<string, unknown>;
+    const { ok, ms, code, at, busy } = check as Record<string, unknown>;
     if (typeof ok !== "boolean" || typeof ms !== "number" || typeof at !== "string") return null;
-    checks[name] = { ok, ms, code: typeof code === "string" ? code : null, at };
+    checks[name] = { ok, ms, code: typeof code === "string" ? code : null, at, ...(busy === true ? { busy } : {}) };
   }
   return checks as SearchHealth;
 }
@@ -178,7 +214,7 @@ const LABELS: Record<SearchHealthName, string> = {
 };
 
 export type SearchHealthSummary = {
-  level: "ok" | "warning" | "unknown";
+  level: "ok" | "busy" | "warning" | "unknown";
   text: string;
 };
 
@@ -187,7 +223,9 @@ const stamp = (at: string) => `${at.slice(0, 16).replace("T", " ")} (UTC)`;
 /**
  * One line for /admin: calm when all three answered inside
  * SEARCH_HEALTH_SLOW_MS, a clearly marked warning naming what failed — and
- * when — otherwise.
+ * when — otherwise. "Busy" (every search slot in use, twice) is neither: its
+ * own quieter line, because the database turning searches away under load is
+ * the protection working, not search breaking.
  */
 export function summarizeSearchHealth(health: SearchHealth | null): SearchHealthSummary {
   if (!health) {
@@ -195,9 +233,18 @@ export function summarizeSearchHealth(health: SearchHealth | null): SearchHealth
   }
 
   const problems = SEARCH_HEALTH_NAMES.filter(
-    (name) => !health[name].ok || health[name].ms > SEARCH_HEALTH_SLOW_MS,
+    (name) => !health[name].busy && (!health[name].ok || health[name].ms > SEARCH_HEALTH_SLOW_MS),
   );
+  const busy = SEARCH_HEALTH_NAMES.filter((name) => health[name].busy);
   const latest = SEARCH_HEALTH_NAMES.map((name) => health[name].at).sort().at(-1) ?? "";
+
+  if (problems.length === 0 && busy.length > 0) {
+    const named = busy.map((name) => LABELS[name]).join("، ");
+    return {
+      level: "busy",
+      text: `ئىزدەش تەكشۈرۈشى: ${named} — ئىزدەۋاتقانلار كۆپ بولغاچقا ساندان «ئالدىراش» دېدى (ئىككى قېتىم سىنالدى). بۇ خاتالىق ئەمەس؛ ھەر كۈنى كۆرۈنسە، سايتقا كەلكۈن كېلىۋاتقان بولۇشى مۇمكىن — ${stamp(latest)}.`,
+    };
+  }
 
   if (problems.length === 0) {
     const timings = SEARCH_HEALTH_NAMES.map((name) => `${LABELS[name]} ${health[name].ms} ms`).join(" · ");

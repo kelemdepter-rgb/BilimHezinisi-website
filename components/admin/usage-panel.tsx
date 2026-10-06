@@ -45,6 +45,8 @@ function Gauge({ used, limit, level, label }: { used: number; limit: number; lev
 const SEARCH_HEALTH_STYLES = {
   ok: "text-ink3",
   unknown: "text-ink3",
+  // Searches turned away under load: worth noticing, not alarming.
+  busy: "rounded-[var(--radius)] bg-bg2 px-3.5 py-2.5 text-ink2",
   warning: "rounded-[var(--radius)] border border-am bg-ab2 px-3.5 py-2.5 text-ink",
 } as const;
 

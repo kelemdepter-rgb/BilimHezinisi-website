@@ -97,6 +97,31 @@ export const BOOK_DOWNLOAD_RULE: RateLimitRule = { limit: 20, windowMs: 10 * 60_
 export const NOTE_SOURCE_RULE: RateLimitRule = { limit: 90, windowMs: 10 * 60_000 };
 
 /**
+ * Searching the library: /search with a word, and the «show every place in
+ * this book» expander beneath its results (one shared bucket per address).
+ *
+ * THE MIDDLE LAYER OF THREE, and the weakest on purpose. On 2026-10-05 a load
+ * tool fired ~70 whole-library searches in a second and took the whole site
+ * down (PROMPT-40). What holds against that is, from the outside in:
+ *   1. the Vercel firewall's per-address rate limit on /search (dashboard,
+ *      docs/search-flood.md) — counted at the edge, across every instance;
+ *   2. this — counted per server INSTANCE, so a busy deployment with several
+ *      instances lets an address through several times over. It still costs
+ *      nothing, needs no network, and answers before the database is asked;
+ *   3. the database's own slots (migration 0028), the only layer that holds
+ *      against a flood spread over many addresses: a search that finds every
+ *      slot taken is refused in milliseconds.
+ *
+ * Sixty a minute, not thirty: the YouTube tutorial means whole groups — a
+ * classroom, a family, a mosque community — searching together behind ONE
+ * shared Wi-Fi address, and the firewall rule is raised to 60 a minute for
+ * exactly that reason once layer 3 is live. A tighter limit here would quietly
+ * undo that on whichever instance the group lands on. One person searching by
+ * hand makes a handful a minute; sixty is one a second, sustained.
+ */
+export const SEARCH_RULE: RateLimitRule = { limit: 60, windowMs: 60_000 };
+
+/**
  * The caller's address, from the proxy header Vercel sets. Falls back to a
  * single shared bucket, which is the safe direction: unknown callers share a
  * limit rather than escaping it.

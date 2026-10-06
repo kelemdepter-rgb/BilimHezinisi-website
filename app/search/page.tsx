@@ -5,7 +5,19 @@ import { CategoryScope } from "@/components/search/category-scope";
 import { SearchField } from "@/components/search/search-field";
 import { BookResults, type BookGroup } from "@/components/search/book-results";
 import { getCategories, getCategoryCounts } from "@/lib/data";
-import { runBookSearch, type SearchHit } from "@/lib/search/books";
+import { runBookSearch, type SearchHit, type SearchOutcome } from "@/lib/search/books";
+import { SEARCH_BUSY_TEXT } from "@/lib/search/busy";
+import { SEARCH_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
+
+/** What an address past SEARCH_RULE gets, without a database call. */
+const BUSY_OUTCOME: SearchOutcome = {
+  hits: [],
+  elapsedMs: 0,
+  failed: true,
+  failure: "busy",
+  moreAvailable: false,
+  tooCommon: false,
+};
 
 /**
  * Results arrive one page-hit per row. A book that mentions the word forty
@@ -31,14 +43,23 @@ function groupByBook(hits: SearchHit[]): BookGroup[] {
 /**
  * Result pages are thin and endless in number, so they stay out of the index
  * while their links are still followed — the books themselves are what should
- * rank. The search page itself remains indexable.
+ * rank. The search page itself, with no word, remains indexable.
+ *
+ * Every result page is also a database search, which is why robots.txt asks
+ * crawlers not to fetch `/search?` at all (app/robots.ts). Both only help with
+ * POLITE crawlers; a flood ignores them, and is met by the firewall, SEARCH_RULE
+ * and the database's slots instead (PROMPT-40).
  */
-export const metadata: Metadata = {
-  title: "ئىزدەش",
-  description: "«بىلىم خەزىنىسى» كۇتۇپخانىسىدىكى بارلىق كىتابلارنىڭ ئىچىدىن سۆز ۋە ئىبارە ئىزدەڭ.",
-  alternates: { canonical: "/search" },
-  robots: { index: true, follow: true },
-};
+export async function generateMetadata({ searchParams }: PageProps<"/search">): Promise<Metadata> {
+  const params = await searchParams;
+  const hasQuery = typeof params.q === "string" && params.q.trim() !== "";
+  return {
+    title: "ئىزدەش",
+    description: "«بىلىم خەزىنىسى» كۇتۇپخانىسىدىكى بارلىق كىتابلارنىڭ ئىچىدىن سۆز ۋە ئىبارە ئىزدەڭ.",
+    alternates: { canonical: "/search" },
+    robots: hasQuery ? { index: false, follow: true } : { index: true, follow: true },
+  };
+}
 
 const PAGE_SIZE = 20;
 /**
@@ -60,12 +81,17 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
 
   const [categories, categoryCounts] = await Promise.all([getCategories(), getCategoryCounts()]);
 
-  const { hits, elapsedMs, failed, failure, moreAvailable, tooCommon } = await runBookSearch({
-    query,
-    categoryId: categoryId && Number.isFinite(categoryId) ? categoryId : null,
-    limit: PAGE_SIZE,
-    offset,
-  });
+  // An address past its allowance is told "busy" — the same calm answer the
+  // database gives when its slots are full — without the database being asked.
+  const limited = query !== "" && isRateLimited(`search:${await callerKey()}`, SEARCH_RULE);
+  const { hits, elapsedMs, failed, failure, moreAvailable, tooCommon } = limited
+    ? BUSY_OUTCOME
+    : await runBookSearch({
+        query,
+        categoryId: categoryId && Number.isFinite(categoryId) ? categoryId : null,
+        limit: PAGE_SIZE,
+        offset,
+      });
 
   const linkParams = (next: Record<string, string | null>) => {
     const search = new URLSearchParams();
@@ -130,6 +156,27 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
         <p className="paper mt-5 p-6 text-center text-[13.5px] text-ink2" data-testid="search-idle">
           ئىزدەش ئۈچۈن يۇقىرىدىكى رامكىغا سۆز كىرگۈزۈڭ.
         </p>
+      ) : failure === "busy" ? (
+        /* Too many searches at once (the database's slots, or this address's
+           allowance). Not a crash, so it does not look like one: a calm note
+           and a way to ask again — the same word, scope and page. */
+        <div
+          role="status"
+          className="paper mt-5 p-5 text-center sm:p-6"
+          data-testid="search-busy"
+        >
+          <Icon name="info" className="ic-lg mx-auto text-am" />
+          <p className="mx-auto mt-3 max-w-md text-[14px] leading-7 text-ink2">{SEARCH_BUSY_TEXT}</p>
+          <Link
+            href={`/search?${linkParams({ p: pageNo > 1 ? String(pageNo) : null })}`}
+            prefetch={false}
+            className="btn-am mt-4"
+            data-testid="search-busy-retry"
+          >
+            <Icon name="redo" />
+            قايتا سىناش
+          </Link>
+        </div>
       ) : failed ? (
         /* A timeout is the one failure a reader can do something about, so it
            says what: a narrower scope or a second word. Anything else keeps

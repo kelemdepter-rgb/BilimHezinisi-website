@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runBookSearch, type SearchHit } from "@/lib/search/books";
 import { runQuranSearch } from "@/lib/quran/data";
 import { findOccurrences } from "@/lib/search/occurrences";
+import { SEARCH_BUSY_TEXT } from "@/lib/search/busy";
 import { stripMarkdown } from "@/lib/books/strip-markdown";
 import { NOTE_SOURCE_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
 import { reportServerError } from "@/lib/server-log";
@@ -30,6 +31,8 @@ const MSG = {
   needsAccount: "خاتىرە يېزىش ئۈچۈن ھېساباتقا كىرىڭ.",
   tooFast: "بەك كۆپ ئىزدىدىڭىز. بىر ئاز ساقلاپ قايتا سىناڭ.",
   failed: "ئىزدەش مەغلۇپ بولدى. سەل تۇرۇپ قايتا سىناڭ.",
+  /** Every search slot in use (migration 0028) — nobody's fault, and brief. */
+  busy: SEARCH_BUSY_TEXT,
 } as const;
 
 export type NoteSourceHit = {
@@ -91,6 +94,7 @@ export async function searchLibraryForNoteAction(input: {
       limit: RESULT_LIMIT,
       offset: 0,
     });
+    if (outcome.failure === "busy") return { ok: false, error: MSG.busy };
     if (outcome.failed) return { ok: false, error: MSG.failed };
 
     return {
@@ -185,6 +189,7 @@ export async function searchQuranForNoteAction(input: { query: string }): Promis
     if (!query) return { ok: true, hits: [] };
 
     const outcome = await runQuranSearch({ query, limit: RESULT_LIMIT, offset: 0 });
+    if (outcome.busy) return { ok: false, error: MSG.busy };
     if (outcome.failed) return { ok: false, error: MSG.failed };
     return { ok: true, hits: outcome.hits };
   } catch (error) {

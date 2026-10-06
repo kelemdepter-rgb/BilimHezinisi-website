@@ -6,6 +6,7 @@ import { Icon } from "@/components/icons";
 import { Snippet } from "@/components/search/snippet";
 import { listBookMatchesAction, type BookMatchList } from "@/app/search-actions";
 import { MATCH_CLASS } from "@/lib/search/occurrences";
+import { SEARCH_BUSY_TEXT } from "@/lib/search/busy";
 import type { SearchHit } from "@/lib/search/books";
 
 export type BookGroup = {
@@ -72,6 +73,9 @@ function readerHref(bookId: number, pageNo: number, term: string, matchIndex = 0
 
 function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
   const [expanded, setExpanded] = useState<BookMatchList | null>(null);
+  // Every search slot was in use. The list stays closed, so the same button
+  // is the way to ask again.
+  const [busy, setBusy] = useState(false);
   const [pending, startTransition] = useTransition();
 
   function expand() {
@@ -79,8 +83,11 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
       setExpanded(null);
       return;
     }
+    setBusy(false);
     startTransition(async () => {
-      setExpanded(await listBookMatchesAction({ bookId: group.bookId, query: term }));
+      const list = await listBookMatchesAction({ bookId: group.bookId, query: term });
+      if (list.busy) setBusy(true);
+      else setExpanded(list);
     });
   }
 
@@ -151,6 +158,12 @@ function BookGroupRow({ group, term }: { group: BookGroup; term: string }) {
               ? "يىغىش"
               : "بۇ كىتابتىكى بارلىق ئورۇنلارنى كۆرۈش"}
         </button>
+      )}
+
+      {busy && !pending && (
+        <p role="status" className="mt-2 text-[12.5px] leading-6 text-ink3" data-testid="expand-busy">
+          {SEARCH_BUSY_TEXT}
+        </p>
       )}
 
       {expanded?.failed && (

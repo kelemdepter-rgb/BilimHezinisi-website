@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { QURAN_TAG, cachedClient } from "@/lib/cache";
+import { isSearchBusy } from "@/lib/search/busy";
 import type { Aya, QuranHit, Sura } from "@/lib/quran/types";
 
 const SURA_COLUMNS = "number, name_ar, name_ug, name_translit, revelation, aya_count";
@@ -68,6 +69,8 @@ export type QuranSearchOutcome = {
   hits: QuranHit[];
   elapsedMs: number;
   failed: boolean;
+  /** Every Qur'an search slot was in use (migration 0028); `failed` is true too. */
+  busy: boolean;
   moreAvailable: boolean;
 };
 
@@ -86,7 +89,13 @@ export async function runQuranSearch(input: {
   limit: number;
   offset: number;
 }): Promise<QuranSearchOutcome> {
-  const empty: QuranSearchOutcome = { hits: [], elapsedMs: 0, failed: false, moreAvailable: false };
+  const empty: QuranSearchOutcome = {
+    hits: [],
+    elapsedMs: 0,
+    failed: false,
+    busy: false,
+    moreAvailable: false,
+  };
   if (!input.query) return empty;
 
   const supabase = await createSupabaseServerClient();
@@ -102,12 +111,16 @@ export async function runQuranSearch(input: {
     off: offset,
   });
   const elapsedMs = Date.now() - started;
+  const busy = isSearchBusy(error);
+  // The scope and nothing else — never the words (PROMPT-29).
+  if (busy) console.warn("[bh] search_quran busy");
 
   const rows = (data as QuranHit[] | null) ?? [];
   return {
     hits: rows.slice(0, limit),
     elapsedMs,
     failed: Boolean(error),
+    busy,
     moreAvailable: rows.length > limit,
   };
 }

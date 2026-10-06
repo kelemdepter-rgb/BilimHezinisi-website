@@ -2,6 +2,8 @@
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { findOccurrences } from "@/lib/search/occurrences";
+import { isSearchBusy } from "@/lib/search/busy";
+import { SEARCH_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
 import {
   MATCH_PAGE_LIMIT,
   batches,
@@ -34,6 +36,11 @@ export type BookMatchList = {
   /** True when the book holds more than the list: the list is the first slice. */
   truncated: boolean;
   failed: boolean;
+  /**
+   * Every search slot was in use (migration 0028), or this address is past
+   * SEARCH_RULE. Not a failure — the same request in a few seconds answers.
+   */
+  busy: boolean;
 };
 
 /** The desktop's own ceiling for this list, and its context width. */
@@ -78,10 +85,15 @@ export async function listBookMatchesAction(input: {
     capped: false,
     truncated: false,
     failed: false,
+    busy: false,
   };
   const term = input.query.trim().slice(0, 200);
   const bookId = Math.floor(Number(input.bookId));
   if (!term || !Number.isInteger(bookId) || bookId <= 0) return empty;
+
+  // The same per-address allowance as /search itself, in the same bucket:
+  // this is a search too, and it is posted to the results page.
+  if (isRateLimited(`search:${await callerKey()}`, SEARCH_RULE)) return { ...empty, busy: true };
 
   const supabase = await createSupabaseServerClient();
   if (!supabase) return empty;
@@ -91,6 +103,10 @@ export async function listBookMatchesAction(input: {
     q: term,
     lim: MATCH_PAGE_LIMIT,
   });
+  if (error && isSearchBusy(error)) {
+    console.warn("[bh] book_match_pages busy (expander)");
+    return { ...empty, busy: true };
+  }
   if (error) return { ...empty, failed: true };
 
   const pages = ((found as MatchPage[] | null) ?? []).filter((page) => page.hits > 0);
@@ -133,5 +149,6 @@ export async function listBookMatchesAction(input: {
     capped,
     truncated: listFallsShort(total, matches.length, capped),
     failed: false,
+    busy: false,
   };
 }

@@ -5,8 +5,19 @@ import { SearchField } from "@/components/search/search-field";
 import { AyaText } from "@/components/quran/aya-text";
 import { QuranSourceNote } from "@/components/quran/source-note";
 import { SuraList } from "@/components/quran/sura-list";
-import { getSuras, runQuranSearch } from "@/lib/quran/data";
+import { getSuras, runQuranSearch, type QuranSearchOutcome } from "@/lib/quran/data";
 import { toArabicNumerals } from "@/lib/quran/format";
+import { SEARCH_BUSY_TEXT } from "@/lib/search/busy";
+import { SEARCH_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
+
+/** What an address past SEARCH_RULE gets, without a database call. */
+const BUSY_OUTCOME: QuranSearchOutcome = {
+  hits: [],
+  elapsedMs: 0,
+  failed: true,
+  busy: true,
+  moreAvailable: false,
+};
 
 export const metadata: Metadata = {
   title: "قۇرئان كەرىم",
@@ -30,9 +41,14 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
   const query = typeof params.q === "string" ? params.q.trim().slice(0, MAX_QUERY_CHARS) : "";
   const pageNo = Math.min(MAX_PAGE, Math.max(1, Number(params.p ?? 1) || 1));
 
+  // The library search's allowance, in a bucket of its own: an address past it
+  // is told "busy" without the database being asked (PROMPT-40).
+  const limited = query !== "" && isRateLimited(`quran-search:${await callerKey()}`, SEARCH_RULE);
   const [suras, search] = await Promise.all([
     getSuras(),
-    runQuranSearch({ query, limit: PAGE_SIZE, offset: (pageNo - 1) * PAGE_SIZE }),
+    limited
+      ? Promise.resolve(BUSY_OUTCOME)
+      : runQuranSearch({ query, limit: PAGE_SIZE, offset: (pageNo - 1) * PAGE_SIZE }),
   ]);
 
   const pageHref = (next: number) =>
@@ -76,7 +92,23 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
             ئىزدەش نەتىجىسى
           </h2>
 
-          {search.failed ? (
+          {search.busy ? (
+            /* Every Qur'an search slot in use, or this address past its
+               allowance: a calm note and the same search again. */
+            <div role="status" className="paper mt-3 p-5 text-center sm:p-6" data-testid="quran-search-busy">
+              <Icon name="info" className="ic-lg mx-auto text-am" />
+              <p className="mx-auto mt-3 max-w-md text-[14px] leading-7 text-ink2">{SEARCH_BUSY_TEXT}</p>
+              <Link
+                href={pageHref(pageNo)}
+                prefetch={false}
+                className="btn-am mt-4"
+                data-testid="quran-search-busy-retry"
+              >
+                <Icon name="redo" />
+                قايتا سىناش
+              </Link>
+            </div>
+          ) : search.failed ? (
             <p role="alert" className="mt-3 rounded-[var(--radius)] border border-bd2 bg-ab2 px-3.5 py-3 text-[13px]">
               ئىزدەشتە خاتالىق كۆرۈلدى. سەل تۇرۇپ قايتا سىناڭ.
             </p>

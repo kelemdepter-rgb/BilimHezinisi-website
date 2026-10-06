@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { reportServerError } from "@/lib/server-log";
+import { isSearchBusy } from "@/lib/search/busy";
 
 export type SearchHit = {
   book_id: number;
@@ -17,8 +18,10 @@ export type SearchHit = {
  * Why a search failed, when it did. A timeout is the database giving up at
  * the statement timeout of the caller's role (3 s for an anonymous visitor)
  * — the failure a reader can do something about, by narrowing the search.
+ * Busy is every search slot being in use (migration 0028, lib/search/busy.ts):
+ * nothing is wrong, and the same search a few seconds later will answer.
  */
-export type SearchFailure = "timeout" | "error" | null;
+export type SearchFailure = "timeout" | "busy" | "error" | null;
 
 export type SearchOutcome = {
   hits: SearchHit[];
@@ -83,8 +86,14 @@ export async function runBookSearch(input: {
   });
   const elapsedMs = Date.now() - started;
 
+  const scope = input.categoryId === null ? "whole library" : "one category";
   let failure: SearchFailure = null;
-  if (error) {
+  if (error && isSearchBusy(error)) {
+    // Expected under load, and refused in milliseconds: the scope and nothing
+    // else — not the words, not the time, not who asked.
+    failure = "busy";
+    console.warn(`[bh] search_books busy (${scope})`);
+  } else if (error) {
     failure = error.code === STATEMENT_TIMEOUT ? "timeout" : "error";
     // The code, the time and the scope — never the words. What a reader types
     // is not inspected or logged anywhere on this site (PROMPT-29), and the
@@ -92,7 +101,7 @@ export async function runBookSearch(input: {
     // it is left out too. This line is what a whole-library search failing
     // for every visitor (2026-09-11) was missing.
     reportServerError(
-      `search_books ${failure} after ${elapsedMs} ms (${input.categoryId === null ? "whole library" : "one category"})`,
+      `search_books ${failure} after ${elapsedMs} ms (${scope})`,
       { code: error.code, message: failure === "timeout" ? "statement timeout" : "rpc error" },
     );
   }

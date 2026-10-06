@@ -2,6 +2,8 @@ import "server-only";
 import { updateTag } from "next/cache";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { hasSupabaseEnv } from "@/lib/env";
+import { reportServerError } from "@/lib/server-log";
+import { SERVER_FETCH_TIMEOUT_MS, fetchWithTimeout } from "@/lib/supabase/timeouts";
 
 /**
  * What may be cached here, and what may never be.
@@ -54,7 +56,12 @@ export function cachedClient(): SupabaseClient | null {
   anonClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } },
+    {
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      // Every page's shared reads go through here; a stall must cost seconds
+      // (lib/supabase/timeouts.ts, PROMPT-40).
+      global: { fetch: fetchWithTimeout({ timeoutMs: SERVER_FETCH_TIMEOUT_MS }) },
+    },
   );
   return anonClient;
 }
@@ -71,6 +78,37 @@ export function cachedClient(): SupabaseClient | null {
  * then look unchanged.
  */
 export const CACHE_SECONDS = 300;
+
+/**
+ * The database did not answer a read the page cannot do without.
+ *
+ * Thrown — never turned into an empty list — for two reasons (PROMPT-40):
+ *
+ *   1. Inside `unstable_cache`, a RETURNED value is stored and handed to
+ *      everyone for the entry's lifetime: one failed read during a stall used
+ *      to become five minutes of an empty sidebar, a "book not found" for a
+ *      book that exists, or — the Qur'an's sura list is kept for a month — an
+ *      empty Qur'an. A THROWN error is not stored, and an entry being
+ *      refreshed in the background keeps its last good value.
+ *   2. The reader sees app/error.tsx — «the library is not answering, try
+ *      again» — within seconds, instead of a page that silently says the
+ *      library is empty.
+ *
+ * The message is fixed: a Postgres error can quote what it was given.
+ */
+export class LibraryUnavailableError extends Error {
+  constructor(where: string) {
+    super(`library unavailable: ${where}`);
+    this.name = "LibraryUnavailableError";
+  }
+}
+
+/** Throw LibraryUnavailableError when a read failed; log the code, not the data. */
+export function throwIfUnavailable(where: string, error: { code?: string } | null | undefined): void {
+  if (!error) return;
+  reportServerError(`${where} failed`, { code: error.code || "?", message: "database did not answer" });
+  throw new LibraryUnavailableError(where);
+}
 
 /**
  * Drop the shared cache after a write.

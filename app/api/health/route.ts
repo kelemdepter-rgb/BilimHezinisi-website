@@ -13,10 +13,15 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /**
  * The search self-check below makes three calls of up to 10 s each after the
- * ping; a 10 s function limit would cut the route off before it could record
- * them. Hobby allows up to 60 s.
+ * ping, and a call answered "busy" (every search slot in use, migration 0028)
+ * gets one more try after a 2 s pause: 3 × (10 + 2 + 10) s at the very worst,
+ * which no real morning comes near — a busy answer takes milliseconds, and
+ * the measured calls take well under 2 s. Every other database call here is
+ * bounded by the admin client's own 10 s timeout (lib/supabase/timeouts.ts).
+ * A minute keeps all of that with room to spare, and is still a fifth of the
+ * 300 s a hung request was allowed before (PROMPT-40).
  */
-export const maxDuration = 45;
+export const maxDuration = 60;
 
 /**
  * Keep-alive endpoint.

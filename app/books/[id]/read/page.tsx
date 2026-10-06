@@ -7,6 +7,7 @@ import { coverUrlFor, getBookDetail, getReadingProgress } from "@/lib/library";
 import { bookJsonLd, jsonLd } from "@/lib/seo";
 import { clampPosition, initialPageWindow } from "@/lib/reader/position";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { throwIfUnavailable } from "@/lib/cache";
 import { THEME_COOKIE, isTheme } from "@/lib/theme";
 import type { BookPage } from "@/lib/reader/pages";
 
@@ -92,13 +93,16 @@ export default async function ReadPage({ params, searchParams }: PageProps<"/boo
 
   let initialPages: BookPage[] = [];
   if (supabase) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("book_pages")
       .select("page_no, content")
       .eq("book_id", bookId)
       .gte("page_no", window_.from)
       .lte("page_no", window_.to)
       .order("page_no", { ascending: true });
+    // An empty reader is not what a stalled database looks like to a reader:
+    // app/error.tsx says so, and offers to try again (PROMPT-40).
+    throwIfUnavailable("reader-pages", error);
     initialPages = (data as BookPage[] | null) ?? [];
   }
 

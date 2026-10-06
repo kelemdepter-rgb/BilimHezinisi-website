@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { BOOKS_TAG, CACHE_SECONDS, cachedClient } from "@/lib/cache";
+import { BOOKS_TAG, CACHE_SECONDS, cachedClient, throwIfUnavailable } from "@/lib/cache";
 import { getCategories } from "@/lib/data";
 import { getPublicUrl } from "@/lib/storage";
 import {
@@ -74,7 +74,10 @@ const loadBooks = async (options: {
 
   if (options.categoryIds) request = request.in("category_id", options.categoryIds);
 
-  const { data, count } = await request;
+  // A shelf that failed to load is not an empty library: the reader is told
+  // the library is not answering (app/error.tsx), not that it has no books.
+  const { data, count, error } = await request;
+  throwIfUnavailable("books", error);
   return { books: (data as LibraryBook[] | null) ?? [], total: count ?? 0 };
 };
 
@@ -158,11 +161,14 @@ export const publishedBookExists = unstable_cache(
   async (bookId: number): Promise<boolean> => {
     const supabase = cachedClient();
     if (!supabase) return false;
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("books")
       .select("id", { count: "exact", head: true })
       .eq("id", bookId)
       .eq("status", "published");
+    // A failed lookup is not "no such book": answering false would 404 a
+    // real book, and keep that 404 in the shared cache for five minutes.
+    throwIfUnavailable("book-exists", error);
     return (count ?? 0) > 0;
   },
   ["book-exists"],
@@ -181,13 +187,16 @@ export const publishedBookExists = unstable_cache(
 export const getBookDetail = cache(async (bookId: number): Promise<BookDetail | null> => {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("books")
     .select(
       "id, title, author, category_id, page_count, date, cover_path, status, description, language, format, content_format, original_file_path, created_at",
     )
     .eq("id", bookId)
     .maybeSingle();
+  // null means "no such book" and becomes a 404; a database that did not
+  // answer is something else, and must not be shown as one (lib/cache.ts).
+  throwIfUnavailable("book-detail", error);
   return (data as BookDetail | null) ?? null;
 });
 

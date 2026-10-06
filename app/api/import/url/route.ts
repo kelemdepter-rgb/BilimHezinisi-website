@@ -10,6 +10,13 @@ import { reportServerError } from "@/lib/server-log";
 /** Readability needs a DOM. */
 export const runtime = "nodejs";
 
+/**
+ * Route handlers do not inherit the root layout's ceiling, so each one names
+ * its own: 30 s, against Vercel's default 300 (PROMPT-40). Every Supabase call
+ * in here gives up within 10 s on its own (lib/supabase/timeouts.ts).
+ */
+export const maxDuration = 30;
+
 /** Only small article pages — this route must never become a file pipeline. */
 const MAX_HTML_BYTES = 2 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 20_000;

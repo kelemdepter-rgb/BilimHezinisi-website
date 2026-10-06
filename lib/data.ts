@@ -1,9 +1,10 @@
 import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { BOOKS_TAG, CACHE_SECONDS, CATEGORIES_TAG, cachedClient } from "@/lib/cache";
+import { BOOKS_TAG, CACHE_SECONDS, CATEGORIES_TAG, cachedClient, throwIfUnavailable } from "@/lib/cache";
 import { rollUpCategoryCounts } from "@/lib/library-types";
 import { timed } from "@/lib/perf/timing";
+import { SESSION_DEADLINE_MS, withDeadline } from "@/lib/supabase/timeouts";
 import type { Category, Role, SessionInfo } from "@/lib/types";
 
 /**
@@ -23,8 +24,12 @@ import type { Category, Role, SessionInfo } from "@/lib/types";
 export const getSessionInfo = cache(async (): Promise<SessionInfo | null> => {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
+  // auth-js retries a failed token refresh for up to 30 s; the page will not
+  // wait that long to learn who is reading. Past SESSION_DEADLINE_MS it
+  // renders for an anonymous visitor — reading needs no account — and every
+  // permission check elsewhere asks again for itself and fails closed.
   const { data: verified } = await timed("layout.auth.getClaims", () =>
-    supabase.auth.getClaims(),
+    withDeadline(supabase.auth.getClaims(), SESSION_DEADLINE_MS, { data: null }),
   );
   const userId = typeof verified?.claims?.sub === "string" ? verified.claims.sub : null;
   if (!userId) return null;
@@ -54,11 +59,12 @@ const loadCategories = unstable_cache(
   async (): Promise<Category[]> => {
     const supabase = cachedClient();
     if (!supabase) return [];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("categories")
       .select("id, parent_id, name, icon, sort_order")
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true });
+    throwIfUnavailable("categories", error);
     return (data as Category[] | null) ?? [];
   },
   ["categories-tree"],
@@ -102,7 +108,8 @@ const loadDirectBookCounts = unstable_cache(
   async (): Promise<Record<number, number>> => {
     const supabase = cachedClient();
     if (!supabase) return {};
-    const { data } = await supabase.from("books").select("category_id").eq("status", "published");
+    const { data, error } = await supabase.from("books").select("category_id").eq("status", "published");
+    throwIfUnavailable("category-counts", error);
     const direct: Record<number, number> = {};
     for (const row of (data as { category_id: number | null }[] | null) ?? []) {
       if (row.category_id == null) continue;

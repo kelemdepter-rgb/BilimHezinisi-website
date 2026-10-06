@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { BROWSER_FETCH_TIMEOUT_MS, fetchWithTimeout } from "@/lib/supabase/timeouts";
 
 /**
  * A browser Supabase client that carries the public anon key and nothing else.
@@ -46,6 +47,9 @@ export function createSupabasePublicClient(): SupabaseClient {
         detectSessionInUrl: false,
         storageKey: "bh-public-no-session",
       },
+      // A reader's page turn gives up rather than spinning for ever
+      // (lib/supabase/timeouts.ts, PROMPT-40).
+      global: { fetch: fetchWithTimeout({ timeoutMs: BROWSER_FETCH_TIMEOUT_MS }) },
     },
   );
   return client;

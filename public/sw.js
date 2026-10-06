@@ -44,6 +44,21 @@ const DEV = new URL(self.location.href).searchParams.get("dev") === "1";
 const CACHEABLE_HEADER = "x-bilim-cacheable";
 const STAMP_HEADER = "x-bh-cached-at";
 
+/**
+ * KEEP IN STEP: lib/pwa/constants.ts (FAILED_RENDER_SOURCE).
+ *
+ * A page that FAILED on the server can still arrive as a 200 (PROMPT-40).
+ * Once a route's loading skeleton has streamed, the status line has gone out,
+ * and a database that then does not answer ends the stream with React's
+ * "render this part in the browser" instruction — `$RX("B:0","<digest>")`,
+ * which shows app/error.tsx — or, from older React, a `data-dgst` template.
+ * Our own error pages carry `data-bh-error-page`. Kept as the offline copy,
+ * such a page would replace a good book page with "the library is not
+ * answering" for as long as the reader is offline; so a document matching
+ * this is served as it is and never stored, and the last good copy stays.
+ */
+const FAILED_RENDER = /\$RX\(|data-dgst=|data-bh-error-page/;
+
 /** The one face the first paint needs; the rest load lazily from their CSS. */
 const SHELL_ASSETS = ["/fonts/ukijekran.woff2"];
 
@@ -258,7 +273,7 @@ async function handleDocument(event, request, url) {
   try {
     const response = await fetch(request);
     if (isKeepableDocument(response, url)) {
-      event.waitUntil(put(DOCS, key, response.clone()));
+      event.waitUntil(keepDocument(key, response.clone()));
     } else if (response.ok && !response.redirected && isReaderUrl(url)) {
       event.waitUntil(cachePublicCopy(key));
     }
@@ -300,9 +315,29 @@ async function cachePublicCopy(key) {
   if (await caches.match(key, { cacheName: DOCS })) return;
   try {
     const response = await fetch(key, { credentials: "omit", headers: { Accept: "text/html" } });
-    if (isKeepableDocument(response, new URL(key))) await put(DOCS, key, response);
+    if (isKeepableDocument(response, new URL(key))) await keepDocument(key, response);
   } catch {
     // Nothing to keep. The reader still has the live page in front of them.
+  }
+}
+
+/**
+ * Store a document for offline reading — unless it is a page that failed on
+ * the server (FAILED_RENDER above), in which case the copy already stored, if
+ * any, is left exactly as it was. Reads the whole body, which the cache would
+ * have had to read anyway.
+ */
+async function keepDocument(key, response) {
+  try {
+    const body = await response.text();
+    if (FAILED_RENDER.test(body)) return;
+    await put(
+      DOCS,
+      key,
+      new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers }),
+    );
+  } catch {
+    // Unreadable: keep nothing rather than something partial.
   }
 }
 

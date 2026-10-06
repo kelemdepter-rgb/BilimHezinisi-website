@@ -1,4 +1,9 @@
 import { createBrowserClient } from "@supabase/ssr";
+import {
+  BROWSER_FETCH_TIMEOUT_MS,
+  BROWSER_UPLOAD_TIMEOUT_MS,
+  fetchWithTimeout,
+} from "@/lib/supabase/timeouts";
 
 /**
  * Browser Supabase client (anon key + the signed-in session).
@@ -28,11 +33,20 @@ import { createBrowserClient } from "@supabase/ssr";
  */
 let client: ReturnType<typeof createBrowserClient> | null = null;
 
+/**
+ * BROWSER_FETCH_TIMEOUT_MS for everything, except a file on its way to or from
+ * Storage — a cover or a kept original over a phone's uplink — which gets
+ * BROWSER_UPLOAD_TIMEOUT_MS (lib/supabase/timeouts.ts, PROMPT-40).
+ */
+const timeoutFor = (url: string) =>
+  url.includes("/storage/v1/") ? BROWSER_UPLOAD_TIMEOUT_MS : BROWSER_FETCH_TIMEOUT_MS;
+
 export function createSupabaseBrowserClient() {
   if (client) return client;
   client = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { global: { fetch: fetchWithTimeout({ timeoutMs: timeoutFor }) } },
   );
   return client;
 }

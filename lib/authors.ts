@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { BOOKS_TAG, CACHE_SECONDS, cachedClient } from "@/lib/cache";
+import { BOOKS_TAG, CACHE_SECONDS, cachedClient, throwIfUnavailable } from "@/lib/cache";
 import type { LibraryBook } from "@/lib/library-types";
 
 /**
@@ -52,7 +52,8 @@ export const listAuthors = unstable_cache(
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
 
     const { data, error } = await supabase.rpc("list_authors", { lim: limit, off: offset });
-    if (error || !data) return { authors: [], total: 0 };
+    throwIfUnavailable("authors-list", error);
+    if (!data) return { authors: [], total: 0 };
 
     const rows = data as AuthorRow[];
     return {
@@ -73,7 +74,8 @@ export const authorStats = unstable_cache(
     const supabase = cachedClient();
     if (!supabase) return { authors: 0, unattributed: 0 };
     const { data, error } = await supabase.rpc("author_stats");
-    if (error || !data) return { authors: 0, unattributed: 0 };
+    throwIfUnavailable("author-stats", error);
+    if (!data) return { authors: 0, unattributed: 0 };
     const row = (data as { authors: number; unattributed: number }[])[0];
     return {
       authors: Number(row?.authors) || 0,
@@ -100,11 +102,13 @@ export const authorHasBooks = unstable_cache(
   async (key: string): Promise<boolean> => {
     const supabase = cachedClient();
     if (!supabase || !key) return false;
-    const { count } = await supabase
+    const { count, error } = await supabase
       .from("books")
       .select("id", { count: "exact", head: true })
       .eq("status", "published")
       .eq("author_key", key);
+    // Not "no such author" when the database did not answer (see lib/cache.ts).
+    throwIfUnavailable("author-exists", error);
     return (count ?? 0) > 0;
   },
   ["author-exists"],

@@ -60,6 +60,22 @@ export const metadata: Metadata = {
   },
 };
 
+/**
+ * The longest any page — and any Server Action posted to it — may run.
+ *
+ * Next 16 resolves this per route from the root layout down, the deepest
+ * segment winning (build/get-static-info-including-layouts), so it is set
+ * here once for every page. Vercel's default on this plan is 300 s, and on
+ * 2026-10-05 a stalled database let every page use all of it (PROMPT-40).
+ * Every Supabase call now gives up within 10 s on its own
+ * (lib/supabase/timeouts.ts) and the slowest legitimate page or action
+ * measured takes a few seconds — a 500-row write, a whole-library search, a
+ * sign-up that sends mail — so 30 s is a backstop that should never be hit,
+ * not a budget anything is expected to use. Route handlers do not inherit it
+ * and carry their own.
+ */
+export const maxDuration = 30;
+
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

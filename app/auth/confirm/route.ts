@@ -2,6 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+/**
+ * Route handlers do not inherit the root layout's ceiling, so each one names
+ * its own: 30 s, against Vercel's default 300 (PROMPT-40). Every Supabase call
+ * in here gives up within 10 s on its own (lib/supabase/timeouts.ts).
+ */
+export const maxDuration = 30;
+
 /** Email OTP verification target (confirmation / recovery links). */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);

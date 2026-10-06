@@ -11,6 +11,12 @@ import { absoluteUrl } from "@/lib/seo";
  */
 export const revalidate = 3600;
 
+/**
+ * A metadata route is a route handler and does not inherit the root layout's
+ * ceiling, so it names its own: 30 s, against Vercel's default 300 (PROMPT-40).
+ */
+export const maxDuration = 30;
+
 /** 114 suras, always. */
 const SURA_COUNT = 114;
 

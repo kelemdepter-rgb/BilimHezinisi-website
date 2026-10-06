@@ -38,3 +38,12 @@ export const OFFLINE_URL = "/offline";
  * signed-in reader.
  */
 export const CACHEABLE_HEADER = "x-bilim-cacheable";
+
+/**
+ * The worker's FAILED_RENDER pattern, as source: a document matching it
+ * failed on the server — even with a 200, once its loading skeleton had
+ * streamed (PROMPT-40) — and is never stored as an offline copy.
+ * `$RX(` is React's instruction to render an errored part in the browser,
+ * `data-dgst=` its older form, `data-bh-error-page` our own error pages.
+ */
+export const FAILED_RENDER_SOURCE = String.raw`\$RX\(|data-dgst=|data-bh-error-page`;

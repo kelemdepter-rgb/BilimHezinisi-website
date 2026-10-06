@@ -1,6 +1,6 @@
 import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { QURAN_TAG, cachedClient } from "@/lib/cache";
+import { QURAN_TAG, cachedClient, throwIfUnavailable } from "@/lib/cache";
 import { isSearchBusy } from "@/lib/search/busy";
 import type { Aya, QuranHit, Sura } from "@/lib/quran/types";
 
@@ -23,10 +23,13 @@ export const getSuras = unstable_cache(
   async (): Promise<Sura[]> => {
     const supabase = cachedClient();
     if (!supabase) return [];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("quran_suras")
       .select(SURA_COLUMNS)
       .order("number", { ascending: true });
+    // Kept for a month: an empty list cached from one failed read would be a
+    // month without a Qur'an index. Throwing stores nothing (lib/cache.ts).
+    throwIfUnavailable("quran-suras", error);
     return (data as Sura[] | null) ?? [];
   },
   ["quran-suras"],
@@ -38,11 +41,12 @@ export const getAyas = unstable_cache(
   async (suraNumber: number): Promise<Aya[]> => {
     const supabase = cachedClient();
     if (!supabase) return [];
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("quran_ayas")
       .select("sura, aya, text_ar, text_ug")
       .eq("sura", suraNumber)
       .order("aya", { ascending: true });
+    throwIfUnavailable("quran-ayas", error);
     return (data as Aya[] | null) ?? [];
   },
   ["quran-ayas"],

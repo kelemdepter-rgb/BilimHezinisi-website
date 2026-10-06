@@ -4,6 +4,13 @@ import { SITE_DESCRIPTION, SITE_NAME, absoluteUrl } from "@/lib/seo";
 export const runtime = "nodejs";
 
 /**
+ * Route handlers do not inherit the root layout's ceiling, so each one names
+ * its own: 30 s, against Vercel's default 300 (PROMPT-40). Every Supabase call
+ * in here gives up within 10 s on its own (lib/supabase/timeouts.ts).
+ */
+export const maxDuration = 30;
+
+/**
  * How many books the feed carries. A feed is a "what is new" list, not an
  * archive — /new is the archive — and every extra entry is bytes every reader
  * downloads on every poll.

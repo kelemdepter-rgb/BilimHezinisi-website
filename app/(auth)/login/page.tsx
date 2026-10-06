@@ -185,14 +185,14 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             data-testid="forgot-password-link"
             className="font-semibold text-am underline"
           >
-            پارولنى ئۇنتۇدىڭىزمۇ؟
+            پارولنى ئۇنتۇپ قالدىم.
           </Link>
         </p>
 
         <p className="mt-3 text-[13px] text-ink2">
-          ھېساباتىڭىز يوقمۇ؟{" "}
+          تېخى تىزىملاتمىغانمۇ؟{" "}
           <Link href="/register" className="font-semibold text-am underline">
-            تىزىمدىن ئۆتۈڭ
+            تىزىملىتىپ كىرىڭ.
           </Link>
         </p>
       </div>

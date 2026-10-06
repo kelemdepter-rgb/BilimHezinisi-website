@@ -42,6 +42,9 @@ redeploy.
 Created and published by the owner on **2026-10-05 22:52** (Istanbul).
 Checked again on **2026-10-06**: 35 sequential `GET /search` (no word, so no
 database work) answered 200 × 30, then 429 from the 31st.
+**Raised to 60 on 2026-10-06**, after migration 0028 was applied and confirmed
+in the live database (the owner's read-only check: all four `true`): 61
+sequential `GET /search` with no word answered 200 × 60, then 429.
 
 | Field | Value |
 |---|---|
@@ -50,16 +53,15 @@ database work) answered 200 × 30, then 429 from the 31st.
 | Then | **Rate Limit** |
 | Algorithm | **Fixed Window** (the only one on Hobby) |
 | Time Window | **60** seconds |
-| Request Limit | **30** — to be raised to **60** (below) |
+| Request Limit | **60** (30 from 2026-10-05 until 0028 was live) |
 | Key | **IP Address** only (the default «1 Keys: IP Address») |
 | Action | **Too Many Requests (429)** — «Default (429)» |
 
-Raising it to 60 is planned once migration 0028 is live and verified: the
-YouTube tutorial means groups — a classroom, a family, a mosque community —
-searching together behind one Wi-Fi address, and with the database's own
-slots in place the per-address limit no longer has to protect the database
-alone. `SEARCH_RULE` is already 60, for the same reason. Confirm with 61
-sequential `GET /search` with **no `q`**: 200 × 60, then 429.
+Why 60 and not 30: the YouTube tutorial means groups — a classroom, a family,
+a mosque community — searching together behind one Wi-Fi address, and with
+the database's own slots in place the per-address limit no longer has to
+protect the database alone. `SEARCH_RULE` is 60 for the same reason. To check
+it again: 61 sequential `GET /search` with **no `q`** — 200 × 60, then 429.
 
 `/search` also covers the Server Actions the results page posts to itself (the
 «بۇ كىتابتىكى بارلىق ئورۇنلارنى كۆرۈش» expander), so they count too.
@@ -71,11 +73,14 @@ is saved with **Save Rule**, then **Review Changes** → **Publish**.
 **In that dialog, Esc closes the whole rule without saving** (it happened once);
 to close the key picker, click empty space inside the dialog instead.
 
-### Rule 2 — `k6 deny` (optional, custom rule)
+### Rule 2 — `k6 deny` (custom rule)
 
-If **User Agent** · **Contains** · `k6/` → **Deny**. It stops only the exact
-tool seen on 2026-10-05 with its default settings; anyone can change a user
-agent. A cheap extra, not the protection.
+If **User Agent** · **Contains** · `k6/` → **Deny**. Created by the owner on
+**2026-10-06**; checked the same day with one request each: the k6 user agent
+answered 403, an ordinary phone browser 200. It stops only the exact tool
+seen on 2026-10-05 with its default settings; anyone can change a user agent.
+A cheap extra, not the protection. Two of Hobby's three custom rules are now
+in use.
 
 ### Facts from Vercel's docs (checked 2026-10-06)
 
@@ -123,6 +128,14 @@ and `tests/unit/search-gate-sql.test.ts` holds them to 0025's and 0015's bodies.
 a STABLE function in a **READ ONLY, READ COMMITTED** transaction — for POST and
 GET alike — and `pg_try_advisory_xact_lock` works there, so the functions stay
 STABLE.
+
+**Live since 2026-10-06.** The owner ran 0028 in the SQL Editor
+(«Success»); his read-only check of the three function definitions and the
+slot taker answered `true` four times. `scripts/search-timing.mjs after`, as
+an anonymous visitor against 61 books / 19,616 pages: 0 failed, 0 over
+budget, of 22 calls; 20 cells answered exactly as the `before` run taken that
+morning, and the 2 that differ are capped results (more than 300 matching
+pages), whose 301-row slice depends on the plan by design (0014).
 
 ### Choosing the sizes
 

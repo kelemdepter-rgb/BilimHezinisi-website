@@ -155,15 +155,31 @@ test.describe("recent searches", () => {
     await page.getByTestId("search-input").click();
     await expect(page.getByTestId("search-history")).toHaveCount(0);
 
-    // Search once, so there is something to remember.
-    await page.getByTestId("search-input").fill("ئالتۇنكۆۋرۈك");
-    await page.getByTestId("search-submit").click();
-    await page.waitForLoadState("load");
+    // Search once, so there is something to remember. The search is recorded
+    // by a submit listener React attaches when it hydrates; a submit that
+    // lands before that navigates without recording — so it is repeated until
+    // it is remembered. (Measured 2026-10-06: the click came ~220 ms after
+    // `load`, hydration ~200 ms after it; 3 of 9 runs lost that race on the
+    // untouched tree, more once the results page changed shape.)
+    const input = page.getByTestId("search-input");
+    await expect(async () => {
+      await input.fill("ئالتۇنكۆۋرۈك");
+      await page.getByTestId("search-submit").click();
+      await page.waitForURL((url) => url.searchParams.get("q") === "ئالتۇنكۆۋرۈك");
+      const stored = await page.evaluate(() => window.localStorage.getItem("bh-search-history"));
+      expect(stored ?? "").toContain("ئالتۇنكۆۋرۈك");
+    }).toPass({ timeout: 30_000 });
 
-    await page.getByTestId("search-input").fill("");
-    await page.getByTestId("search-input").click();
+    // The list opens on FOCUS, and a focus that lands before the new page has
+    // hydrated reaches no handler — `fill` alone focuses the box. So it is
+    // blurred and re-armed until it takes, exactly as autofill.spec.ts does.
     const list = page.getByTestId("search-history");
-    await expect(list).toBeVisible();
+    await expect(async () => {
+      await input.fill("");
+      await input.blur();
+      await input.click();
+      await expect(list).toBeVisible({ timeout: 1500 });
+    }).toPass({ timeout: 20_000 });
     await expect(page.getByTestId("search-history-item").first()).toContainText("ئالتۇنكۆۋرۈك");
     await assertNoHorizontalOverflow(page);
   });

@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // The dev server the sign-in and registration specs run against a fake
     // Supabase (playwright.config.ts); machine-generated too.
     ".next-mock/**",
+    // The production build the flood test serves (scripts/flood/); generated too.
+    ".next-flood/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

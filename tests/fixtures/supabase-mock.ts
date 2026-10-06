@@ -32,6 +32,10 @@ import { hookEvent, installAccountSchema } from "./pglite-auth";
  *     signed-in reader reads their own profile, the service role does
  *     anything. Every other table is empty, which is what a fresh project
  *     holds.
+ *   - On request (PROMPT-40, tests/search-flood.spec.ts): any RPC can be given
+ *     a fixed answer — the search slots' HTTP 429 `PT429 bh:search_busy`, or
+ *     a page of results — and any table can be made to fail, which is what a
+ *     database that does not answer looks like to the site's loaders.
  *
  * Every Auth call is recorded, so a spec can assert what was — and was not —
  * sent to Supabase.
@@ -87,7 +91,11 @@ export class SupabaseMock {
   private recoveryTokens = new Map<string, string>();
   private confirmationTokens = new Map<string, string>();
   private scripted = new Map<AuthEndpoint, ScriptedError[]>();
+  private rpcAnswers = new Map<string, { status: number; body: unknown }>();
+  private failingTables = new Map<string, { status: number; body: unknown }>();
   readonly calls: AuthCall[] = [];
+  /** Every RPC asked for, by name, in order — to prove one was or was not called. */
+  readonly rpcCalls: string[] = [];
 
   async start(): Promise<void> {
     this.db = await new PGlite();
@@ -118,13 +126,47 @@ export class SupabaseMock {
     this.recoveryTokens.clear();
     this.confirmationTokens.clear();
     this.scripted.clear();
+    this.rpcAnswers.clear();
+    this.failingTables.clear();
     this.calls.length = 0;
+    this.rpcCalls.length = 0;
     await this.db!.exec(`
       delete from public.auth_attempts;
       delete from auth.users;
       delete from public.settings where key not in ('registration_paused', 'unconfirmed_sweep_enabled');
       update public.settings set value = 'false'::jsonb;
     `);
+  }
+
+  /** Answer every call of `fn` with this, until reset or cleared. */
+  answerRpc(fn: string, status: number, body: unknown): void {
+    this.rpcAnswers.set(fn, { status, body });
+  }
+
+  /** The answer migration 0028 gives when every search slot is in use. */
+  answerRpcBusy(fn: string): void {
+    this.answerRpc(fn, 429, {
+      code: "PT429",
+      message: "bh:search_busy",
+      details: "every slot in search pool 1 is in use",
+      hint: null,
+    });
+  }
+
+  clearRpc(fn: string): void {
+    this.rpcAnswers.delete(fn);
+  }
+
+  /** Every read of `table` fails like a database that is not answering. */
+  failTable(table: string, status = 503): void {
+    this.failingTables.set(table, {
+      status,
+      body: { code: "PGRST003", message: "Timed out acquiring connection from connection pool.", details: null, hint: null },
+    });
+  }
+
+  clearTable(table: string): void {
+    this.failingTables.delete(table);
   }
 
   /** An existing account — confirmed unless said otherwise — with its profile. */
@@ -348,6 +390,8 @@ export class SupabaseMock {
     }
     if (url.pathname.startsWith("/rest/v1/")) {
       const table = url.pathname.slice("/rest/v1/".length);
+      const failure = this.failingTables.get(table);
+      if (failure) return this.send(response, failure.status, failure.body);
       if (table in COLUMNS) return this.rest(table, url, method, await this.body(request), request, response);
       // A fresh project: every other table is empty.
       if (method === "HEAD") return this.send(response, 200, undefined, { "content-range": "*/0" });
@@ -535,6 +579,9 @@ export class SupabaseMock {
     request: IncomingMessage,
     response: ServerResponse,
   ): Promise<void> {
+    this.rpcCalls.push(fn);
+    const answer = this.rpcAnswers.get(fn);
+    if (answer) return this.send(response, answer.status, answer.body);
     if (!SQL_FUNCTIONS.has(fn)) return this.send(response, 200, []);
     const names = Object.keys(body);
     if (!names.every((key) => /^p_[a-z_]+$/.test(key))) {

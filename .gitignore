@@ -72,3 +72,7 @@ next-env.d.ts
 .next-e2e/
 # Dev server the sign-in/registration specs run against a fake Supabase
 .next-mock/
+# The throwaway local stack and production build of the flood test
+# (scripts/flood/, docs/search-flood.md) — local keys and build output only
+/.flood/
+.next-flood/

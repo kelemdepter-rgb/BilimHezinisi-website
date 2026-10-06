@@ -38,11 +38,14 @@
     ".next-e2e/types/**/*.ts",
     ".next-e2e/dev/types/**/*.ts",
     ".next-mock/types/**/*.ts",
-    ".next-mock/dev/types/**/*.ts"
+    ".next-mock/dev/types/**/*.ts",
+    ".next-flood/types/**/*.ts",
+    ".next-flood/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
     ".next-e2e",
-    ".next-mock"
+    ".next-mock",
+    ".next-flood"
   ]
 }

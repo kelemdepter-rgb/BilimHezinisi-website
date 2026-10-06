@@ -583,6 +583,25 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Search under a flood, and the site with its database down
+         * (PROMPT-40): the busy messages and the error page. Against the same
+         * fake-Supabase server as the auth-flow projects, which answers the
+         * search RPCs the way migration 0028's slots do — never the real
+         * project, and never a real flood (scripts/flood/ does that, locally).
+         */
+        name: `resilience-${viewport.name}`,
+        testMatch: /search-flood\.spec\.ts/,
+        use: {
+          baseURL: MOCK_URL,
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,
@@ -625,7 +644,14 @@ export default defineConfig({
        * (tests/fixtures/dns-stub.mjs). The fake itself is started by the spec.
        */
       command: `npx next dev --port ${MOCK_PORT}`,
-      url: MOCK_URL,
+      /**
+       * Ready when robots.txt answers, not the home page: the fake Supabase
+       * only starts inside the specs, and until it does every page that reads
+       * the library answers with the error page (500) — correctly, since
+       * PROMPT-40 a database that does not answer is shown as one rather than
+       * as an empty library. robots.txt reads nothing.
+       */
+      url: `${MOCK_URL}/robots.txt`,
       reuseExistingServer: !process.env.CI,
       timeout: 180_000,
       env: {

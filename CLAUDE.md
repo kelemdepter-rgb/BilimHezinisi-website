@@ -126,6 +126,15 @@ here. The table is left in place because an applied migration is never edited ·
   one exact phrase (after `ug_normalize`), the way the desktop app's `indexOf` search
   behaves. A result is only shown when that exact phrase occurs; the whole phrase is
   highlighted, never a fragment of it.
+- **Every expensive anonymous search takes a slot first** (migration 0028,
+  PROMPT-40): `search_books` (whole library 2, one category 3),
+  `book_match_pages` 2 and `search_quran` 1 transaction-scoped advisory locks
+  via `private.take_search_slot()`; a full pool answers at once with
+  `PT429 bh:search_busy` (HTTP 429), which every caller shows as the calm
+  «ھازىر ئىزدەۋاتقانلار كۆپ» with a retry (`lib/search/busy.ts`). A new
+  expensive anonymous RPC gets a pool of its own. Never replace the try-lock
+  with the blocking one, and never count searches in a table. Sizes and
+  measurements: `docs/search-flood.md`.
 - Reader match navigation: «ئالدىنقى» / «كېيىنكى» with an «n/total» counter walking
   every occurrence in the whole book (ported from desktop `updateMatchNav` /
   `jumpToMatch`); returning from the reader goes back to the search results.
@@ -196,6 +205,22 @@ here. The table is left in place because an applied migration is never edited ·
   every request. Never trust client-side gating alone.
 - Sanitize all rendered book/note HTML (port `sanitize.js` approach; DOMPurify).
 - Do not weaken CSP; no third-party scripts/CDNs at runtime.
+- **Never load-test production**: no bursts at bilimhezinisi.com or the live Supabase project, ever — floods run only against the local stack in `scripts/flood/`.
+- **Nothing waits for Supabase for minutes** (PROMPT-40, after the 2026-10-05
+  outage): every Supabase client carries a fetch timeout through `global.fetch`
+  (`lib/supabase/timeouts.ts` — 10 s on the server, 30 s in the browser, 10 min
+  for Storage uploads), session checks have overall deadlines, pages and route
+  handlers have `maxDuration` 30 (health 60), and `app/error.tsx` /
+  `app/global-error.tsx` show the Uyghur error page. A new Supabase client must
+  pass the same `global.fetch`; a new route handler must export its own
+  `maxDuration`. Loaders whose read failed THROW (`throwIfUnavailable` in
+  `lib/cache.ts`) — inside `unstable_cache` a returned empty answer would be
+  cached for everyone. Slowness may only take a permission away: role checks
+  fail closed, and the proxy never marks a page cacheable when it could not
+  verify the session cookie that came with it. `public/sw.js` never stores a
+  page that failed on the server (`FAILED_RENDER`). The Vercel Firewall
+  rate-limit rule on `/search` lives in the dashboard; its settings are in
+  `docs/search-flood.md`.
 - Never edit an applied migration — always add a new file in `supabase/migrations/`.
 - Test accounts are created at run time with random passwords, on a domain whose
   mail nobody can read (`example.com`), and are swept by the `bh-e2e-` prefix at

@@ -177,6 +177,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         </p>
 
         <p className="mt-3 text-[13px] text-ink2">
+          تېخى تىزىملاتمىغانمۇ؟{" "}
           <Link href="/register" className="font-semibold text-am underline">
             تىزىملىتىپ كىرىڭ.
           </Link>

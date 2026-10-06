@@ -145,7 +145,7 @@ async function timed(sql: string, params: unknown[]): Promise<{ ms: number; rows
 
 beforeAll(async () => {
   db = await new PGlite();
-  await db.exec(`create role anon; create role authenticated;`);
+  await db.exec(`create role anon; create role authenticated; create role service_role;`);
   await db.exec(`
     create table public.categories (
       id bigint primary key,
@@ -197,6 +197,10 @@ beforeAll(async () => {
   // No index exists yet: 0025's guard is what builds it, exactly as it would
   // on a database where the index had gone missing.
   await db.exec(MIGRATION_0025);
+  // 0028 puts a search slot in front of each function (PROMPT-40) and must
+  // change nothing about how they find their rows: everything below runs
+  // against the functions as they ship.
+  await db.exec(readFileSync(join(MIGRATIONS, "0028_search_concurrency_gate.sql"), "utf8"));
   await db.exec(`analyze public.books; analyze public.categories;`);
 }, 180_000);
 

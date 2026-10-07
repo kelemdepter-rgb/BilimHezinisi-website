@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SpellChecker, type SpellStatus } from "@/lib/spellcheck/client";
-import { tokenize } from "@/lib/spellcheck/dictionary";
+import { isSingleToken, tokenize } from "@/lib/spellcheck/dictionary";
 import {
   canHighlight,
   hitTest,
   HIGHLIGHT_NAME,
   rangeFor,
   readTextMap,
+  wordRange,
   type MarkedWord,
   type TextMap,
 } from "@/lib/spellcheck/marks";
@@ -217,14 +218,27 @@ export function useSpellcheck(
     [enabled],
   );
 
-  /** Replace just that word, keeping the undo stack and the caret intact. */
+  /**
+   * Replace just that word, keeping the undo stack and the caret intact — and
+   * only if it is still exactly where the popup said.
+   */
   const applySuggestion = useCallback(
     (mark: MarkedWord, replacement: string) => {
-      const map = mapRef.current;
       const editor = editorRef.current;
-      if (!map || !editor) return;
-      const range = rangeFor(map, mark.start, mark.end);
-      if (!range) return;
+      if (!editor) return;
+      setPopup(null);
+
+      // Never the map the popup was opened from: anything typed since moved
+      // its offsets, and a Range built from moved offsets is how a correction
+      // once landed on other letters — or across a line end, taking the next
+      // line's first word with it (N1, N8).
+      const range = wordRange(readTextMap(editor), mark);
+      if (!range) {
+        // The word is not there any more. Change nothing, and re-check so the
+        // underline shows where things are now; the writer taps it again.
+        void runCheck();
+        return;
+      }
 
       const selection = window.getSelection();
       if (!selection) return;
@@ -236,7 +250,6 @@ export function useSpellcheck(
       // behaves like undoing anything else the writer typed.
       document.execCommand("insertText", false, replacement);
 
-      setPopup(null);
       void runCheck();
     },
     [editorRef, runCheck],
@@ -245,6 +258,10 @@ export function useSpellcheck(
   /** «لۇغەتكە قوش» — this word is right; stop telling me it is not. */
   const addToPersonal = useCallback(
     (word: string) => {
+      setPopup(null);
+      // One word or nothing. A mark is always one word now that line ends
+      // separate words, and this keeps it so whatever reaches here.
+      if (!isSingleToken(word)) return;
       const next = [...new Set([...personal, word])];
       setPersonal(next);
       writePersonal(next);
@@ -254,7 +271,6 @@ export function useSpellcheck(
       const remaining = marksRef.current.filter((mark) => mark.word !== word);
       commitMarks(remaining);
       paint(mapRef.current, remaining);
-      setPopup(null);
     },
     [commitMarks, paint, personal],
   );

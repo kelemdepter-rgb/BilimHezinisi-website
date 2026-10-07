@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { tokenize } from "@/lib/spellcheck/dictionary";
+import { isSingleToken, tokenize } from "@/lib/spellcheck/dictionary";
 import {
   LINE_SEPARATOR,
   offsetOf,
   rangeFor,
   readTextMap,
   wordAtOffset,
+  wordRange,
+  type MarkedWord,
 } from "@/lib/spellcheck/marks";
 
 /**
@@ -146,5 +148,58 @@ describe("offsets across separators", () => {
     expect(wordAtOffset([misspelled], nextLine)).toBeNull();
     // The end of the word itself still opens it — a finger lands where it lands.
     expect(wordAtOffset([misspelled], misspelled.end)).toBe(misspelled);
+  });
+});
+
+describe("taking a suggestion", () => {
+  it("refuses the glued word the old map produced, so nothing is deleted", () => {
+    const editor = editorWith("ئۇسۇلى بىلەن سىلىشتۇرسۇ<div>كىشىلەر ياخشى</div>");
+    const before = editor.innerHTML;
+    // Offsets as the old map — no separator — would have reported them.
+    const glued: MarkedWord = { word: "سىلىشتۇرسۇكىشىلەر", start: 13, end: 30 };
+    expect(wordRange(readTextMap(editor), glued)).toBeNull();
+    expect(editor.innerHTML).toBe(before);
+  });
+
+  it("refuses a mark that spans two blocks, though the Range would read as the word", () => {
+    const editor = editorWith("<div>ئال</div><div>ما</div>");
+    const map = readTextMap(editor);
+    // Range.toString() over these offsets is «ئالما» — exactly the trap N1
+    // fell into. A hand-made mark spanning the separator is still refused.
+    expect(rangeFor(map, 0, 6)!.toString()).toBe("ئالما");
+    expect(wordRange(map, { word: "ئالما", start: 0, end: 6 })).toBeNull();
+  });
+
+  it("refuses once the word under the mark has changed", () => {
+    const editor = editorWith("<div>بۇ ئۇيغۇر سۆز</div>");
+    const map = readTextMap(editor);
+    const [, mark] = tokenize(map.text);
+    // Two letters typed before it shift it out from under its offsets.
+    map.nodes[0].data = `ab${map.nodes[0].data}`;
+    expect(wordRange(readTextMap(editor), mark)).toBeNull();
+  });
+
+  it("accepts every word that is still there, whatever surrounds it", () => {
+    const map = readTextMap(
+      editorWith(
+        "<h2>كىرىش سۆز</h2>بىرىنچى قۇر<br>ئىككىنچى <b>قۇر</b><div>ئۈ<i>چى</i>نچى</div><ul><li>تۆتىنچى</li></ul>",
+      ),
+    );
+    for (const token of tokenize(map.text)) {
+      expect(wordRange(map, token)?.toString(), token.word).toBe(token.word);
+    }
+  });
+});
+
+describe("what the personal dictionary admits", () => {
+  it("takes exactly one word", () => {
+    expect(isSingleToken("ئۇيغۇر")).toBe(true);
+    expect(isSingleToken("ئاق-قارا")).toBe(true);
+  });
+
+  it("refuses anything glued, padded or split", () => {
+    for (const text of ["", "ئۇيغۇر سۆز", "سىلىشتۇرسۇ\nكىشىلەر", " ئۇيغۇر", "ئۇيغۇر.", "abc"]) {
+      expect(isSingleToken(text), JSON.stringify(text)).toBe(false);
+    }
   });
 });

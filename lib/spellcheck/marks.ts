@@ -183,6 +183,36 @@ export function rangeFor(map: TextMap, start: number, end: number, doc: Document
   return range;
 }
 
+/** The nearest block around a node — the element its line belongs to. */
+function blockOf(node: Node): Element | null {
+  for (let element = node.parentElement; element; element = element.parentElement) {
+    if (BLOCK_TAGS.has(element.localName)) return element;
+  }
+  return null;
+}
+
+/**
+ * The Range of a marked word in the document as it is NOW, or null when the
+ * document no longer holds exactly that word there.
+ *
+ * `map` must be freshly read: a mark's offsets are only meaningful against the
+ * text they were found in, and anything typed since moves them. Three checks,
+ * each of which alone would have stopped N1 from deleting a line:
+ *
+ *  - the flattened text at the mark is exactly the word — any edit that moved
+ *    it, and any separator inside it, fails here;
+ *  - the Range reads back as exactly the word;
+ *  - the Range starts and ends in the same block, so replacing it can never
+ *    merge two lines.
+ */
+export function wordRange(map: TextMap, mark: MarkedWord, doc: Document = document): Range | null {
+  if (map.text.slice(mark.start, mark.end) !== mark.word) return null;
+  const range = rangeFor(map, mark.start, mark.end, doc);
+  if (!range || range.toString() !== mark.word) return null;
+  if (blockOf(range.startContainer) !== blockOf(range.endContainer)) return null;
+  return range;
+}
+
 /** The flattened offset of a DOM position, or null when it is outside the map. */
 export function offsetOf(map: TextMap, node: Node, offset: number): number | null {
   const index = map.nodes.indexOf(node as Text);

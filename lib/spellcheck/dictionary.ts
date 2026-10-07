@@ -37,6 +37,18 @@ export const WORD_PATTERN = new RegExp(
 
 const ONLY_UYGHUR = new RegExp(`^[${UYGHUR_LETTERS}'’-]+$`, "u");
 
+const ONE_TOKEN = new RegExp(`^(?:${WORD_PATTERN.source})$`, "u");
+
+/**
+ * Whether a string is exactly one word as `tokenize` finds them — nothing
+ * glued to it, nothing around it. The personal dictionary admits nothing else:
+ * before line ends were word boundaries, «لۇغەتكە قوش» could store two words
+ * joined across a line break as if they were one.
+ */
+export function isSingleToken(text: string): boolean {
+  return ONE_TOKEN.test(text);
+}
+
 /**
  * The 34 characters the dictionary holds, in code-point order.
  *

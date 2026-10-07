@@ -36,6 +36,8 @@ import { hookEvent, installAccountSchema } from "./pglite-auth";
  *     a fixed answer — the search slots' HTTP 429 `PT429 bh:search_busy`, or
  *     a page of results — and any table can be made to fail, which is what a
  *     database that does not answer looks like to the site's loaders.
+ *   - On request (tests/notes-unavailable.spec.ts): any other table can be
+ *     given fixed rows to answer every read with — a writer's notes, say.
  *
  * Every Auth call is recorded, so a spec can assert what was — and was not —
  * sent to Supabase.
@@ -93,6 +95,7 @@ export class SupabaseMock {
   private scripted = new Map<AuthEndpoint, ScriptedError[]>();
   private rpcAnswers = new Map<string, { status: number; body: unknown }>();
   private failingTables = new Map<string, { status: number; body: unknown }>();
+  private tableAnswers = new Map<string, unknown[]>();
   readonly calls: AuthCall[] = [];
   /** Every RPC asked for, by name, in order — to prove one was or was not called. */
   readonly rpcCalls: string[] = [];
@@ -128,6 +131,7 @@ export class SupabaseMock {
     this.scripted.clear();
     this.rpcAnswers.clear();
     this.failingTables.clear();
+    this.tableAnswers.clear();
     this.calls.length = 0;
     this.rpcCalls.length = 0;
     await this.db!.exec(`
@@ -167,6 +171,14 @@ export class SupabaseMock {
 
   clearTable(table: string): void {
     this.failingTables.delete(table);
+  }
+
+  /**
+   * Every read of `table` answers these rows, whatever it filtered on, until
+   * reset — unless the table is also made to fail, which wins.
+   */
+  answerTable(table: string, rows: unknown[]): void {
+    this.tableAnswers.set(table, rows);
   }
 
   /** An existing account — confirmed unless said otherwise — with its profile. */
@@ -392,6 +404,10 @@ export class SupabaseMock {
       const table = url.pathname.slice("/rest/v1/".length);
       const failure = this.failingTables.get(table);
       if (failure) return this.send(response, failure.status, failure.body);
+      const rows = this.tableAnswers.get(table);
+      if (rows && method === "GET") {
+        return this.send(response, 200, rows, { "content-range": `0-${Math.max(0, rows.length - 1)}/${rows.length}` });
+      }
       if (table in COLUMNS) return this.rest(table, url, method, await this.body(request), request, response);
       // A fresh project: every other table is empty.
       if (method === "HEAD") return this.send(response, 200, undefined, { "content-range": "*/0" });

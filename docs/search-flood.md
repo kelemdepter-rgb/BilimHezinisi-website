@@ -23,7 +23,7 @@ What holds now, from the outside in:
 | `SEARCH_RULE` | `lib/rate-limit.ts`, per server instance | one address, one instance | «ھازىر ئىزدەۋاتقانلار كۆپ» without asking the database |
 | Search slots | migration `0028_search_concurrency_gate.sql` | **any number of addresses**, and callers who skip the site with the public key | `PT429 bh:search_busy` in milliseconds → the same calm message |
 | Timeouts | `lib/supabase/timeouts.ts`, every Supabase client | a database or API that does not answer | gives up in seconds |
-| Error pages | `app/error.tsx`, `app/global-error.tsx` | everything else | «كۇتۇپخانا ھازىر جاۋاب بەرمىدى» + retry |
+| Error pages | `app/error.tsx`, `app/global-error.tsx`; the notebook's own `app/notes/error.tsx` | everything else | «كۇتۇپخانا ھازىر جاۋاب بەرمىدى» (the notebook: «خاتىرە دەپتىرى ئېچىلمىدى») + retry |
 | `maxDuration` | `app/layout.tsx` 30 s, every route handler 30 s, `/api/health` 60 s | anything left | Vercel stops it long before 300 s |
 
 **Never load-test the live site or the live Supabase project.** Everything

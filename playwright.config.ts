@@ -604,6 +604,26 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * The notebook with its database down: a list or a note that did not
+         * load is the notebook's error page with a working retry — never
+         * «تېخى خاتىرە يوق», never a 404 for the writer's own note. Against
+         * the fake-Supabase server, like the resilience projects, because the
+         * notes are read on the server; named with the notebook's projects so
+         * `--project "notes-*"` runs it with them.
+         */
+        name: `notes-unavailable-${viewport.name}`,
+        testMatch: /notes-unavailable\.spec\.ts/,
+        use: {
+          baseURL: MOCK_URL,
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // Admin specs reuse the signed-in staff state from the setup project.
         name: `admin-${viewport.name}`,
         testMatch: /admin\.spec\.ts/,

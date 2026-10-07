@@ -456,7 +456,10 @@ describe("0025 answers exactly as 0023 and 0020 did", () => {
       }
     }
     expect(compared).toBe(QUERIES.length * 4 * 5);
-  });
+    // 180 calls on one PGlite: ~2 s alone, past the default 5 s when the
+    // other PGlite files run beside it (vitest.config.mts) — a correctness
+    // test, so the clock is not what it checks.
+  }, 60_000);
 
   it("book_match_pages: every query, every book, every limit", async () => {
     for (const q of QUERIES) {
@@ -468,5 +471,5 @@ describe("0025 answers exactly as 0023 and 0020 did", () => {
         }
       }
     }
-  });
+  }, 60_000);
 });

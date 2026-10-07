@@ -280,33 +280,6 @@ export function hitTest(
   return flat === null ? null : wordAtOffset(marks, flat);
 }
 
-/**
- * Re-point marks after an edit, without re-checking anything.
- *
- * Typing shifts every offset after the caret. Re-running the whole checker on
- * each keystroke would be both slow and visually noisy — the underlines would
- * flicker off and back on. Instead the marks that sit entirely before the edit
- * keep their offsets, the ones after are shifted by the length delta, and the
- * one being typed inside is dropped: the writer is fixing it, and telling them
- * it is still wrong mid-word is exactly the wrong moment.
- */
-export function shiftMarks(
-  marks: readonly MarkedWord[],
-  editAt: number,
-  delta: number,
-): MarkedWord[] {
-  const out: MarkedWord[] = [];
-  for (const mark of marks) {
-    if (mark.end < editAt) {
-      out.push(mark);
-    } else if (mark.start > editAt) {
-      out.push({ word: mark.word, start: mark.start + delta, end: mark.end + delta });
-    }
-    // Straddling the edit: dropped on purpose, see above.
-  }
-  return out;
-}
-
 /** Is the Custom Highlight API usable in this browser? */
 export function canHighlight(): boolean {
   return (

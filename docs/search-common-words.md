@@ -27,12 +27,16 @@ To build it again:
 ```bash
 node scripts/flood/stack.mjs up
 node scripts/flood/gateway.mjs                         # another terminal
-# load the backup with COPY (session_replication_role = replica, uploaded_by
-# set to null — the copy has no accounts), then ANALYZE
+node scripts/flood/load-backup.mjs backups/bilim-backup-2026-09-16.ndjson.gz
 node --env-file=.flood/local.env scripts/search-timing.mjs before
 node --env-file=.flood/local.env scripts/search-parity.mjs before
-# apply the migration as postgres, then the same two with `after`
+# apply the next migration as postgres (docker exec … psql -U postgres < file),
+# then the same two with `after`
 ```
+
+`load-backup.mjs` COPYs the backup in (replica mode; `uploaded_by` cleared,
+the copy has no accounts), sets live's planner settings and analyzes. It
+writes only into the local container.
 
 ## How common the words are
 
@@ -174,6 +178,40 @@ expected to:
 Every uncapped, unpartial query — including «ئىلىم» and «زاكات» in category 15
 (191 and 221 pages), «ناماز ئوقۇش» there (254), «مېۋە», «تېخنىكا», «اية»,
 «اسلام» and the derived words — is identical at full depth.
+
+## Live, after 0029 (2026-10-07)
+
+The owner applied 0029 in the SQL Editor on 2026-10-07; one anonymous RPC call
+then returned the `partial` column. Single sequential searches through
+`bilimhezinisi.com/search`, a pause between each, the time the page itself
+reports (`search-meta`):
+
+| Word, whole library | 2026-10-05 | After 0029 |
+|---|---|---|
+| ئاللاھ | timeout (3.36 s, 3.28 s) | **0.42 s** |
+| پەيغەمبەر | 1.23 s | 0.71 s |
+| ئىلىم | 0.72 s | 1.12 s, then 0.54, 0.66 s |
+| كىتاب | 0.64 s | 0.82 s, then 0.53, 0.40 s |
+| ناماز | 0.59 s | 0.62 s |
+
+Every one with results and the «too common» notice; none with the timeout.
+
+`node --use-system-ca --env-file=.env.local scripts/search-timing.mjs after
+--runs 1` (anonymous, one call per cell, from Istanbul — each time includes
+~80–240 ms of network): **0 failed, 0 over budget, of 39**. Navigator
+«ئاللاھ» on book 1308: 110 ms. Compared with the local copy's `before`, no
+cell answered differently except capped ones, whose slice follows the heap's
+page order — different between the copy (loaded in key order) and live.
+
+One shape to know about: a category or navigator search for a very common
+word reads, once, the row of every page in the LIBRARY that holds it, to learn
+which book it belongs to (the hash join in `private.matching_pages`). From
+cache that is microseconds a page; cold, it is not: «پەيغەمبەر» (13,221 pages)
+in the 159-page category «تەۋھىد ۋە ئەقىدە» took 1,298 ms on the first live
+call, then 725 and 325 ms; the navigator «پەيغەمبەر» 795, then 441 and 440 ms.
+Inside the budget. If the library grows several-fold and this shows on
+/admin, the refinement is a BitmapAnd with `book_pages_pkey` for small book
+sets — measured, because it reopens a walk for the planner to choose.
 
 ## The daily self-check
 

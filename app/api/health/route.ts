@@ -12,14 +12,16 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 /**
- * The search self-check below makes three calls of up to 10 s each after the
- * ping, and a call answered "busy" (every search slot in use, migration 0028)
- * gets one more try after a 2 s pause: 3 × (10 + 2 + 10) s at the very worst,
- * which no real morning comes near — a busy answer takes milliseconds, and
- * the measured calls take well under 2 s. Every other database call here is
- * bounded by the admin client's own 10 s timeout (lib/supabase/timeouts.ts).
- * A minute keeps all of that with room to spare, and is still a fifth of the
- * 300 s a hung request was allowed before (PROMPT-40).
+ * The search self-check below makes four calls after the ping, each abandoned
+ * at 10 s, and a call answered "busy" (every search slot in use, migration
+ * 0028) gets one more try after a 2 s pause. A database that answers ends
+ * every call at the anonymous 3 s statement timeout at the latest — 4 × (3 +
+ * 2 + 3) = 32 s if all four timed out twice — and the measured calls take
+ * well under a second; only an API that hangs outright could run the four
+ * 10 s aborts past the minute, and then Vercel ends the run, which is the
+ * point of the limit. Every other database call here is bounded by the admin
+ * client's own 10 s timeout (lib/supabase/timeouts.ts). A minute is still a
+ * fifth of the 300 s a hung request was allowed before (PROMPT-40).
  */
 export const maxDuration = 60;
 
@@ -34,7 +36,7 @@ export const maxDuration = 60;
  * CRON_SECRET is set, callers must present it — the cron does so automatically.
  *
  * After the ping it also runs the search self-check (lib/search/health.ts):
- * three fixed calls as an anonymous visitor, recorded under the
+ * four fixed calls as an anonymous visitor, recorded under the
  * `search_health` setting for /admin. Whole-library search had been failing
  * for every reader without an account before anyone noticed (2026-09-11);
  * this is what notices next time, without a second cron.

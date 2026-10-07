@@ -42,21 +42,30 @@ function fakeClient(
 
 const healthy: SearchHealth = {
   common: { ok: true, ms: 412, code: null, at: "2026-09-12T06:00:01.000Z" },
-  nowhere: { ok: true, ms: 95, code: null, at: "2026-09-12T06:00:02.000Z" },
-  navigator: { ok: true, ms: 388, code: null, at: "2026-09-12T06:00:03.000Z" },
+  hard: { ok: true, ms: 577, code: null, at: "2026-09-12T06:00:02.000Z" },
+  nowhere: { ok: true, ms: 95, code: null, at: "2026-09-12T06:00:03.000Z" },
+  navigator: { ok: true, ms: 388, code: null, at: "2026-09-12T06:00:04.000Z" },
 };
 
+/** What the route stored before PROMPT-41 added «ئاللاھ»: no `hard`. */
+const beforeHard = Object.fromEntries(
+  Object.entries(healthy).filter(([name]) => name !== "hard"),
+) as SearchHealth;
+
 describe("runSearchHealthCheck", () => {
-  it("makes exactly the three fixed calls, in order, as the route describes them", async () => {
+  it("makes exactly the four fixed calls, in order, as the route describes them", async () => {
     const { client, calls } = fakeClient(async () => null);
     const health = await runSearchHealthCheck(client);
 
-    expect(calls.map((call) => call.fn)).toEqual(["search_books", "search_books", "book_match_pages"]);
+    expect(calls.map((call) => call.fn)).toEqual(["search_books", "search_books", "search_books", "book_match_pages"]);
     expect(calls[0].args).toEqual({ q: "ناماز", category_id: null, lim: 1, off: 0 });
-    expect(calls[1].args).toMatchObject({ category_id: null, lim: 1, off: 0 });
-    expect(calls[1].args.q).not.toBe("ناماز");
+    // The word that timed out live on 2026-10-05 (PROMPT-41), the whole library.
+    expect(calls[1].args).toEqual({ q: "ئاللاھ", category_id: null, lim: 1, off: 0 });
+    expect(calls[2].args).toMatchObject({ category_id: null, lim: 1, off: 0 });
+    expect(calls[2].args.q).not.toBe("ناماز");
+    expect(calls[2].args.q).not.toBe("ئاللاھ");
     // The navigator runs on the published book with the most pages.
-    expect(calls[2].args).toEqual({ book_id: 1308, q: "ناماز", lim: 500 });
+    expect(calls[3].args).toEqual({ book_id: 1308, q: "ناماز", lim: 500 });
 
     for (const name of SEARCH_HEALTH_NAMES) {
       expect(health[name].ok).toBe(true);
@@ -72,8 +81,20 @@ describe("runSearchHealthCheck", () => {
     );
     const health = await runSearchHealthCheck(client);
     expect(health.common).toMatchObject({ ok: false, code: "57014" });
+    expect(health.hard.ok).toBe(true);
     expect(health.nowhere.ok).toBe(true);
     expect(health.navigator.ok).toBe(true);
+  });
+
+  it("records the hard word's timeout on its own line, as 2026-10-05 would have been", async () => {
+    const { client } = fakeClient(async (call) => (call.args.q === "ئاللاھ" ? { code: "57014" } : null));
+    const health = await runSearchHealthCheck(client);
+    expect(health.hard).toMatchObject({ ok: false, code: "57014" });
+    expect(health.common.ok).toBe(true);
+    const summary = summarizeSearchHealth(health);
+    expect(summary.level).toBe("warning");
+    expect(summary.text).toContain("«ئاللاھ»");
+    expect(summary.text).toContain("57014");
   });
 
   it("abandons a call that hangs, counts it as failed, and still finishes", async () => {
@@ -109,17 +130,37 @@ describe("parseSearchHealth", () => {
     expect(parseSearchHealth("2026-09-12T06:00:00.000Z")).toBeNull();
     expect(parseSearchHealth({ common: healthy.common })).toBeNull();
     expect(parseSearchHealth({ ...healthy, nowhere: { ok: "yes" } })).toBeNull();
+    expect(parseSearchHealth({ ...healthy, hard: { ok: "yes" } })).toBeNull();
+  });
+
+  it("still reads a record written before «ئاللاھ» was checked", () => {
+    const stored = parseSearchHealth(JSON.parse(JSON.stringify(beforeHard)));
+    expect(stored).toEqual(beforeHard);
+    expect(stored?.hard).toBeUndefined();
+    const summary = summarizeSearchHealth(stored);
+    expect(summary.level).toBe("ok");
+    expect(summary.text).toContain("412 ms");
+    expect(summary.text).not.toContain("«ئاللاھ»");
   });
 });
 
 describe("summarizeSearchHealth", () => {
-  it("is calm when all three answered inside 1,500 ms", () => {
+  it("is calm when all four answered inside 1,500 ms, and shows each one's time", () => {
     const summary = summarizeSearchHealth(healthy);
     expect(summary.level).toBe("ok");
     expect(summary.text).toContain("ھەممىسى نورمال");
     expect(summary.text).toContain("412 ms");
+    // The hard word's time, right after the common word's.
+    expect(summary.text).toContain("«ئاللاھ» 577 ms");
+    expect(summary.text.indexOf("412 ms")).toBeLessThan(summary.text.indexOf("577 ms"));
     expect(summary.text).toContain("2026-09-12 06:00 (UTC)");
     expect(summary.text).not.toContain("⚠");
+  });
+
+  it("warns when the hard word answered, but slower than a reader should wait", () => {
+    const summary = summarizeSearchHealth({ ...healthy, hard: { ok: true, ms: 2310, code: null, at: healthy.hard!.at } });
+    expect(summary.level).toBe("warning");
+    expect(summary.text).toContain("«ئاللاھ» بەك ئاستا (2310 ms)");
   });
 
   it("warns, naming what failed and when, on a timeout", () => {
@@ -169,6 +210,7 @@ describe("the admin panel", () => {
     expect(html).toContain('data-testid="last-ping"');
     expect(html).toMatch(/data-testid="search-health"[^>]*data-level="ok"/);
     expect(html).toContain("ھەممىسى نورمال");
+    expect(html).toContain("«ئاللاھ» 577 ms");
   });
 
   it("shows the marked warning when the check failed", () => {
@@ -208,7 +250,14 @@ describe("a busy database", () => {
     let answers = 0;
     const { client, calls } = fakeClient(async () => (answers++ === 0 ? BUSY : null));
     const health = await runSearchHealthCheck(client, { busyPauseMs: 1 });
-    expect(calls.map((call) => call.fn)).toEqual(["search_books", "search_books", "search_books", "book_match_pages"]);
+    // The first word twice (busy, then answered), then the other three once.
+    expect(calls.map((call) => call.fn)).toEqual([
+      "search_books",
+      "search_books",
+      "search_books",
+      "search_books",
+      "book_match_pages",
+    ]);
     expect(health.common).toMatchObject({ ok: true, code: null });
     expect(health.common.busy).toBeFalsy();
   });

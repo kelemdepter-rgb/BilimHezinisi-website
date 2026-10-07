@@ -12,9 +12,13 @@ import { SERVER_FETCH_TIMEOUT_MS, fetchWithTimeout } from "@/lib/supabase/timeou
  * service role, the parity corpus was four pages, and the owner applies
  * migrations by hand after the tests have run. So /api/health — already
  * called once a day by the only Vercel cron this site has — now also makes
- * three fixed calls AS AN ANONYMOUS VISITOR, with the anon key and no
+ * four fixed calls AS AN ANONYMOUS VISITOR, with the anon key and no
  * session, and writes what happened under the `search_health` setting for
  * /admin to show. No new cron, no new vendor, no new table.
+ *
+ * The second word, «ئاللاھ», came with PROMPT-41: on 2026-10-05 it timed out
+ * live for every reader while «ناماز» — the only word checked — answered in
+ * 0.59 s, so the check had never seen the hard case.
  *
  * Only these fixed words ever go through it. What readers type is never
  * inspected or logged (PROMPT-29), and this file sends none of it.
@@ -33,12 +37,21 @@ export const SEARCH_HEALTH_SLOW_MS = 1500;
  */
 export const SEARCH_HEALTH_CALL_TIMEOUT_MS = 10_000;
 
-/** The word most books carry, and the word none does. */
+/**
+ * The word most books carry; the word that timed out on 2026-10-05 — on 3,613
+ * of 19,596 pages, gathered in a few books, which is what made the planner
+ * walk the library instead of reading the index (migration 0029); and the word
+ * none does.
+ */
 const COMMON_WORD = "ناماز";
+const HARD_WORD = "ئاللاھ";
 const NOWHERE_WORD = "قققزززخخخ";
 
-export const SEARCH_HEALTH_NAMES = ["common", "nowhere", "navigator"] as const;
+export const SEARCH_HEALTH_NAMES = ["common", "hard", "nowhere", "navigator"] as const;
 export type SearchHealthName = (typeof SEARCH_HEALTH_NAMES)[number];
+
+/** Checks added after records were first stored: an older record lacks them. */
+type LaterCheck = "hard";
 
 export type SearchHealthCheck = {
   ok: boolean;
@@ -66,7 +79,23 @@ export type SearchHealthCheck = {
  */
 export const SEARCH_HEALTH_BUSY_PAUSE_MS = 2_000;
 
-export type SearchHealth = Record<SearchHealthName, SearchHealthCheck>;
+/** What one run of the check writes: every call. */
+export type FullSearchHealth = Record<SearchHealthName, SearchHealthCheck>;
+
+/**
+ * What a stored record holds: every call, except that a record written before
+ * a check existed lacks it. /admin shows what is there rather than calling an
+ * older record unreadable until the next daily run.
+ */
+export type SearchHealth = Omit<FullSearchHealth, LaterCheck> & Partial<Pick<FullSearchHealth, LaterCheck>>;
+
+/** The checks a record holds, in the order they run. */
+function checksOf(health: SearchHealth): [SearchHealthName, SearchHealthCheck][] {
+  return SEARCH_HEALTH_NAMES.flatMap((name) => {
+    const check = health[name];
+    return check ? [[name, check] as [SearchHealthName, SearchHealthCheck]] : [];
+  });
+}
 
 /**
  * What the check needs from the database, and nothing more — so a test can
@@ -158,19 +187,24 @@ async function measure(run: Run, timeoutMs: number, busyPauseMs: number): Promis
 }
 
 /**
- * The three calls, one after another, each on its own clock — three
- * measurements a reader would recognise, not three searches racing each
+ * The four calls, one after another, each on its own clock — four
+ * measurements a reader would recognise, not four searches racing each
  * other for the free tier's shared CPU.
  */
 export async function runSearchHealthCheck(
   client: SearchHealthClient,
   options: { timeoutMs?: number; busyPauseMs?: number } = {},
-): Promise<SearchHealth> {
+): Promise<FullSearchHealth> {
   const timeoutMs = options.timeoutMs ?? SEARCH_HEALTH_CALL_TIMEOUT_MS;
   const busyPauseMs = options.busyPauseMs ?? SEARCH_HEALTH_BUSY_PAUSE_MS;
 
   const common = await measure(
     (signal) => client.call("search_books", { q: COMMON_WORD, category_id: null, lim: 1, off: 0 }, signal),
+    timeoutMs,
+    busyPauseMs,
+  );
+  const hard = await measure(
+    (signal) => client.call("search_books", { q: HARD_WORD, category_id: null, lim: 1, off: 0 }, signal),
     timeoutMs,
     busyPauseMs,
   );
@@ -195,16 +229,20 @@ export async function runSearchHealthCheck(
           busyPauseMs,
         );
 
-  return { common, nowhere, navigator };
+  return { common, hard, nowhere, navigator };
 }
+
+const LATER_CHECKS: readonly SearchHealthName[] = ["hard"] satisfies LaterCheck[];
 
 /** Whatever was stored, read back defensively: the setting is jsonb. */
 export function parseSearchHealth(value: unknown): SearchHealth | null {
   if (!value || typeof value !== "object") return null;
   const record = value as Record<string, unknown>;
-  const checks: Partial<SearchHealth> = {};
+  const checks: Partial<FullSearchHealth> = {};
   for (const name of SEARCH_HEALTH_NAMES) {
     const check = record[name];
+    // Written before this check existed: the record is still good without it.
+    if (check === undefined && LATER_CHECKS.includes(name)) continue;
     if (!check || typeof check !== "object") return null;
     const { ok, ms, code, at, busy } = check as Record<string, unknown>;
     if (typeof ok !== "boolean" || typeof ms !== "number" || typeof at !== "string") return null;
@@ -215,6 +253,7 @@ export function parseSearchHealth(value: unknown): SearchHealth | null {
 
 const LABELS: Record<SearchHealthName, string> = {
   common: "بارلىق كىتابلاردىن بىر سۆز",
+  hard: "بارلىق كىتابلاردىن «ئاللاھ»",
   nowhere: "يوق سۆز",
   navigator: "كىتاب ئىچىدىكى ساناقچى",
 };
@@ -227,7 +266,7 @@ export type SearchHealthSummary = {
 const stamp = (at: string) => `${at.slice(0, 16).replace("T", " ")} (UTC)`;
 
 /**
- * One line for /admin: calm when all three answered inside
+ * One line for /admin: calm when every call answered inside
  * SEARCH_HEALTH_SLOW_MS, a clearly marked warning naming what failed — and
  * when — otherwise. "Busy" (every search slot in use, twice) is neither: its
  * own quieter line, because the database turning searches away under load is
@@ -238,14 +277,15 @@ export function summarizeSearchHealth(health: SearchHealth | null): SearchHealth
     return { level: "unknown", text: "ئىزدەش تەكشۈرۈشى تېخى ئىشلىمىدى — كۈندىلىك تەكشۈرۈشتىن كېيىن بۇ يەردە كۆرۈنىدۇ." };
   }
 
-  const problems = SEARCH_HEALTH_NAMES.filter(
-    (name) => !health[name].busy && (!health[name].ok || health[name].ms > SEARCH_HEALTH_SLOW_MS),
+  const checks = checksOf(health);
+  const problems = checks.filter(
+    ([, check]) => !check.busy && (!check.ok || check.ms > SEARCH_HEALTH_SLOW_MS),
   );
-  const busy = SEARCH_HEALTH_NAMES.filter((name) => health[name].busy);
-  const latest = SEARCH_HEALTH_NAMES.map((name) => health[name].at).sort().at(-1) ?? "";
+  const busy = checks.filter(([, check]) => check.busy);
+  const latest = checks.map(([, check]) => check.at).sort().at(-1) ?? "";
 
   if (problems.length === 0 && busy.length > 0) {
-    const named = busy.map((name) => LABELS[name]).join("، ");
+    const named = busy.map(([name]) => LABELS[name]).join("، ");
     return {
       level: "busy",
       text: `ئىزدەش تەكشۈرۈشى: ${named} — ئىزدەۋاتقانلار كۆپ بولغاچقا ساندان «ئالدىراش» دېدى (ئىككى قېتىم سىنالدى). بۇ خاتالىق ئەمەس؛ ھەر كۈنى كۆرۈنسە، سايتقا كەلكۈن كېلىۋاتقان بولۇشى مۇمكىن — ${stamp(latest)}.`,
@@ -253,7 +293,7 @@ export function summarizeSearchHealth(health: SearchHealth | null): SearchHealth
   }
 
   if (problems.length === 0) {
-    const timings = SEARCH_HEALTH_NAMES.map((name) => `${LABELS[name]} ${health[name].ms} ms`).join(" · ");
+    const timings = checks.map(([name, check]) => `${LABELS[name]} ${check.ms} ms`).join(" · ");
     return {
       level: "ok",
       text: `ئىزدەش تەكشۈرۈشى: ھەممىسى نورمال (${timings}) — ${stamp(latest)}.`,
@@ -261,8 +301,7 @@ export function summarizeSearchHealth(health: SearchHealth | null): SearchHealth
   }
 
   const named = problems
-    .map((name) => {
-      const check = health[name];
+    .map(([name, check]) => {
       return check.ok
         ? `${LABELS[name]} بەك ئاستا (${check.ms} ms)`
         : `${LABELS[name]} مەغلۇپ (خاتالىق ${check.code ?? "?"}، ${check.ms} ms)`;

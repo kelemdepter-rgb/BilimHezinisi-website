@@ -17,6 +17,7 @@ const BUSY_OUTCOME: SearchOutcome = {
   failure: "busy",
   moreAvailable: false,
   tooCommon: false,
+  partial: false,
 };
 
 /**
@@ -84,7 +85,7 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
   // An address past its allowance is told "busy" — the same calm answer the
   // database gives when its slots are full — without the database being asked.
   const limited = query !== "" && isRateLimited(`search:${await callerKey()}`, SEARCH_RULE);
-  const { hits, elapsedMs, failed, failure, moreAvailable, tooCommon } = limited
+  const { hits, elapsedMs, failed, failure, moreAvailable, tooCommon, partial } = limited
     ? BUSY_OUTCOME
     : await runBookSearch({
         query,
@@ -190,6 +191,23 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
             ? "ئىزدەش بەك ئۇزۇن ۋاقىت ئالدى. بىر تۈرنى تاللاپ ياكى يەنە بىر سۆز قوشۇپ قايتا سىناڭ."
             : "ئىزدەشتە خاتالىق كۆرۈلدى. سەل تۇرۇپ قايتا سىناڭ."}
         </p>
+      ) : hits.length === 0 && partial ? (
+        /* The words share so many pages that only the first ones were opened
+           (migration 0029), and the phrase was not on them. "Nothing found"
+           would not be true, so the reader is told what was searched and
+           how to reach the rest. */
+        <p
+          role="status"
+          className="mt-5 flex items-start gap-2 rounded-[var(--radius)] bg-ab px-3.5 py-3 text-[13px] leading-7"
+          data-testid="search-partial"
+        >
+          <Icon name="info" className="mt-1 shrink-0 text-am" />
+          <span>
+            «{query}» — بۇ سۆزلەر بىرگە كېلىدىغان بەت بەك كۆپ، شۇڭا كۇتۇپخانىنىڭ بىر قىسمىلا
+            ئىزدەلدى ۋە ئۇ قىسىمدا بۇ ئىبارە تېپىلمىدى. بىر تۈرنى تاللاپ ياكى يەنە بىر سۆز قوشۇپ
+            قايتا ئىزدەڭ.
+          </span>
+        </p>
       ) : hits.length === 0 ? (
         <div className="paper mt-5 p-6 text-center" data-testid="search-empty">
           <Icon name="search" className="ic-lg mx-auto text-am" />
@@ -212,7 +230,23 @@ export default async function SearchPage({ searchParams }: PageProps<"/search">)
               <Icon name="info" className="mt-1 shrink-0 text-am" />
               <span>
                 «{query}» بەك كۆپ بەتتە بار. تۆۋەندىكىسى دەسلەپكى نەتىجىلەر — تېخىمۇ ئېنىق
-                تېپىش ئۈچۈن يەنە بىر سۆز قوشۇڭ.
+                تېپىش ئۈچۈن يەنە بىر سۆز قوشۇڭ ياكى بىر تۈرنى تاللاڭ.
+              </span>
+            </p>
+          )}
+
+          {/* Only the first pages holding the words were opened (0029):
+              these are what turned up there, not everything there is. */}
+          {partial && (
+            <p
+              className="mt-4 flex items-start gap-2 rounded-[var(--radius)] bg-ab px-3.5 py-3 text-[13px] leading-7"
+              data-testid="search-partial"
+            >
+              <Icon name="info" className="mt-1 shrink-0 text-am" />
+              <span>
+                «{query}» — بۇ سۆزلەر بىرگە كېلىدىغان بەت بەك كۆپ، شۇڭا كۇتۇپخانىنىڭ بىر قىسمىلا
+                ئىزدەلدى. تۆۋەندىكىسى شۇ قىسىمدىن تېپىلغان نەتىجىلەر — ھەممىسىنى تېپىش ئۈچۈن بىر
+                تۈرنى تاللاڭ ياكى يەنە بىر سۆز قوشۇڭ.
               </span>
             </p>
           )}

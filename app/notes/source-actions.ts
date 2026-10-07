@@ -44,7 +44,7 @@ export type NoteSourceHit = {
 };
 
 export type NoteSourceResult =
-  | { ok: true; hits: NoteSourceHit[]; tooCommon: boolean }
+  | { ok: true; hits: NoteSourceHit[]; tooCommon: boolean; partial: boolean }
   | { ok: false; error: string };
 
 export type NoteQuranResult = { ok: true; hits: QuranHit[] } | { ok: false; error: string };
@@ -86,7 +86,7 @@ export async function searchLibraryForNoteAction(input: {
     if (isRateLimited(caller.key, NOTE_SOURCE_RULE)) return { ok: false, error: MSG.tooFast };
 
     const query = input.query.trim().slice(0, MAX_QUERY);
-    if (!query) return { ok: true, hits: [], tooCommon: false };
+    if (!query) return { ok: true, hits: [], tooCommon: false, partial: false };
 
     const outcome = await runBookSearch({
       query,
@@ -100,6 +100,7 @@ export async function searchLibraryForNoteAction(input: {
     return {
       ok: true,
       tooCommon: outcome.tooCommon,
+      partial: outcome.partial,
       hits: outcome.hits.map((hit: SearchHit) => ({
         bookId: hit.book_id,
         title: hit.title,

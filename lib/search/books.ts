@@ -12,7 +12,19 @@ export type SearchHit = {
   rank: number;
   /** True when the word matched more pages than the RPC is willing to rank. */
   capped?: boolean;
+  /**
+   * True when a phrase's words share more pages than search_books opens to
+   * check (migration 0029), so only part of the library was searched.
+   */
+  partial?: boolean;
 };
+
+/**
+ * What search_books sends when only part of the library was searched and
+ * nothing turned up there (0029): one row with no book, carrying the flags.
+ * It is not a result.
+ */
+type SearchRow = Omit<SearchHit, "book_id"> & { book_id: number | null };
 
 /**
  * Why a search failed, when it did. A timeout is the database giving up at
@@ -35,6 +47,12 @@ export type SearchOutcome = {
    * says so and suggests a second word.
    */
   tooCommon: boolean;
+  /**
+   * The phrase's words share so many pages that only the first ones were
+   * opened to look for it (migration 0029). Whatever was found is in `hits`
+   * — possibly nothing — and the page says that only part was searched.
+   */
+  partial: boolean;
 };
 
 /** Postgres's SQLSTATE for "canceling statement due to statement timeout". */
@@ -68,6 +86,7 @@ export async function runBookSearch(input: {
     failure: null,
     moreAvailable: false,
     tooCommon: false,
+    partial: false,
   };
   if (!input.query) return empty;
 
@@ -106,14 +125,17 @@ export async function runBookSearch(input: {
     );
   }
 
-  const rows = (data as SearchHit[] | null) ?? [];
+  const rows = (data as SearchRow[] | null) ?? [];
+  // The flags-only row is not a result; every other row is a book or a page.
+  const hits = rows.filter((row): row is SearchHit => row.book_id !== null);
   return {
-    hits: rows.slice(0, limit),
+    hits: hits.slice(0, limit),
     elapsedMs,
     failed: Boolean(error),
     failure,
-    moreAvailable: rows.length > limit,
-    // Every row carries the same flag, so the first one answers for all.
+    moreAvailable: hits.length > limit,
+    // Every row carries the same flags, so the first one answers for all.
     tooCommon: Boolean(rows[0]?.capped),
+    partial: Boolean(rows[0]?.partial),
   };
 }

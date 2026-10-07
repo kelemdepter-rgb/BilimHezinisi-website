@@ -589,9 +589,11 @@ export default defineConfig({
          * fake-Supabase server as the auth-flow projects, which answers the
          * search RPCs the way migration 0028's slots do — never the real
          * project, and never a real flood (scripts/flood/ does that, locally).
+         * And the most common words (PROMPT-41): «ئاللاھ», and a phrase whose
+         * words fill the library, answered the way migration 0029 does.
          */
         name: `resilience-${viewport.name}`,
-        testMatch: /search-flood\.spec\.ts/,
+        testMatch: /search-(flood|common-words)\.spec\.ts/,
         use: {
           baseURL: MOCK_URL,
           browserName: "chromium" as const,

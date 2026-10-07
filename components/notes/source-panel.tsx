@@ -57,6 +57,7 @@ export function SourcePanel({
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<NoteSourceHit[] | null>(null);
   const [tooCommon, setTooCommon] = useState(false);
+  const [partial, setPartial] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Full paragraphs fetched on demand, keyed by book and page. */
@@ -123,6 +124,7 @@ export function SourcePanel({
     }
     setHits(result.hits);
     setTooCommon(result.tooCommon);
+    setPartial(result.partial);
     setPassages({});
   }, [query]);
 
@@ -316,7 +318,7 @@ export function SourcePanel({
                 </p>
               )}
 
-              {hits !== null && hits.length === 0 && !busy && (
+              {hits !== null && hits.length === 0 && !busy && !partial && (
                 <p className="mt-4 text-[13px] leading-7 text-ink3" data-testid="source-empty">
                   ھېچنېمە تېپىلمىدى. باشقا سۆز بىلەن سىناپ كۆرۈڭ.
                 </p>
@@ -325,6 +327,17 @@ export function SourcePanel({
               {tooCommon && (
                 <p className="mt-3 rounded-[var(--radius)] bg-ab px-3 py-2 text-[12.5px] leading-6">
                   بۇ سۆز بەك كۆپ ئۇچرايدۇ — يەنە بىر سۆز قوشسىڭىز نەتىجە ئېنىقراق بولىدۇ.
+                </p>
+              )}
+
+              {/* Only part of the library was searched (migration 0029), so
+                  "nothing found" would not be true: say what happened. */}
+              {partial && !busy && (
+                <p
+                  className="mt-3 rounded-[var(--radius)] bg-ab px-3 py-2 text-[12.5px] leading-6"
+                  data-testid="source-partial"
+                >
+                  بۇ سۆزلەر بىرگە كېلىدىغان بەت بەك كۆپ، شۇڭا كۇتۇپخانىنىڭ بىر قىسمىلا ئىزدەلدى — يەنە بىر سۆز قوشسىڭىز نەتىجە ئېنىقراق بولىدۇ.
                 </p>
               )}
 

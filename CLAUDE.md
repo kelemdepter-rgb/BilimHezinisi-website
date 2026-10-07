@@ -118,6 +118,18 @@ here. The table is left in place because an applied migration is never edited ·
   anonymous visitor on 2026-09-11). After the owner applies ANY migration that touches
   search, `node --env-file=.env.local scripts/search-timing.mjs after` runs **as anon**
   (the default) and must pass — it exits non-zero on a failure or a missed budget.
+- **Pages are found through the index and nothing else** (0029, PROMPT-41):
+  `search_books` and `book_match_pages` take their pages from
+  `private.matching_pages`, whose one statement runs with the planner's walks
+  (`enable_seqscan/indexscan/nestloop`) off. Left free, the planner walked the
+  books normalizing every page for «ئاللاھ» (gathered in a few books) and timed
+  out live; on an unchanged copy the same plan flipped between 5 s and 0.7 ms.
+  A phrase asks the index for pages holding ALL its words and opens at most
+  1,000 of them; when that bound stops it, the answer carries `partial` (and a
+  flags-only row with no book when nothing turned up), which /search and the
+  notebook show as «only part searched» — never «nothing found».
+  `runBookSearch` filters that row; any new caller of `search_books` must too.
+  Measurements and the reasoning: `docs/search-common-words.md`.
 - RPC `search_books(query, category, limit, offset)` returning ranked results with
   highlighted snippets, plus `page_no` and `match_pos` so the reader can jump to the
   exact occurrence.

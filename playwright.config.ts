@@ -103,6 +103,32 @@ const VIEWPORTS = [
 ] as const;
 
 /**
+ * The notebook in the two other engines (N15). The owner writes in Firefox and
+ * iPhone readers use Safari, and contentEditable with execCommand behaves
+ * differently in each — Enter alone produces a different shape of HTML in each
+ * of the three. Only the notebook's specs run here: the rest of the site is
+ * plain markup that the Chromium projects already prove.
+ *
+ * Playwright's Firefox does not support `isMobile`, so its phone run is the
+ * viewport alone. WebKit with `isMobile` and `hasTouch` is the closest
+ * Playwright gets to iPhone Safari.
+ *
+ * Install the engines once with `npx playwright install firefox webkit`. When
+ * that runs from inside the Claude desktop app on Windows, `%LOCALAPPDATA%` is
+ * silently redirected into the app's private package folder, and Firefox —
+ * alone of the three — then cannot start ("side-by-side configuration is
+ * incorrect": Windows looks for its mozglue component at the real path, where
+ * it is not). Install AND run with PLAYWRIGHT_BROWSERS_PATH set to a folder
+ * outside AppData, such as %USERPROFILE%\.cache\ms-playwright.
+ */
+const NOTEBOOK_ENGINES = [
+  { name: "firefox-desktop-1280x800", browser: "firefox", width: 1280, height: 800, mobile: false, scale: 1 },
+  { name: "firefox-mobile-390x844", browser: "firefox", width: 390, height: 844, mobile: false, scale: 3 },
+  { name: "webkit-mobile-390x844", browser: "webkit", width: 390, height: 844, mobile: true, scale: 3 },
+  { name: "webkit-desktop-1280x800", browser: "webkit", width: 1280, height: 800, mobile: false, scale: 1 },
+] as const;
+
+/**
  * Mobile-first testing gate (CLAUDE.md): every feature must pass at
  * 375×667, 390×844 and 1280×800 — no horizontal overflow, controls usable
  * after scrolling, drawers must not trap body scroll.
@@ -618,6 +644,21 @@ export default defineConfig({
         },
       },
     ]),
+    ...NOTEBOOK_ENGINES.map((engine) => ({
+      // The same three specs, setup and signed-in state as the Chromium
+      // notes, notes-sources and notes-ai projects above.
+      name: `notebook-${engine.name}`,
+      testMatch: /[\\/]notes(-sources|-ai)?\.spec\.ts$/,
+      dependencies: ["setup"],
+      use: {
+        browserName: engine.browser,
+        viewport: { width: engine.width, height: engine.height },
+        isMobile: engine.mobile,
+        hasTouch: engine.mobile,
+        deviceScaleFactor: engine.scale,
+        storageState: STAFF_STATE_PATH,
+      },
+    })),
   ]),
   webServer: [
     {

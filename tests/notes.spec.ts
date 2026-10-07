@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { READER_STATE_PATH, freshPassword, hasStaffTestEnv, loadEnvLocal, testEmail } from "./env";
+import { scrollPage } from "./fixtures/scroll";
 
 loadEnvLocal();
 
@@ -162,14 +163,11 @@ test.describe("notebook", () => {
 
     // Scroll down, then back up: the mobile rule is that every control is still
     // there and tappable afterwards.
-    await page.mouse.wheel(0, 4000);
-    await page.waitForTimeout(200);
+    await scrollPage(page, 4000);
     await expect(page.getByTestId("note-toolbar")).toBeInViewport();
     await expect(page.getByTestId("format-bold")).toBeVisible();
 
-    await page.mouse.wheel(0, -6000);
-
-    await page.waitForTimeout(200);
+    await scrollPage(page, -6000);
     for (const id of ["notes-back", "note-title", "format-bold", "toolbar-more", "spell-toggle"]) {
       await expect(page.getByTestId(id), id).toBeVisible();
     }
@@ -540,12 +538,9 @@ test.describe("the spellchecker at line ends", () => {
         expect(await overflow(), "no horizontal scroll at 360px").toBeLessThanOrEqual(1);
       }
 
-      await page.mouse.wheel(0, 4000);
-
-      await page.waitForTimeout(200);
+      await scrollPage(page, 4000);
       await expect(page.getByTestId("note-toolbar")).toBeInViewport();
-      await page.mouse.wheel(0, -6000);
-      await page.waitForTimeout(200);
+      await scrollPage(page, -6000);
       for (const id of ["notes-back", "note-title", "format-bold", "toolbar-more", "spell-toggle"]) {
         await expect(page.getByTestId(id), id).toBeVisible();
       }

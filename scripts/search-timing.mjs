@@ -4,6 +4,10 @@
  *   node --env-file=.env.local scripts/search-timing.mjs before
  *   node --env-file=.env.local scripts/search-timing.mjs after
  *   node --env-file=.env.local scripts/search-timing.mjs after --service
+ *   node --env-file=.flood/local.env scripts/search-timing.mjs before   (the local copy)
+ *
+ * `--runs N` sets how many calls each cell's median is taken from (default
+ * 5); against the live site, fewer runs mean fewer requests.
  *
  * Anonymous by default: the site's own public key, which carries the 3 s
  * statement timeout Supabase gives the `anon` role. That is what every reader
@@ -29,7 +33,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 const label = process.argv[2] === "after" ? "after" : "before";
 const useServiceRole = process.argv.includes("--service");
 const file = (name) => `.search-timing-${name}.json`;
-const RUNS = 5;
+const runsFlag = process.argv.indexOf("--runs");
+const RUNS = runsFlag !== -1 ? Math.max(1, Number(process.argv[runsFlag + 1]) || 5) : 5;
 
 const key = useServiceRole
   ? process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -58,8 +63,26 @@ const QUERIES = [
   { name: "a word that occurs nowhere", q: NOWHERE, budget: 400 },
 ];
 
+/**
+ * PROMPT-41's words: the most common in this library (measured live on
+ * 2026-10-05, from 0.17 s for «تېخنىكا» to a timeout for «ئاللاھ»), a common
+ * phrase, and two common words that seldom stand side by side — the phrase
+ * that opens many pages for few matches. Over the whole library and the
+ * largest of the categories above.
+ */
+const COMMON_WORDS = [
+  { name: "the timeout of 2026-10-05", q: "ئاللاھ", budget: 1500 },
+  { name: "a common word", q: "ئىلىم", budget: 1500 },
+  { name: "a common word", q: "كىتاب", budget: 1500 },
+  { name: "a less common word", q: "مېۋە", budget: 1500 },
+  { name: "a rare word", q: "تېخنىكا", budget: 1500 },
+  { name: "a common phrase", q: "ئاللاھ تائالا", budget: 1500 },
+  { name: "common words, seldom adjacent", q: "پەيغەمبەر ئاللاھ", budget: 1500 },
+];
+
 /** The whole library, then the three categories the audit measured. */
 const SCOPE_IDS = [null, 17, 15, 14];
+const COMMON_SCOPE_IDS = [null, 15];
 
 const median = (values) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
 const pad = (value, width) => String(value).padStart(width);
@@ -131,33 +154,42 @@ async function time(call) {
 const library = await describeScopes();
 const cells = [];
 
-for (const query of QUERIES) {
-  for (const scope of library.scopes) {
-    const timed = await time(() =>
-      supabase.rpc("search_books", { q: query.q, category_id: scope.id, lim: 20, off: 0 }),
-    );
-    cells.push({
-      kind: "search_books",
-      name: query.name,
-      q: query.q,
-      scope,
-      budget: query.budget,
-      ...timed,
-      rows: (timed.rows ?? []).map((row) => ({
-        book_id: row.book_id,
-        page_no: row.page_no,
-        rank: row.rank,
-        capped: row.capped,
-        snippet: row.snippet,
-      })),
-    });
-  }
+const searches = [
+  ...QUERIES.flatMap((query) => library.scopes.map((scope) => ({ query, scope }))),
+  ...COMMON_WORDS.flatMap((query) =>
+    library.scopes.filter((scope) => COMMON_SCOPE_IDS.includes(scope.id)).map((scope) => ({ query, scope })),
+  ),
+];
+for (const { query, scope } of searches) {
+  const timed = await time(() =>
+    supabase.rpc("search_books", { q: query.q, category_id: scope.id, lim: 20, off: 0 }),
+  );
+  cells.push({
+    kind: "search_books",
+    name: query.name,
+    q: query.q,
+    scope,
+    budget: query.budget,
+    ...timed,
+    rows: (timed.rows ?? []).map((row) => ({
+      book_id: row.book_id,
+      page_no: row.page_no,
+      rank: row.rank,
+      capped: row.capped,
+      // Migration 0029's column; absent before it, and recorded as false so a
+      // run before and a run after compare on the rows alone.
+      partial: row.partial ?? false,
+      snippet: row.snippet,
+    })),
+  });
 }
 
 // The reader's navigator on the biggest book: its cost grows with the pages
 // of ONE book, so this is where a per-page plan shows up last and worst.
 if (library.largest) {
-  for (const query of [QUERIES[0], QUERIES[QUERIES.length - 1]]) {
+  // «ئاللاھ» is on few of its pages and walked all of them before 0029.
+  const navigatorWords = [QUERIES[0], QUERIES[1], COMMON_WORDS[0], COMMON_WORDS[5], QUERIES[QUERIES.length - 1]];
+  for (const query of navigatorWords) {
     const timed = await time(() =>
       supabase.rpc("book_match_pages", { book_id: library.largest.id, q: query.q, lim: 500 }),
     );
@@ -229,9 +261,11 @@ if (label === "after" && existsSync(file("before"))) {
       answers = "same answers";
     } else {
       // A capped result is the best of an early slice by design (0014), and
-      // which slice depends on the plan; an uncapped difference is a real one.
-      const capped = previous.rows[0]?.capped === true || cell.rows[0]?.capped === true;
-      answers = capped ? "DIFFERENT (capped slice)" : "DIFFERENT ANSWERS";
+      // which slice depends on the plan; so is a partial one (0029: the pages
+      // a phrase may open ran out). Any other difference is a real one.
+      const sliced = (rows) => rows[0]?.capped === true || rows[0]?.partial === true;
+      const capped = sliced(previous.rows) || sliced(cell.rows);
+      answers = capped ? "DIFFERENT (capped or partial slice)" : "DIFFERENT ANSWERS";
       differentAnswers += 1;
     }
     console.log(

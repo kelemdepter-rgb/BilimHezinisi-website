@@ -1,25 +1,48 @@
 /**
- * Record search results for a fixed query set, so the same queries can be
- * compared before and after a storage change.
+ * Record what search_books answers for a fixed set of queries, so a change to
+ * search can be held to "the same rows, in the same order, with the same
+ * snippets" — run before the change and after it.
  *
- * Run:  node --env-file=.env.local scripts/search-parity.mjs before
- *       node --env-file=.env.local scripts/search-parity.mjs after
+ *   node --env-file=.flood/local.env scripts/search-parity.mjs before   (the local copy)
+ *   node --env-file=.flood/local.env scripts/search-parity.mjs after
+ *   … add --service to call as the service role instead
  *
- * Writes .search-parity-<label>.json and, for "after", diffs against "before".
+ * Anonymous by default — the public key, the 3 s statement timeout, the path
+ * every reader takes. Each query is asked over the whole library and over one
+ * large category, for the FULL ranked list a reader can page through (300
+ * rows, 15 pages of 20), not just the first page.
+ *
+ * Writes .search-parity-<label>.json; `after` compares with `before` and
+ * sorts every difference into one of two kinds:
+ *   - capped or partial on either side: more than 300 pages match, or the pages
+ *     a phrase may open ran out (0014, 0029). Which slice is ranked depends on
+ *     the plan by design, so a difference here is listed and explained, not a
+ *     failure;
+ *   - anything else: a real difference. The script exits non-zero.
  */
 import { createClient } from "@supabase/supabase-js";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 
 const label = process.argv[2] === "after" ? "after" : "before";
+const useServiceRole = process.argv.includes("--service");
 const file = (name) => `.search-parity-${name}.json`;
+/** The deepest a reader can page: 15 pages of 20 (app/search/page.tsx). */
+const DEPTH = 300;
+/** The whole library, and the largest category the audits measured. */
+const SCOPES = [null, 15];
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { auth: { autoRefreshToken: false, persistSession: false } },
-);
+const key = useServiceRole
+  ? process.env.SUPABASE_SERVICE_ROLE_KEY
+  : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !key) {
+  console.error("NEXT_PUBLIC_SUPABASE_URL and the chosen key must be set.");
+  process.exit(2);
+}
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, key, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
 
-// Pull real words out of the library so the queries exercise actual content.
+// Real words out of the library too, so the set is not only words chosen by hand.
 const { data: pages } = await supabase
   .from("book_pages")
   .select("book_id, page_no, content")
@@ -36,93 +59,133 @@ for (const page of pages ?? []) {
   }
 }
 const sorted = [...words.entries()].sort((a, b) => b[1] - a[1]);
-const common = sorted[0]?.[0] ?? "كىتاب";
-// A word appearing once, ideally on a later page — the "rare word deep in a
-// book" case.
+const derivedCommon = sorted[0]?.[0] ?? "كىتاب";
 const deepPage = (pages ?? [])[Math.min(2, (pages?.length ?? 1) - 1)];
-const rare =
+const derivedRare =
   String(deepPage?.content ?? "")
     .split(/\s+/)
     .map((w) => w.replace(/[^\p{L}\p{M}]/gu, ""))
     .find((w) => w.length > 5 && words.get(w) === 1) ?? sorted[sorted.length - 1]?.[0] ?? "خەزىنە";
-
-// A two-word phrase taken verbatim from the text.
 const phraseSource = String(pages?.[0]?.content ?? "").split(/\s+/).filter((w) => w.length > 3);
-const phrase = phraseSource.slice(0, 2).join(" ").replace(/[^\p{L}\p{M}\s]/gu, "").trim();
+const derivedPhrase = phraseSource.slice(0, 2).join(" ").replace(/[^\p{L}\p{M}\s]/gu, "").trim();
 
 const QUERIES = [
-  { name: "single common word", q: common },
-  { name: "rare word deep in a book", q: rare },
-  { name: "quoted phrase", q: `"${phrase}"` },
+  // PROMPT-41's list.
+  { name: "the 2026-10-05 timeout", q: "ئاللاھ" },
+  { name: "very common", q: "پەيغەمبەر" },
+  { name: "common", q: "ئىلىم" },
+  { name: "common", q: "كىتاب" },
+  { name: "common", q: "ناماز" },
+  { name: "ordinary", q: "مېۋە" },
+  { name: "rare", q: "تېخنىكا" },
+  { name: "common phrase", q: "ئاللاھ تائالا" },
+  { name: "common words, seldom adjacent", q: "پەيغەمبەر ئاللاھ" },
+  { name: "occurs nowhere", q: "قققزززخخخ" },
+  // Ordinary words and phrases.
+  { name: "rarer word", q: "زاكات" },
+  { name: "three-word phrase", q: "نامازغا چاقىرىش ئۈچۈن" },
+  { name: "phrase", q: "ناماز ئوقۇش" },
+  { name: "word start (نامازغا)", q: "نامازغا" },
+  { name: "title word", q: "جەننەت" },
   { name: "hamza/alif variant (آية vs اية)", q: "اية" },
   { name: "hamza variant (إسلام vs اسلام)", q: "اسلام" },
   { name: "uyghur ya vs alif maqsura (تىل)", q: "تىل" },
-  { name: "boolean OR", q: `${common} OR خەزىنە` },
-  { name: "exclusion", q: `${common} -قوندۇرۇلمىغانسۆز` },
-  { name: "title word", q: "جەننەت" },
+  // What used to be operators is plain text now (0016).
+  { name: "the word OR, literally", q: `${derivedCommon} OR خەزىنە` },
+  // Out of the library itself.
+  { name: "derived: most frequent word", q: derivedCommon },
+  { name: "derived: rare word deep in a book", q: derivedRare },
+  { name: "derived: two words verbatim", q: derivedPhrase },
 ];
 
 const results = [];
 for (const query of QUERIES) {
-  const started = Date.now();
-  const { data, error } = await supabase.rpc("search_books", {
-    q: query.q,
-    category_id: null,
-    lim: 20,
-    off: 0,
-  });
-  const ms = Date.now() - started;
-  results.push({
-    name: query.name,
-    q: query.q,
-    ms,
-    error: error?.message ?? null,
-    hits: (data ?? []).map((row) => ({
-      book_id: row.book_id,
-      page_no: row.page_no,
-      rank: Number(row.rank).toFixed(4),
-      snippet: String(row.snippet).replace(/\s+/g, " ").slice(0, 90),
-    })),
-  });
+  for (const scope of SCOPES) {
+    const started = Date.now();
+    const { data, error } = await supabase.rpc("search_books", {
+      q: query.q,
+      category_id: scope,
+      lim: DEPTH,
+      off: 0,
+    });
+    const ms = Date.now() - started;
+    const rows = data ?? [];
+    results.push({
+      name: query.name,
+      q: query.q,
+      scope,
+      ms,
+      error: error ? `${error.code} ${error.message}` : null,
+      capped: rows.some((row) => row.capped === true),
+      partial: rows.some((row) => row.partial === true),
+      // The flags-only row 0029 sends when nothing was found in the part searched.
+      hits: rows
+        .filter((row) => row.book_id !== null)
+        .map((row) => ({
+          book_id: row.book_id,
+          page_no: row.page_no,
+          rank: Number(row.rank).toFixed(6),
+          snippet: String(row.snippet).replace(/\s+/g, " "),
+        })),
+    });
+  }
 }
 
-writeFileSync(file(label), JSON.stringify(results, null, 2), "utf8");
+writeFileSync(file(label), JSON.stringify({ label, role: useServiceRole ? "service_role" : "anon", results }, null, 2), "utf8");
 
-console.log(`SEARCH PARITY — ${label.toUpperCase()}`);
-console.log("=".repeat(72));
+const scopeName = (scope) => (scope === null ? "whole library" : `category ${scope}`);
+console.log(`SEARCH PARITY — ${label.toUpperCase()}  as ${useServiceRole ? "service_role" : "anon"}  (up to ${DEPTH} rows)`);
+console.log("=".repeat(80));
 for (const entry of results) {
-  console.log(`\n${entry.name}  →  ${entry.q}`);
-  console.log(`  ${entry.hits.length} hit(s) in ${entry.ms} ms${entry.error ? ` ERROR: ${entry.error}` : ""}`);
-  for (const hit of entry.hits.slice(0, 3)) {
-    console.log(`    book ${hit.book_id} p${hit.page_no} rank ${hit.rank} | ${hit.snippet}`);
-  }
+  const flags = [entry.capped && "capped", entry.partial && "partial"].filter(Boolean).join(", ");
+  console.log(
+    `${String(entry.ms).padStart(5)} ms  ${String(entry.hits.length).padStart(3)} rows  ${scopeName(entry.scope).padEnd(13)} ` +
+      `${entry.name} — «${entry.q}»${flags ? `  [${flags}]` : ""}${entry.error ? `  ERROR ${entry.error}` : ""}`,
+  );
 }
 
 if (label === "after" && existsSync(file("before"))) {
   const before = JSON.parse(readFileSync(file("before"), "utf8"));
-  console.log(`\n${"=".repeat(72)}\nCOMPARISON WITH BEFORE\n${"=".repeat(72)}`);
-  let differences = 0;
-  for (const [index, entry] of results.entries()) {
-    const previous = before[index];
+  const previousResults = Array.isArray(before) ? before : before.results;
+  console.log(`\n${"=".repeat(80)}\nCOMPARISON WITH BEFORE\n${"=".repeat(80)}`);
+  let real = 0;
+  let sliced = 0;
+  for (const entry of results) {
+    const previous = previousResults.find((other) => other.q === entry.q && other.scope === entry.scope);
     if (!previous) continue;
-    const key = (hits) => hits.map((h) => `${h.book_id}:${h.page_no}`).join(",");
-    const same = key(previous.hits) === key(entry.hits);
-    const snippetsSame =
-      previous.hits.map((h) => h.snippet).join("|") === entry.hits.map((h) => h.snippet).join("|");
-    if (!same || !snippetsSame) differences++;
-    console.log(
-      `${same && snippetsSame ? "SAME    " : "CHANGED "} ${entry.name}  (${previous.hits.length} → ${entry.hits.length} hits, ${previous.ms} → ${entry.ms} ms)`,
-    );
+    const rowsKey = (hits) => hits.map((h) => `${h.book_id}:${h.page_no}:${h.rank}`).join(",");
+    const snippetsKey = (hits) => hits.map((h) => h.snippet).join("|");
+    const same =
+      !previous.error &&
+      !entry.error &&
+      rowsKey(previous.hits) === rowsKey(entry.hits) &&
+      snippetsKey(previous.hits) === snippetsKey(entry.hits) &&
+      previous.capped === entry.capped &&
+      Boolean(previous.partial) === entry.partial;
+    let verdict = "SAME";
     if (!same) {
-      console.log(`    before: ${key(previous.hits) || "(none)"}`);
-      console.log(`    after:  ${key(entry.hits) || "(none)"}`);
-    } else if (!snippetsSame) {
-      console.log("    same pages, different snippet text");
+      if (previous.error) verdict = `before failed (${previous.error})`;
+      else if (previous.capped || previous.partial || entry.capped || entry.partial) {
+        verdict = "DIFFERENT — capped or partial slice";
+        sliced += 1;
+      } else {
+        verdict = "DIFFERENT — REAL";
+        real += 1;
+      }
+    }
+    console.log(
+      `${verdict.padEnd(36)} ${scopeName(entry.scope).padEnd(13)} «${entry.q}»  ` +
+        `(${previous.hits.length} → ${entry.hits.length} rows, ${previous.ms} → ${entry.ms} ms)`,
+    );
+    if (verdict === "DIFFERENT — REAL") {
+      console.log(`    before: ${rowsKey(previous.hits).slice(0, 300) || "(none)"}`);
+      console.log(`    after:  ${rowsKey(entry.hits).slice(0, 300) || "(none)"}`);
     }
   }
   console.log(
-    differences === 0
-      ? "\nRESULT: every query returns identical results and snippets."
-      : `\nRESULT: ${differences} query/queries changed — review above.`,
+    real === 0
+      ? `\nRESULT: no real difference; ${sliced} capped/partial slice(s) differ by design.`
+      : `\nRESULT: ${real} REAL difference(s) — review above.`,
   );
+  process.exit(real === 0 ? 0 : 1);
 }

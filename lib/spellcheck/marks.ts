@@ -22,12 +22,42 @@
  * Everything here works on an offset map — the same trick the search
  * highlighter uses: flatten the text nodes into one string, remember where each
  * one started, and convert freely in both directions afterwards.
+ *
+ * WHERE A LINE ENDS, THE MAP SAYS SO. The flattened string is what the
+ * tokenizer reads, so it must break wherever the reader sees a break. It used
+ * to be the bare concatenation of every text node, and that glued the last
+ * word of one line to the first word of the next: «سىلىشتۇرسۇ», Enter,
+ * «كىشىلەر» read as one word, was underlined as one wrong word, and taking a
+ * suggestion replaced a Range running from the first block into the second —
+ * deleting the next line's word and the line break with it (N1, 2026-10-07).
+ *
+ * So the map puts one virtual LINE_SEPARATOR between two text nodes whenever,
+ * walking from the first to the second in document order, it
+ *
+ *  - enters or leaves a block element (BLOCK_TAGS) — which covers every pair
+ *    of nodes whose nearest block differs, and also an empty block sitting
+ *    between two runs of text inside one block, which the browser draws as a
+ *    line break too; or
+ *  - passes a <br> (or an <hr>, which is a block).
+ *
+ * At most one separator stands between two nodes, and none before the first.
+ * Inline elements — b, span, a, font and the rest — never break anything: a
+ * word half in bold is still one word.
+ *
+ * A separator belongs to no text node. `starts[i]` is still where `nodes[i]`
+ * begins; the gaps between one node's end and the next one's start are the
+ * separators; and an offset that falls on a separator resolves to the END of
+ * the node before it, so a word that ends a line gets a Range that ends inside
+ * its own block. Empty text nodes are left out of the map: they hold no
+ * character an offset could address, and one sitting just before a separator
+ * would otherwise claim that offset ahead of the node holding the word.
  */
 
 /** A flattened view of every text node under a root, with the way back. */
 export type TextMap = {
-  /** All the text, as the reader sees it. */
+  /** All the text, as the reader sees it, with LINE_SEPARATOR at line ends. */
   text: string;
+  /** Every non-empty text node, in document order. */
   nodes: Text[];
   /** Where each node's text begins inside `text`. */
   starts: number[];
@@ -36,32 +66,88 @@ export type TextMap = {
 /** One misspelled word, addressed in flattened coordinates. */
 export type MarkedWord = { word: string; start: number; end: number };
 
+/** What the map puts where a line ends. No word pattern ever matches it. */
+export const LINE_SEPARATOR = "\n";
+
+/**
+ * The block-level tags a note can contain (lib/notes/sanitize.ts holds the
+ * closed list). Entering or leaving one ends a line. The same notion as
+ * BLOCK_SELECTOR in lib/ai/note-blocks.ts, which picks the LEAF blocks out of
+ * this set for its own purpose and so keeps its own list.
+ */
+export const BLOCK_TAGS: ReadonlySet<string> = new Set([
+  "p",
+  "div",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "pre",
+  "table",
+  "thead",
+  "tbody",
+  "tr",
+  "th",
+  "td",
+  "hr",
+]);
+
 /**
  * Flatten a subtree's text. Nodes are visited in document order, so the string
- * reads the way the page does.
+ * reads the way the page does, and a line end between two of them becomes a
+ * LINE_SEPARATOR — see the comment at the top of this file.
  */
-export function readTextMap(root: Node, doc: Document = document): TextMap {
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+export function readTextMap(root: Node): TextMap {
   const nodes: Text[] = [];
   const starts: number[] = [];
   let text = "";
+  // A line end has been passed since the last text node. A flag, not a count,
+  // which is what keeps it to one separator however many boundaries there are.
+  let lineEnded = false;
 
-  let node = walker.nextNode() as Text | null;
-  while (node) {
-    starts.push(text.length);
-    nodes.push(node);
-    text += node.data;
-    node = walker.nextNode() as Text | null;
-  }
+  const visit = (parent: Node) => {
+    for (let child = parent.firstChild; child; child = child.nextSibling) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const node = child as Text;
+        if (node.data.length === 0) continue;
+        if (lineEnded && nodes.length > 0) text += LINE_SEPARATOR;
+        lineEnded = false;
+        starts.push(text.length);
+        nodes.push(node);
+        text += node.data;
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const tag = (child as Element).localName;
+        if (tag === "br") {
+          lineEnded = true;
+          continue;
+        }
+        const block = BLOCK_TAGS.has(tag);
+        if (block) lineEnded = true;
+        visit(child);
+        if (block) lineEnded = true;
+      }
+    }
+  };
+  visit(root);
+
   return { text, nodes, starts };
 }
 
 /**
  * Which text node holds a flattened offset, and where inside it.
  *
- * An offset sitting exactly on a boundary belongs to the node that STARTS
- * there, so a range built from [start, end) never begins at the tail of the
- * previous node — which would place the underline one node too early.
+ * An offset sitting exactly on a boundary between two adjacent nodes belongs
+ * to the node that STARTS there, so a range built from [start, end) never
+ * begins at the tail of the previous node — which would place the underline
+ * one node too early. An offset on a separator belongs to no node and resolves
+ * to the end of the one before it: the search below lands on that node, and
+ * the offset inside it is its length.
  */
 function locate(map: TextMap, offset: number): { node: Text; offset: number } | null {
   if (map.nodes.length === 0) return null;
@@ -81,7 +167,8 @@ function locate(map: TextMap, offset: number): { node: Text; offset: number } | 
 
   const node = map.nodes[found];
   const within = offset - map.starts[found];
-  // A trailing offset can land one past the end of an empty or exhausted node.
+  // A trailing offset can land one past the end of an exhausted node, and a
+  // node can have shortened since the map was read.
   return { node, offset: Math.min(Math.max(within, 0), node.data.length) };
 }
 
@@ -114,7 +201,9 @@ export function offsetOf(map: TextMap, node: Node, offset: number): number | nul
 export function wordAtOffset(marks: readonly MarkedWord[], offset: number): MarkedWord | null {
   for (const mark of marks) {
     // Inclusive of `end` so a tap at the very end of a word still opens it —
-    // on a phone the finger lands wherever it lands.
+    // on a phone the finger lands wherever it lands. A word that ends a line
+    // ends on a separator, so the first offset of the next line is never
+    // mistaken for the end of this one.
     if (offset >= mark.start && offset <= mark.end) return mark;
   }
   return null;

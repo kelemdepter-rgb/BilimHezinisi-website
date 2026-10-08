@@ -34,7 +34,11 @@ function sourceFiles(): string[] {
     "node_modules",
     ".next",
     ".next-e2e",
+    ".next-mock",
+    ".next-flood",
     ".git",
+    // Claude Code's worktrees: whole second copies of the repo, inside it.
+    ".claude",
     "test-results",
     "migration-data",
     "backups",

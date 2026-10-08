@@ -46,6 +46,7 @@
     "node_modules",
     ".next-e2e",
     ".next-mock",
-    ".next-flood"
+    ".next-flood",
+    ".claude"
   ]
 }

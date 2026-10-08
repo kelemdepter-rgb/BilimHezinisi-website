@@ -17,6 +17,8 @@ const eslintConfig = defineConfig([
     ".next-mock/**",
     // The production build the flood test serves (scripts/flood/); generated too.
     ".next-flood/**",
+    // Claude Code's worktrees: second copies of the repo, build output and all.
+    ".claude/**",
     "out/**",
     "build/**",
     "next-env.d.ts",

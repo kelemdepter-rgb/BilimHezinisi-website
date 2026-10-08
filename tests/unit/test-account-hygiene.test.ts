@@ -48,8 +48,9 @@ function testSources(): string[] {
     for (const entry of readdirSync(dir)) {
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) {
-        // .auth is where the run-time credentials live, on purpose and untracked.
-        if (entry !== ".auth" && entry !== "node_modules") walk(path);
+        // .auth is where the run-time credentials live, on purpose and untracked;
+        // .claude holds Claude Code's worktrees, second copies of the repo.
+        if (entry !== ".auth" && entry !== "node_modules" && entry !== ".claude") walk(path);
       } else if (/\.(?:tsx?|mjs|cjs|js)$/.test(entry)) {
         found.push(path);
       }

@@ -34,7 +34,8 @@ function sourceFiles(): string[] {
     for (const entry of readdirSync(dir)) {
       const path = join(dir, entry);
       if (statSync(path).isDirectory()) {
-        if (entry !== "node_modules" && entry !== ".auth") walk(path);
+        // .claude holds Claude Code's worktrees: second copies of the repo.
+        if (entry !== "node_modules" && entry !== ".auth" && entry !== ".claude") walk(path);
       } else if (/\.(?:tsx?|mjs|cjs|js|sql)$/.test(entry)) {
         found.push(path);
       }

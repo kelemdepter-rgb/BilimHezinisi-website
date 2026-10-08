@@ -268,6 +268,25 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Nothing written in a note is lost (PROMPT-43): leaving by a link,
+         * a hidden page, failed and retried saves, and two versions of one
+         * note. Failures are this page's own Server Actions aborted by the
+         * spec — never the real project broken.
+         */
+        name: `notes-save-${viewport.name}`,
+        testMatch: /[\\/]notes-save\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Licence attribution, the legal pages, password recovery and the
         // account page. Anonymous by default — everything a reader without an
         // account must be able to reach — with the account block opting into
@@ -665,10 +684,10 @@ export default defineConfig({
       },
     ]),
     ...NOTEBOOK_ENGINES.map((engine) => ({
-      // The same three specs, setup and signed-in state as the Chromium
-      // notes, notes-sources and notes-ai projects above.
+      // The same four specs, setup and signed-in state as the Chromium
+      // notes, notes-sources, notes-save and notes-ai projects above.
       name: `notebook-${engine.name}`,
-      testMatch: /[\\/]notes(-sources|-ai)?\.spec\.ts$/,
+      testMatch: /[\\/]notes(-sources|-save|-ai)?\.spec\.ts$/,
       dependencies: ["setup"],
       use: {
         browserName: engine.browser,

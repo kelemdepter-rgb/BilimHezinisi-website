@@ -76,14 +76,7 @@ async function exportedDocx(page: Page): Promise<{ xml: string; rels: string }> 
 test.describe("citing a book from a note", () => {
   test("searches the library, inserts a source, and it survives save, reload and export", async ({
     page,
-    browserName,
   }) => {
-    // N2 and the label that goes with it, fixed in stage 2 (PROMPT-43): an
-    // edit made while the previous save is still in flight is shown as
-    // «ساقلاندى» when THAT save returns, and leaving inside the next 1.2 s
-    // loses it with no local copy. WebKit's timing hits it here about one run
-    // in two — the reload brings back the typed sentence without the citation.
-    test.fixme(browserName === "webkit", "N2: a save in flight marks a newer edit saved — stage 2");
     const path = await newNote(page);
     await startWriting(page);
 

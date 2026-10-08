@@ -246,16 +246,7 @@ test.describe("before anything leaves the browser", () => {
 /* ── Chat ────────────────────────────────────────────────────────────────── */
 
 test.describe("asking a question", () => {
-  test("streams, cancels cleanly, and inserts at the caret when asked", async ({
-    page,
-    browserName,
-  }) => {
-    // N2 and its label, fixed in stage 2 (PROMPT-43). Measured 2026-10-07: the
-    // save of the typed sentence is still in flight when the answer is
-    // inserted, its reply then shows «ساقلاندى» although the insert was never
-    // sent, and the reload loses the answer. Firefox at 390 px hit it in every
-    // run; Chromium hits the same race now and then.
-    test.fixme(browserName === "firefox", "N2: a save in flight marks a newer edit saved — stage 2");
+  test("streams, cancels cleanly, and inserts at the caret when asked", async ({ page }) => {
     await enableAi(page);
     const path = await newNote(page);
     await type(page, "باشلىنىش.");

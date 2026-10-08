@@ -298,6 +298,40 @@ test.describe("two versions of one note", () => {
     }
   });
 
+  test("a copy another open tab is still writing is left to it, and restored once that tab is gone", async ({
+    page,
+    context,
+  }) => {
+    const path = await newNote(page);
+    const text = "يېزىلىۋاتقان جۈملە";
+    await blockSaves(page);
+    await write(page, text);
+    await expect(page.getByTestId("save-state")).toHaveText(LABEL.offline, { timeout: 20_000 });
+
+    // A second tab, while the first still has the note open with its copy
+    // unsent: it must not take that copy for one left behind, nor save it.
+    const second = await context.newPage();
+    await second.goto(path);
+    await expect(second.getByTestId("note-body")).toHaveAttribute("contenteditable", "true");
+    await expect(second.getByTestId("note-body")).not.toContainText(text);
+    await expect(second.getByTestId("note-notice")).toHaveCount(0);
+    await expect(second.getByTestId("save-state")).toHaveText("");
+    await second.close();
+
+    // The first tab goes away with the copy still unsent: now it is left
+    // behind, and the next tab puts it back and saves it.
+    await page.close();
+    const third = await context.newPage();
+    try {
+      await third.goto(path);
+      await expect(third.getByTestId("note-body")).toContainText(text);
+      await expect(third.getByTestId("note-notice")).toContainText("ئەسلىگە كەلتۈرۈلدى");
+      await expect(third.getByTestId("save-state")).toHaveText(LABEL.saved, { timeout: 20_000 });
+    } finally {
+      await deleteNote(third, path);
+    }
+  });
+
   test("«مېنىڭ نۇسخامنى بۇنىڭ ئورنىغا قويۇش» puts this version over the other", async ({ page }) => {
     const path = await newNote(page);
     try {

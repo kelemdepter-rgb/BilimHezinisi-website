@@ -15,7 +15,12 @@ import {
   normalizeTitle,
 } from "@/lib/notes/save-protocol";
 import type { SaveLoop, SaveSnapshot } from "@/lib/notes/save-loop";
-import { forgetNoteSession, openNoteSession, type NoteSession } from "@/components/notes/note-session";
+import {
+  forgetNoteSession,
+  holdNoteOpen,
+  openNoteSession,
+  type NoteSession,
+} from "@/components/notes/note-session";
 import {
   MAX_NOTE_LEADING,
   MAX_NOTE_SIZE,
@@ -157,13 +162,15 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [session, setSession] = useState<NoteSession | null>(null);
   const loopRef = useRef<SaveLoop | null>(null);
   const loop = session?.loop ?? null;
+  /** The opening is settled: no other tab is asked about any more. */
+  const [started, setStarted] = useState(false);
   /**
    * The title and the body take keystrokes only once the note is in the
    * editor and a loop is there to save them. Before that — a page still
    * hydrating on a slow phone — a letter in the title never reached a save,
    * and anything typed in the body was written over when the note arrived.
    */
-  const ready = session !== null;
+  const ready = session !== null && started;
   const save = useSyncExternalStore(
     loop ? loop.subscribe : subscribeNothing,
     loop ? loop.getSnapshot : idleSnapshot,
@@ -179,6 +186,8 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [copy, setCopy] = useState<{ id: number; title: string } | null>(null);
   /** The loop's "changed elsewhere" call, always reaching this render's handler. */
   const onRemoteNewer = useRef<() => void>(() => {});
+  /** The session's "put this copy on screen", likewise. */
+  const showCopy = useRef<(content: { title: string; html: string }) => void>(() => {});
 
   /** Every edit, of the body or the title, by hand or by a panel. */
   const noteChanged = useCallback(() => {
@@ -209,7 +218,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       setTitle(opened.content.title);
       loopRef.current = opened.loop;
       setSession(opened);
-      if (opened.restored) setNotice(RESTORED_NOTICE);
+      setStarted(opened.settled);
       recount();
     },
     [note, recount],
@@ -222,7 +231,15 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       read: () => ({ title: titleRef.current, html: nodeRef.current?.innerHTML ?? "" }),
       onRemoteNewer: () => onRemoteNewer.current(),
     });
-    session.begin();
+    // While the editor is open, another tab can tell this one still has the
+    // note — and leaves this tab's device copy to it.
+    const releaseOpen = holdNoteOpen(session);
+    void session
+      .start((content) => showCopy.current(content))
+      .then((restored) => {
+        if (restored) setNotice(RESTORED_NOTICE);
+        setStarted(true);
+      });
 
     const onOnline = () => current.online();
     // A phone switching apps, a tab put in the background: the copy is
@@ -236,6 +253,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
+      releaseOpen();
       // Leaving inside the app — a link, the back button — where pagehide
       // never fires (N2).
       current.detach();
@@ -243,29 +261,37 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   }, [session]);
 
   /**
-   * Put a version the server already holds on screen: the other version after
-   * a conflict, or one changed elsewhere while this tab was away. The editor
-   * is clean afterwards. Stage 5 (this device's history) comes through here
-   * too.
+   * The one way a whole document goes on screen: this device's copy once the
+   * opening has settled, the server's version after a conflict or a change
+   * made elsewhere — and, in stage 5, a version from this device's history.
+   * The caller tells the save loop what the new text is.
    *
    * A direct, sanitized write of the node's HTML — never `selectAll` +
    * `insertHTML`, which merges the first block into whatever it lands in and
    * so corrupts a note that starts with a heading, a quote or a list.
    */
-  const replaceDocument = useCallback(
-    (next: { title: string; html: string; updatedAt: string }) => {
+  const putDocument = useCallback(
+    (next: { title: string; html: string }) => {
       const node = nodeRef.current;
       if (!node) return;
       node.innerHTML = sanitizeNoteHtml(next.html);
       titleRef.current = next.title;
       setTitle(next.title);
       savedRange.current = null;
-      loopRef.current?.adopt(next.updatedAt);
       recount();
       markChanged();
       spell.scheduleCheck();
     },
     [markChanged, recount, spell],
+  );
+
+  /** A version the server already holds: the editor is clean afterwards. */
+  const replaceDocument = useCallback(
+    (next: { title: string; html: string; updatedAt: string }) => {
+      putDocument(next);
+      loopRef.current?.adopt(next.updatedAt);
+    },
+    [putDocument],
   );
 
   /** Changed elsewhere while this tab was away, and nothing here is unsaved. */
@@ -290,6 +316,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
 
   useEffect(() => {
     onRemoteNewer.current = () => void showRemoteVersion();
+    showCopy.current = putDocument;
   });
 
   /**

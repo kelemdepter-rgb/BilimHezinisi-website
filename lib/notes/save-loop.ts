@@ -240,11 +240,14 @@ export class SaveLoop {
 
   /**
    * Opened on a copy written against an older (or unknown) version: show it,
-   * keep it, send nothing until the writer chooses. True when the copy is
-   * safely on this device.
+   * keep it, send nothing until the writer chooses. `textBase` is the version
+   * the copy was written on — the device copy keeps it, so a later open asks
+   * again rather than quietly sending it. True when the copy is safely on
+   * this device.
    */
-  conflictOnOpen(serverUpdatedAt: string): boolean {
+  conflictOnOpen(serverUpdatedAt: string, textBase: string | null): boolean {
     this.revision++;
+    this.base = textBase;
     return this.enterConflict(serverUpdatedAt);
   }
 

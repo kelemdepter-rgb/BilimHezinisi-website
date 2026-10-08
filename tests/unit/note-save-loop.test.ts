@@ -435,13 +435,22 @@ describe("two versions of one note (N5)", () => {
   });
 
   it("opened on a copy of an unknown version: shows it, sends nothing", async () => {
-    const t = setup({ base: null });
-    expect(t.loop.conflictOnOpen(V1)).toBe(true);
+    // The loop starts on the server's version; the copy's own (unknown) base
+    // is what its device copy keeps.
+    const t = setup({ base: V1 });
+    expect(t.loop.conflictOnOpen(V1, null)).toBe(true);
     expect(t.env.draft).toMatchObject({ baseUpdatedAt: null });
     await t.wait(10 * 60_000);
     expect(t.requests).toHaveLength(0);
     t.loop.keepMine();
     expect(t.requests[0].input.baseUpdatedAt).toBe(V1);
+  });
+
+  it("opened on a copy of an older version: the copy keeps that version", () => {
+    const t = setup({ base: V2 });
+    t.loop.conflictOnOpen(V2, V0);
+    expect(t.env.draft).toMatchObject({ baseUpdatedAt: V0 });
+    expect(t.loop.getSnapshot()).toMatchObject({ state: "conflict", serverUpdatedAt: V2 });
   });
 
   it("opened on a copy of the same version: sends it at once", () => {

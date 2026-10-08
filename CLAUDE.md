@@ -306,6 +306,43 @@ here. The table is left in place because an applied migration is never edited ·
   switches it on in the card (`settings.unconfirmed_sweep_enabled`); never
   switch it on on the owner's behalf.
 
+## Notebook saving (PROMPT-43 — nothing written may be lost)
+- **One save loop decides everything about saving a note**:
+  `lib/notes/save-loop.ts` (no React, no DOM; clock, request and device copy
+  injected; unit-tested on fake timers in `tests/unit/note-save-loop.test.ts`).
+  The editor only reports changes and page events, and lends it the text. The
+  title and body are read when the save is SENT, never captured earlier (N4).
+  Debounce 1.2 s, at least 3 s between saves, one in flight; flush at once on
+  `visibilitychange`→hidden, `pagehide` and unmount (a link inside the app
+  fires no pagehide). Retries 5 s, 15 s, 45 s, then every 60 s while visible,
+  and at once on `online`, on becoming visible and on «ھازىر قايتا سىناش».
+- **A save confirms only the revision it carried.** An edit made while it was
+  in flight keeps the label at «ئۆزگەردى…» and is sent next; the label never
+  says «ساقلاندى» while something unsent is on screen (N2b).
+- **Write-ahead copy** in localStorage `bh-note-draft-v2:<userId>:<noteId>`
+  (`lib/notes/drafts.ts`): written ≤ 300 ms after every change and
+  synchronously before every send and on leaving; removed only when the
+  server confirmed that exact revision, and only by the tab that wrote it.
+  Sign-out never removes it; account deletion removes that account's copies
+  (and every legacy `bh-note-draft-<id>`) once the server confirmed. The user
+  id in the key is a storage namespace, never a permission.
+- **Never last-write-wins.** `saveNoteAction` updates only
+  `where updated_at = baseUpdatedAt` — the string exactly as PostgREST printed
+  it (microseconds) — and otherwise answers `conflict` (with
+  `serverUpdatedAt`) or `not_found`. The writer chooses in a banner, never a
+  native dialog; «ئىككى خاتىرە قىلىپ ساقلاش» (keep both) is the recommended
+  choice. What a note opens on (server, this device's copy, or that choice) is
+  `lib/notes/opening.ts`.
+- **Result codes live in one place**, `lib/notes/save-protocol.ts`:
+  `SAVE_CODES`, `CODE_STATE` and `SAVE_MESSAGES` (stage 3 adds `quota` and
+  `rate` there). A failed session check is `failed` (retried), never
+  `needs_account`.
+- **Nothing over 900 KB is sent** (`MAX_SAVE_BYTES`): Server Actions refuse
+  1 MB bodies, and `serverActions.bodySizeLimit` stays at its default.
+- **The whole document is replaced in one helper**, the editor's
+  `replaceDocument` — a direct, sanitized `innerHTML` write that tells the
+  loop which server version it now shows. Never `selectAll` + `insertHTML`.
+
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
 `npm run lint` + `npm run build` → Playwright smoke (mobile + desktop viewports) →

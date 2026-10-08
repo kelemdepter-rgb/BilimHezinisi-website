@@ -15,13 +15,17 @@ import { Icon } from "@/components/icons";
  *
  * This covers /notes and /notes/[id] both, since a boundary applies to the
  * segment it sits in and everything under it.
+ *
+ * `retry`, not `reset`: reset only re-renders what the server already sent,
+ * so after a read that failed (lib/notes/data.ts throws, PROMPT-40) it showed
+ * this page again without asking the server. retry fetches the page anew.
  */
 export default function NotesError({
   error,
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   useEffect(() => {
     // The digest is the only handle on the matching server log line; Next
@@ -40,7 +44,7 @@ export default function NotesError({
         </p>
 
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-          <button type="button" className="btn-am" data-testid="notes-error-retry" onClick={reset}>
+          <button type="button" className="btn-am" data-testid="notes-error-retry" onClick={() => retry()}>
             <Icon name="redo" />
             قايتا سىناش
           </button>

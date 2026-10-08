@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icon } from "@/components/icons";
 import { deleteAccountAction } from "@/app/my/account/actions";
+import { rememberPendingDeletion } from "@/lib/notes/drafts";
 
 /**
  * The destructive half of /my/account.
@@ -12,8 +13,21 @@ import { deleteAccountAction } from "@/app/my/account/actions";
  * wrong thing on a phone — and the server action re-checks the same match
  * against the session's own email, because a disabled button is only a
  * suggestion.
+ *
+ * The notebook keeps unsaved writing in this browser, under the account's id
+ * (lib/notes/drafts.ts). Those copies go too — but only once the server has
+ * confirmed the deletion: the id is noted for the confirmation page, which
+ * clears them. A refused deletion leaves every copy where it was.
  */
-export function DeleteAccount({ email, blocked }: { email: string; blocked: boolean }) {
+export function DeleteAccount({
+  email,
+  userId,
+  blocked,
+}: {
+  email: string;
+  userId: string;
+  blocked: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
 
@@ -48,7 +62,12 @@ export function DeleteAccount({ email, blocked }: { email: string; blocked: bool
   }
 
   return (
-    <form action={deleteAccountAction} className="space-y-4" data-testid="delete-form">
+    <form
+      action={deleteAccountAction}
+      className="space-y-4"
+      data-testid="delete-form"
+      onSubmit={() => rememberPendingDeletion(userId)}
+    >
       <p className="rounded-[var(--radius)] border border-bd2 bg-ab2 px-3.5 py-3 text-[13px] leading-7 text-ink">
         بۇ مەشغۇلاتنى <strong>كەينىگە قايتۇرغىلى بولمايدۇ</strong>. خەتكۈچلىرىڭىز،
         خاتىرىلىرىڭىز، ئوقۇش ئىزىڭىز ۋە خاتىرە دەپتىرىڭىزنىڭ ھەممىسى ئۆچىدۇ. داۋاملاشتۇرۇش

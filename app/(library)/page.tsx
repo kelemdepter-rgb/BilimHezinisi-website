@@ -3,6 +3,7 @@ import { cookies, headers } from "next/headers";
 import { Icon } from "@/components/icons";
 import { LibraryBrowser } from "@/components/library/library-browser";
 import { BookStrip } from "@/components/library/book-strip";
+import { ClearDeletedDrafts } from "@/components/my/clear-deleted-drafts";
 import { RecentStrip } from "@/components/library/recent-strip";
 import { getCategories, getSessionInfo } from "@/lib/data";
 import { coverUrlMap, getRecentReads, listBooks, listNewBooks } from "@/lib/library";
@@ -109,6 +110,7 @@ export default async function HomePage({ searchParams }: PageProps<"/">) {
         >
           ھېساباتىڭىز ۋە ئۇنىڭغا باغلانغان بارلىق ئۇچۇرلار ئۆچۈرۈلدى. كىتاب ئوقۇشنى
           ھېساباتسىزمۇ داۋاملاشتۇرالايسىز.
+          <ClearDeletedDrafts />
         </p>
       )}
 

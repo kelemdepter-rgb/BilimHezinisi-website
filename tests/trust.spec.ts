@@ -1233,6 +1233,19 @@ test.describe("deleting an account", () => {
       await expect(page.getByTestId("account-link")).toBeVisible({ timeout: 20_000 });
 
       await page.goto("/my/account");
+
+      // Unsaved notebook copies in this browser (PROMPT-43): theirs, one from
+      // before accounts were in the key, and another account's.
+      const otherKey = "bh-note-draft-v2:00000000-0000-0000-0000-000000000000:1";
+      await page.evaluate(
+        ({ own, other }) => {
+          localStorage.setItem(own, "{}");
+          localStorage.setItem("bh-note-draft-123456", "<p>سىناق</p>");
+          localStorage.setItem(other, "{}");
+        },
+        { own: `bh-note-draft-v2:${userId}:1`, other: otherKey },
+      );
+
       await page.getByTestId("delete-open").click();
       await page.getByTestId("delete-confirm-email").fill(email);
       await page.getByTestId("delete-submit").click();
@@ -1240,6 +1253,17 @@ test.describe("deleting an account", () => {
       // Signed out, told what happened, and the library still readable.
       await expect(page.getByTestId("account-deleted")).toBeVisible({ timeout: 30_000 });
       await expect(page.getByTestId("login-link")).toBeVisible();
+
+      // Their copies left with the account; another account's stayed.
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            Object.keys(localStorage)
+              .filter((key) => key.startsWith("bh-note-draft"))
+              .sort(),
+          ),
+        )
+        .toEqual([otherKey]);
     } finally {
       await context.close();
     }

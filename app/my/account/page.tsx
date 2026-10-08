@@ -182,7 +182,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/my/accou
           قىلىمىز. كۇتۇپخانىدىكى كىتابلار ھەممەيلەنگە ئورتاق بولغاچقا ئۆچمەيدۇ.
         </p>
         <div className="mt-4">
-          <DeleteAccount email={owner.email} blocked={lastAdmin} />
+          <DeleteAccount email={owner.email} userId={owner.userId} blocked={lastAdmin} />
         </div>
       </section>
     </div>

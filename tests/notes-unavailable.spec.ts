@@ -28,6 +28,8 @@ const ERROR_HEADING = "خاتىرە دەپتىرى ئېچىلمىدى";
 /** The writer's one note, with every column the list and the editor select. */
 const NOTE = {
   id: 4143,
+  // The editor keys this browser's unsaved copy by it (PROMPT-43).
+  user_id: "00000000-0000-4000-8000-000000004143",
   title: "سىناق خاتىرىسى",
   content_html: "<p>بۇ خاتىرىنىڭ مەزمۇنى.</p>",
   content_text: "بۇ خاتىرىنىڭ مەزمۇنى.",

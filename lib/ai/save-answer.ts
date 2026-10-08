@@ -1,6 +1,6 @@
 "use client";
 
-import { createNoteAction, saveNoteAction } from "@/app/notes/actions";
+import { createNoteAction } from "@/app/notes/actions";
 import { readerHref } from "@/lib/notes/insert";
 
 /**
@@ -91,13 +91,7 @@ export function noteHtmlFor(input: SaveAnswerInput): string {
 export async function saveAnswerToNotebook(
   input: SaveAnswerInput,
 ): Promise<{ ok: true; id: number } | { ok: false }> {
-  const created = await createNoteAction();
-  if (!created.ok || typeof created.id !== "number") return { ok: false };
-
-  const saved = await saveNoteAction({
-    id: created.id,
-    title: noteTitleFor(input),
-    html: noteHtmlFor(input),
-  });
-  return saved.ok ? { ok: true, id: created.id } : { ok: false };
+  // One request: the note is created already holding the answer.
+  const created = await createNoteAction({ title: noteTitleFor(input), html: noteHtmlFor(input) });
+  return created.ok ? { ok: true, id: created.id } : { ok: false };
 }

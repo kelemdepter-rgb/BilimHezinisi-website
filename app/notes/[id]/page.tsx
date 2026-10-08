@@ -24,5 +24,7 @@ export default async function NotePage({ params }: PageProps<"/notes/[id]">) {
   const note = await getNote(noteId);
   if (!note) notFound();
 
-  return <NoteEditor note={note} />;
+  // Keyed by note: moving from one note to another is a new editor, never
+  // the old one holding the previous note's text.
+  return <NoteEditor key={note.id} note={note} />;
 }

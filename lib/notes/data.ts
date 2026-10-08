@@ -14,6 +14,8 @@ export type NoteSummary = {
 
 export type NoteDocument = {
   id: number;
+  /** The owner — the editor's key for this browser's copy, never a permission. */
+  user_id: string;
   title: string;
   content_html: string;
   content_text: string;
@@ -41,9 +43,11 @@ function signedOut(error: unknown): boolean {
  * Null means Auth ANSWERED that nobody is signed in, and the pages send that
  * visitor to sign in. An Auth that did not answer — failed, or ran past
  * SESSION_DEADLINE_MS — is not that, and throws like a failed read: as null
- * it made a writer's own note a 404 (PROMPT-40).
+ * it made a writer's own note a 404 (PROMPT-40). The Server Actions in
+ * app/notes/actions.ts ask the same way: a session check that failed is a
+ * save that failed and is retried, never "you have been signed out".
  */
-async function ownerClient() {
+export async function ownerClient() {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return null;
   const { data, error } = await withDeadline(supabase.auth.getUser(), SESSION_DEADLINE_MS, UNANSWERED);
@@ -96,7 +100,7 @@ export const getNote = cache(async (id: number): Promise<NoteDocument | null> =>
 
   const { data, error } = await owner.supabase
     .from("note_documents")
-    .select("id, title, content_html, content_text, updated_at")
+    .select("id, user_id, title, content_html, content_text, updated_at")
     .eq("id", id)
     .eq("user_id", owner.userId)
     .maybeSingle();

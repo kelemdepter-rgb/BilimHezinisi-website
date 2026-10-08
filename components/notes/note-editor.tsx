@@ -2,10 +2,20 @@
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
-import { saveNoteAction } from "@/app/notes/actions";
+import { createNoteAction, loadNoteAction, type LoadNoteResult } from "@/app/notes/actions";
 import { MAX_NOTE_CHARS } from "@/lib/notes/limits";
 import { sanitizeNoteHtml } from "@/lib/notes/sanitize";
+import {
+  MAX_TITLE_CHARS,
+  SAVE_LABEL,
+  SAVE_MESSAGES,
+  STORAGE_FULL_MESSAGE,
+  normalizeTitle,
+} from "@/lib/notes/save-protocol";
+import type { SaveLoop, SaveSnapshot } from "@/lib/notes/save-loop";
+import { forgetNoteSession, openNoteSession, type NoteSession } from "@/components/notes/note-session";
 import {
   MAX_NOTE_LEADING,
   MAX_NOTE_SIZE,
@@ -31,36 +41,27 @@ import { FindBar } from "@/components/notes/find-bar";
 import { useAiState } from "@/lib/ai/use-ai-state";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
 
-const SAVE_DEBOUNCE_MS = 1200;
 /** Warn while there is still room to finish a thought. */
 const WARN_AT = Math.round(MAX_NOTE_CHARS * 0.9);
 
-type SaveState = "idle" | "dirty" | "saving" | "saved" | "offline" | "error";
+/** Before the save loop exists — the server render, the first paint. */
+const IDLE: SaveSnapshot = { state: "idle", code: null, serverUpdatedAt: null, storageFailed: false };
+const subscribeNothing = () => () => {};
+const idleSnapshot = () => IDLE;
 
-const SAVE_LABEL: Record<SaveState, string> = {
-  idle: "",
-  dirty: "ئۆزگەردى…",
-  saving: "ساقلىنىۋاتىدۇ…",
-  saved: "ساقلاندى",
-  offline: "ئۇلىنىش يوق — يەرلىكتە ساقلاندى",
-  error: "ساقلانمىدى — قايتا سىنالماقتا",
-};
-
-/** Where an unsent draft waits out a dropped connection. */
-const draftKey = (id: number) => `bh-note-draft-${id}`;
-
-function readDraft(id: number): string | null {
-  try {
-    return window.localStorage.getItem(draftKey(id));
-  } catch {
-    return null;
-  }
-}
+/** Added to the writer's own version when both are kept after a conflict. */
+const COPY_SUFFIX = " (بۇ ئۈسكۈنىدىكى نۇسخا)";
+const RESTORED_NOTICE = "ئۇلىنىش ئۈزۈلگەندە ساقلانغان نۇسخا ئەسلىگە كەلتۈرۈلدى.";
+const REMOTE_NEWER_NOTICE = "باشقا يەردە ئۆزگەرتىلگەن يېڭى نۇسخا ئېچىلدى.";
+const CHOICE_FAILED =
+  "ئۇلىنىش يوق — سەل تۇرۇپ قايتا سىناڭ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.";
+/** The frame every notice under the toolbar shares. */
+const NOTICE = "mt-3 rounded-[var(--radius)] px-3.5 py-2.5 text-[13px] leading-6";
 
 export function NoteEditor({ note }: { note: NoteDocument }) {
+  const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState(note.title);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [counts, setCounts] = useState({ words: 0, chars: 0 });
   const [overflowOpen, setOverflowOpen] = useState(false);
   const [spellOpen, setSpellOpen] = useState(false);
@@ -91,7 +92,6 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   /** True once the note holds a Qur'an verse, so its sources can be credited. */
   const [hasAya, setHasAya] = useState(false);
 
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * The caret, remembered.
    *
@@ -147,95 +147,206 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   }, []);
 
   /**
+   * Saving (PROMPT-43). lib/notes/save-loop.ts decides when the note is sent
+   * and what the label says; this component lends it the text and tells it
+   * what happened on the page. The loop is made when the editor's node
+   * appears — in the browser, never during the server render — and it
+   * outlives the editor: a save started on the way out still lands, and
+   * coming back to the note joins it rather than racing it.
+   */
+  const [session, setSession] = useState<NoteSession | null>(null);
+  const loopRef = useRef<SaveLoop | null>(null);
+  const loop = session?.loop ?? null;
+  /**
+   * The title and the body take keystrokes only once the note is in the
+   * editor and a loop is there to save them. Before that — a page still
+   * hydrating on a slow phone — a letter in the title never reached a save,
+   * and anything typed in the body was written over when the note arrived.
+   */
+  const ready = session !== null;
+  const save = useSyncExternalStore(
+    loop ? loop.subscribe : subscribeNothing,
+    loop ? loop.getSnapshot : idleSnapshot,
+    idleSnapshot,
+  );
+  /** The editor's node, kept after React lets go of it: leaving reads it once more. */
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  /** The title as typed, read at the moment of sending — never a stale copy (N4). */
+  const titleRef = useRef(note.title);
+  /** A conflict choice is on its way; the note holds still until it lands. */
+  const [choosing, setChoosing] = useState(false);
+  /** Where the writer's own version went when both were kept. */
+  const [copy, setCopy] = useState<{ id: number; title: string } | null>(null);
+  /** The loop's "changed elsewhere" call, always reaching this render's handler. */
+  const onRemoteNewer = useRef<() => void>(() => {});
+
+  /** Every edit, of the body or the title, by hand or by a panel. */
+  const noteChanged = useCallback(() => {
+    loopRef.current?.change();
+  }, []);
+
+  /**
    * The editor is uncontrolled on purpose: React must never re-render the
    * contentEditable while someone is typing in it, or the caret jumps. So the
    * content is written once, by hand, the moment the node exists — a ref
    * callback rather than an effect, because "fill this DOM node when it
-   * appears" is exactly what a ref callback is for.
+   * appears" is exactly what a ref callback is for. What it is filled with —
+   * the server's version, this device's unsaved copy, or a choice between
+   * them — is lib/notes/opening.ts.
    */
   const seeded = useRef(false);
   const attachEditor = useCallback(
     (node: HTMLDivElement | null) => {
       editorRef.current = node;
-      if (!node || seeded.current) return;
+      if (!node) return;
+      nodeRef.current = node;
+      if (seeded.current) return;
       seeded.current = true;
 
-      const draft = readDraft(note.id);
-      node.innerHTML = draft ?? note.content_html;
-      if (draft && draft !== note.content_html) {
-        setNotice("ئۇلىنىش ئۈزۈلگەندە ساقلانغان نۇسخا ئەسلىگە كەلتۈرۈلدى.");
-        setSaveState("dirty");
-      }
+      const opened = openNoteSession(note);
+      node.innerHTML = opened.content.html;
+      titleRef.current = opened.content.title;
+      setTitle(opened.content.title);
+      loopRef.current = opened.loop;
+      setSession(opened);
+      if (opened.restored) setNotice(RESTORED_NOTICE);
       recount();
     },
-    [note.content_html, note.id, recount],
+    [note, recount],
   );
 
-  const save = useCallback(async () => {
-    const html = editorRef.current?.innerHTML ?? "";
-    setSaveState("saving");
+  useEffect(() => {
+    if (!session) return;
+    const current = session.loop;
+    current.attach({
+      read: () => ({ title: titleRef.current, html: nodeRef.current?.innerHTML ?? "" }),
+      onRemoteNewer: () => onRemoteNewer.current(),
+    });
+    session.begin();
+
+    const onOnline = () => current.online();
+    // A phone switching apps, a tab put in the background: the copy is
+    // written and the save started now, while the page can still run.
+    const onVisibility = () => current.visibility(document.visibilityState !== "hidden");
+    const onPageHide = () => current.flush();
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+      // Leaving inside the app — a link, the back button — where pagehide
+      // never fires (N2).
+      current.detach();
+    };
+  }, [session]);
+
+  /**
+   * Put a version the server already holds on screen: the other version after
+   * a conflict, or one changed elsewhere while this tab was away. The editor
+   * is clean afterwards. Stage 5 (this device's history) comes through here
+   * too.
+   *
+   * A direct, sanitized write of the node's HTML — never `selectAll` +
+   * `insertHTML`, which merges the first block into whatever it lands in and
+   * so corrupts a note that starts with a heading, a quote or a list.
+   */
+  const replaceDocument = useCallback(
+    (next: { title: string; html: string; updatedAt: string }) => {
+      const node = nodeRef.current;
+      if (!node) return;
+      node.innerHTML = sanitizeNoteHtml(next.html);
+      titleRef.current = next.title;
+      setTitle(next.title);
+      savedRange.current = null;
+      loopRef.current?.adopt(next.updatedAt);
+      recount();
+      markChanged();
+      spell.scheduleCheck();
+    },
+    [markChanged, recount, spell],
+  );
+
+  /** Changed elsewhere while this tab was away, and nothing here is unsaved. */
+  async function showRemoteVersion() {
+    const current = loopRef.current;
+    if (!current) return;
+    let server: LoadNoteResult;
     try {
-      const result = await saveNoteAction({ id: note.id, title, html });
-      if (!result.ok) {
-        setSaveState("error");
-        setNotice(result.error);
+      server = await loadNoteAction(note.id);
+    } catch {
+      return;
+    }
+    if (!server.ok) return;
+    // Something was typed while it loaded: now there are two versions.
+    if (current.hasUnsent()) {
+      current.conflict(server.updatedAt);
+      return;
+    }
+    replaceDocument(server);
+    setNotice(REMOTE_NEWER_NOTICE);
+  }
+
+  useEffect(() => {
+    onRemoteNewer.current = () => void showRemoteVersion();
+  });
+
+  /**
+   * «ئىككى خاتىرە قىلىپ ساقلاش» — the recommended way out of a conflict: the
+   * writer's version becomes a new note, and this one shows the server's.
+   * Nothing is replaced until both requests have succeeded.
+   */
+  async function keepBoth() {
+    const current = loopRef.current;
+    if (!current || choosing) return;
+    setChoosing(true);
+    try {
+      const server = await loadNoteAction(note.id);
+      if (!server.ok) {
+        if (server.code === "not_found" || server.code === "needs_account") current.block(server.code);
+        else setNotice(CHOICE_FAILED);
         return;
       }
-      setSaveState("saved");
+      const mine = current.content();
+      const room = MAX_TITLE_CHARS - COPY_SUFFIX.length;
+      const copyTitle = `${normalizeTitle(mine.title).slice(0, room)}${COPY_SUFFIX}`;
+      const created = await createNoteAction({ title: copyTitle, html: mine.html });
+      if (!created.ok) {
+        setNotice(created.code === "failed" ? CHOICE_FAILED : created.error);
+        return;
+      }
+      replaceDocument(server);
+      setCopy({ id: created.id, title: copyTitle });
       setNotice(null);
-      try {
-        window.localStorage.removeItem(draftKey(note.id));
-      } catch {
-        // Nothing to clean up if storage is unavailable.
-      }
     } catch {
-      // Offline, or the request never landed. Keep the writing locally and
-      // let the next edit (or the retry below) try again — never lose it.
-      try {
-        window.localStorage.setItem(draftKey(note.id), html);
-        setSaveState("offline");
-      } catch {
-        setSaveState("error");
-      }
+      setNotice(CHOICE_FAILED);
+    } finally {
+      setChoosing(false);
     }
-  }, [note.id, title]);
+  }
 
-  const scheduleSave = useCallback(() => {
-    setSaveState("dirty");
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => void save(), SAVE_DEBOUNCE_MS);
-  }, [save]);
-
-  // Retry as soon as the connection is back.
-  useEffect(() => {
-    const retry = () => {
-      if (saveState === "offline" || saveState === "error") void save();
-    };
-    window.addEventListener("online", retry);
-    return () => window.removeEventListener("online", retry);
-  }, [save, saveState]);
-
-  // Leaving with unsaved work should at least keep a local copy.
-  useEffect(() => {
-    const onLeave = () => {
-      if (saveState === "dirty" || saveState === "saving") {
-        try {
-          window.localStorage.setItem(draftKey(note.id), editorRef.current?.innerHTML ?? "");
-        } catch {
-          // Best effort only.
-        }
+  /** The note was deleted elsewhere: keep the writing as a new one. */
+  async function saveAsNew() {
+    const current = loopRef.current;
+    if (!current || !session || choosing) return;
+    setChoosing(true);
+    try {
+      const mine = current.content();
+      const created = await createNoteAction({ title: mine.title, html: mine.html });
+      if (!created.ok) {
+        setNotice(created.code === "failed" ? CHOICE_FAILED : created.error);
+        setChoosing(false);
+        return;
       }
-    };
-    window.addEventListener("pagehide", onLeave);
-    return () => window.removeEventListener("pagehide", onLeave);
-  }, [note.id, saveState]);
-
-  useEffect(
-    () => () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    },
-    [],
-  );
+      current.abandon();
+      forgetNoteSession(session);
+      router.replace(`/notes/${created.id}`);
+    } catch {
+      setNotice(CHOICE_FAILED);
+      setChoosing(false);
+    }
+  }
 
   /**
    * execCommand is deprecated and still the only thing every mobile browser
@@ -244,7 +355,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   function exec(command: string, value?: string) {
     editorRef.current?.focus();
     document.execCommand(command, false, value);
-    scheduleSave();
+    noteChanged();
     recount();
     markChanged();
   }
@@ -294,12 +405,12 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       savedRange.current = after && after.rangeCount > 0 ? after.getRangeAt(0).cloneRange() : null;
 
       setNotice(message);
-      scheduleSave();
+      noteChanged();
       recount();
       markChanged();
       spell.scheduleCheck();
     },
-    [markChanged, recount, scheduleSave, spell],
+    [markChanged, recount, noteChanged, spell],
   );
 
   /**
@@ -329,12 +440,12 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       const after = window.getSelection();
       savedRange.current = after && after.rangeCount > 0 ? after.getRangeAt(0).cloneRange() : null;
       setNotice("قىستۇرۇلدى.");
-      scheduleSave();
+      noteChanged();
       recount();
       markChanged();
       spell.scheduleCheck();
     },
-    [markChanged, recount, scheduleSave, spell],
+    [markChanged, recount, noteChanged, spell],
   );
 
   /** Replace what was selected — one undoable step, like the desktop. */
@@ -353,12 +464,12 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       document.execCommand("insertText", false, text);
       savedRange.current = null;
       setNotice("ئالماشتۇرۇلدى.");
-      scheduleSave();
+      noteChanged();
       recount();
       markChanged();
       spell.scheduleCheck();
     },
-    [markChanged, recount, scheduleSave, spell],
+    [markChanged, recount, noteChanged, spell],
   );
 
   /**
@@ -368,11 +479,11 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
    * would sit on screen and never reach the database.
    */
   const afterPanelEdit = useCallback(() => {
-    scheduleSave();
+    noteChanged();
     recount();
     markChanged();
     spell.scheduleCheck();
-  }, [markChanged, recount, scheduleSave, spell]);
+  }, [markChanged, recount, noteChanged, spell]);
 
   /** Re-read the selection and the note, for the panel's scope line. */
   const captureAiScope = useCallback(() => {
@@ -412,7 +523,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     } else {
       document.execCommand("insertText", false, text);
     }
-    scheduleSave();
+    noteChanged();
     recount();
     markChanged();
   }
@@ -441,19 +552,26 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             autoComplete="off"
             className="min-w-0 flex-1 bg-transparent px-2 text-[15px] font-bold text-ink outline-none"
             value={title}
+            // The server keeps 200 characters; the field stops at the same
+            // place, so nothing typed is ever cut off without a sign (N21).
+            maxLength={MAX_TITLE_CHARS}
+            readOnly={!ready || choosing}
             aria-label="خاتىرە ماۋزۇسى"
             data-testid="note-title"
             onChange={(event) => {
+              titleRef.current = event.target.value;
               setTitle(event.target.value);
-              scheduleSave();
+              noteChanged();
             }}
           />
+          {/* A long state wraps onto a second line rather than squeezing the
+              title away on a 360 px phone. */}
           <span
-            className="whitespace-nowrap px-1 text-[12px] text-ink3"
+            className="max-w-[45%] shrink-0 px-1 text-[12px] leading-4 text-ink3"
             data-testid="save-state"
             role="status"
           >
-            {SAVE_LABEL[saveState]}
+            {SAVE_LABEL[save.state]}
           </span>
         </div>
 
@@ -659,7 +777,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           initialQuery={selectionText}
           onClose={() => setFindOpen(false)}
           onDocumentChanged={() => {
-            scheduleSave();
+            noteChanged();
             recount();
             markChanged();
             spell.scheduleCheck();
@@ -667,33 +785,121 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         />
       </header>
 
-      {notice && (
-        <p
-          role="status"
-          className="mx-auto mt-3 w-full max-w-4xl rounded-[var(--radius)] bg-ab px-3.5 py-2.5 text-[13px] leading-6"
-          data-testid="note-notice"
-        >
-          {notice}
-        </p>
-      )}
+      {/*
+        The notice area: in the page's flow under the toolbar, never fixed, so
+        nothing here can cover the text — and the title row above it has no
+        room for a button on a 360 px phone.
+      */}
+      <div className="mx-auto w-full max-w-4xl px-3 sm:px-5" data-testid="note-notices">
+        {save.storageFailed && (
+          <p role="alert" className={`${NOTICE} bg-ab2`} data-testid="note-storage-warning">
+            {STORAGE_FULL_MESSAGE}
+          </p>
+        )}
 
-      {nearLimit && (
-        <p
-          role="alert"
-          className={`mx-auto mt-3 w-full max-w-4xl rounded-[var(--radius)] px-3.5 py-2.5 text-[13px] leading-6 ${
-            overLimit ? "bg-ab2 font-semibold" : "bg-ab"
-          }`}
-        >
-          {overLimit
-            ? `خاتىرە ${MAX_NOTE_CHARS.toLocaleString("en-US")} ھەرپتىن ئېشىپ كەتتى — ساقلانمايدۇ. ئىككىگە بۆلۈڭ.`
-            : `خاتىرە ئۇزۇنلىقى چەككە يېقىنلاشتى (${counts.chars.toLocaleString("en-US")} / ${MAX_NOTE_CHARS.toLocaleString("en-US")}).`}
-        </p>
-      )}
+        {save.state === "conflict" && (
+          <div role="alert" className={`${NOTICE} bg-ab2`} data-testid="note-conflict">
+            <p>{SAVE_MESSAGES.conflict}</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-am"
+                data-testid="conflict-keep-both"
+                disabled={choosing}
+                onClick={() => void keepBoth()}
+              >
+                <Icon name="copy" />
+                ئىككى خاتىرە قىلىپ ساقلاش
+              </button>
+              <button
+                type="button"
+                className="hbtn"
+                data-testid="conflict-keep-mine"
+                disabled={choosing}
+                onClick={() => loopRef.current?.keepMine()}
+              >
+                مېنىڭ نۇسخامنى بۇنىڭ ئورنىغا قويۇش
+              </button>
+            </div>
+          </div>
+        )}
+
+        {save.state === "blocked" && save.code && (
+          <div role="alert" className={`${NOTICE} bg-ab2`} data-testid="note-blocked">
+            <p>{SAVE_MESSAGES[save.code]}</p>
+            {save.code === "needs_account" && (
+              <Link href="/login" className="hbtn mt-2" data-testid="note-login">
+                <Icon name="log-in" />
+                كىرىش
+              </Link>
+            )}
+            {save.code === "not_found" && (
+              <button
+                type="button"
+                className="btn-am mt-2"
+                data-testid="note-save-as-new"
+                disabled={choosing}
+                onClick={() => void saveAsNew()}
+              >
+                <Icon name="save" />
+                يېڭى خاتىرە قىلىپ ساقلاش
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* The label above says what happened; this is what to do about it. */}
+        {(save.state === "offline" || save.state === "retrying") && (
+          <div className="mt-3" data-testid="save-retry-row">
+            <button
+              type="button"
+              className="hbtn"
+              data-testid="save-retry"
+              onClick={() => loopRef.current?.retryNow()}
+            >
+              <Icon name="refresh" />
+              ھازىر قايتا سىناش
+            </button>
+          </div>
+        )}
+
+        {copy && (
+          <div role="status" className={`${NOTICE} bg-ab`} data-testid="note-copy-notice">
+            <p>
+              سىزنىڭ نۇسخىڭىز يېڭى خاتىرە قىلىپ ساقلاندى. بۇ بەتتە باشقا يەردە ئۆزگەرتىلگەن
+              نۇسخا ئېچىلدى.
+            </p>
+            <Link
+              href={`/notes/${copy.id}`}
+              className="inline-flex min-h-11 items-center font-semibold text-am underline"
+              data-testid="note-copy-link"
+            >
+              {copy.title}
+            </Link>
+          </div>
+        )}
+
+        {notice && (
+          <p role="status" className={`${NOTICE} bg-ab`} data-testid="note-notice">
+            {notice}
+          </p>
+        )}
+
+        {nearLimit && (
+          <p role="alert" className={`${NOTICE} ${overLimit ? "bg-ab2 font-semibold" : "bg-ab"}`}>
+            {overLimit
+              ? `خاتىرە ${MAX_NOTE_CHARS.toLocaleString("en-US")} ھەرپتىن ئېشىپ كەتتى — ساقلانمايدۇ. ئىككىگە بۆلۈڭ.`
+              : `خاتىرە ئۇزۇنلىقى چەككە يېقىنلاشتى (${counts.chars.toLocaleString("en-US")} / ${MAX_NOTE_CHARS.toLocaleString("en-US")}).`}
+          </p>
+        )}
+      </div>
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-3 py-4 sm:px-5">
         <div
           ref={attachEditor}
-          contentEditable
+          // Held still until the note is in it, and while a conflict choice is
+          // on its way, so nothing typed in either moment is written over.
+          contentEditable={ready && !choosing}
           suppressContentEditableWarning
           dir="rtl"
           role="textbox"
@@ -708,7 +914,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           }}
           className="md-body paper min-h-[60dvh] w-full px-4 py-5 outline-none sm:px-6"
           onInput={() => {
-            scheduleSave();
+            noteChanged();
             recount();
             markChanged();
             spell.scheduleCheck();

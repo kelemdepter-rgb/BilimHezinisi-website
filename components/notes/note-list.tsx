@@ -15,8 +15,8 @@ export function NoteList({ notes }: { notes: NoteSummary[] }) {
   function create() {
     startTransition(async () => {
       const result = await createNoteAction();
-      if (result.ok && result.id) router.push(`/notes/${result.id}`);
-      else setError(result.ok ? null : result.error);
+      if (result.ok) router.push(`/notes/${result.id}`);
+      else setError(result.error);
     });
   }
 

@@ -325,7 +325,11 @@ here. The table is left in place because an applied migration is never edited ·
   server confirmed that exact revision, and only by the tab that wrote it.
   Sign-out never removes it; account deletion removes that account's copies
   (and every legacy `bh-note-draft-<id>`) once the server confirmed. The user
-  id in the key is a storage namespace, never a permission.
+  id in the key is a storage namespace, never a permission. A tab puts back
+  another tab's copy only once that tab no longer has the note open — each
+  open editor holds the Web Lock `bh-note-open:<userId>:<noteId>:<tab>`,
+  which the browser drops when the tab closes or crashes
+  (`components/notes/note-session.ts`).
 - **Never last-write-wins.** `saveNoteAction` updates only
   `where updated_at = baseUpdatedAt` — the string exactly as PostgREST printed
   it (microseconds) — and otherwise answers `conflict` (with
@@ -340,8 +344,9 @@ here. The table is left in place because an applied migration is never edited ·
 - **Nothing over 900 KB is sent** (`MAX_SAVE_BYTES`): Server Actions refuse
   1 MB bodies, and `serverActions.bodySizeLimit` stays at its default.
 - **The whole document is replaced in one helper**, the editor's
-  `replaceDocument` — a direct, sanitized `innerHTML` write that tells the
-  loop which server version it now shows. Never `selectAll` + `insertHTML`.
+  `putDocument` — a direct, sanitized `innerHTML` write; the caller then
+  tells the loop what the text is (`adopt(version)` for a server version,
+  `change()` for an edit). Never `selectAll` + `insertHTML`.
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +

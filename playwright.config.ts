@@ -287,6 +287,26 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * The notebook's quota as a writer meets it (PROMPT-44): the usage
+         * line on /notes for a brand-new account, and the full-notebook and
+         * too-fast messages — made-up answers to this page's own Server
+         * Actions, never a real account filled. Chromium only: it is markup
+         * and the save loop, which the Firefox/WebKit projects already run.
+         */
+        name: `notes-quota-${viewport.name}`,
+        testMatch: /[\\/]notes-quota\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Licence attribution, the legal pages, password recovery and the
         // account page. Anonymous by default — everything a reader without an
         // account must be able to reach — with the account block opting into

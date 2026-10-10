@@ -15,28 +15,37 @@ test.skip(!hasStaffTestEnv(), "Supabase env not configured");
  * The limits themselves — 200 notes, 5 MB, enforced by migration 0030's
  * trigger — are proven in PGlite (tests/unit/note-quota-sql.test.ts). Here
  * nobody's account is filled: a full notebook, and a writer told to slow
- * down, are this page's own Server Action answers made up by the spec. The
- * envelope of each made-up answer is a real one, captured from the first save
- * that goes through, so the framing and build id are the dev server's own —
- * and a made-up answer never reaches the server, so the note there stays at
- * the version the editor knows. Every text is invented.
+ * down, are this page's own Server Action answers made up by the spec, and
+ * a made-up answer never reaches the server — so the note there stays at the
+ * version the editor knows. Every text is invented.
+ *
+ * A made-up answer is what Next sends for an action that revalidated
+ * nothing: row 0 points at the result and carries no page (`"f":""`), row 1
+ * is the result, and there is no `x-action-revalidated` header — so the
+ * router resolves the action with the result and re-renders nothing
+ * (next/dist/client/components/router-reducer/reducers/server-action-
+ * reducer.js). Replaying a real save's answer instead does not work: it
+ * carries the whole re-rendered page, and the action never settled. Only
+ * the build id (`"b"`) is borrowed from a real answer, so a production
+ * build's id is right too.
  */
 test.use({ serviceWorkers: "block" });
 
-/** A real save's result, exactly as the dev server frames it. */
-const SAVED = /\{"ok":true,"updatedAt":"[^"]*"\}/;
+/** A real save's result, as the dev server frames it. */
+const SAVED = /^1:\{"ok":true,"updatedAt":"[^"]*"\}$/m;
+/** The build id in a real answer's row 0. */
+const BUILD_ID = /^0:\{.*"b":("[^"]*")/m;
 
 type Answer = Record<string, unknown>;
 
 /**
  * Made-up answers for note saves and note creates, on every page of the
  * context. Until an answer is set — and until a real save has been seen to
- * borrow its envelope from — every request goes through untouched.
+ * borrow the build id from — every request goes through untouched.
  */
 async function fakeAnswers(context: BrowserContext) {
   const state = {
-    template: null as string | null,
-    headers: {} as Record<string, string>,
+    buildId: null as string | null,
     save: null as Answer | null,
     create: null as Answer | null,
     faked: 0,
@@ -51,26 +60,20 @@ async function fakeAnswers(context: BrowserContext) {
         ? "create"
         : "other";
     const answer = kind === "save" ? state.save : kind === "create" ? state.create : null;
-    if (answer && state.template) {
+    if (answer && state.buildId) {
       state.faked += 1;
       await route.fulfill({
         status: 200,
-        headers: state.headers,
-        body: state.template.replace(SAVED, JSON.stringify(answer)),
+        headers: { "content-type": "text/x-component" },
+        body: `0:{"a":"$@1","f":"","b":${state.buildId},"q":"","i":false}\n1:${JSON.stringify(answer)}\n`,
       });
       return;
     }
-    if (kind === "save" && state.template === null) {
+    if (kind === "save" && state.buildId === null) {
       const response = await route.fetch();
       const text = await response.text();
-      if (SAVED.test(text)) {
-        state.template = text;
-        state.headers = Object.fromEntries(
-          Object.entries(response.headers()).filter(
-            ([name]) => !["content-length", "content-encoding", "transfer-encoding"].includes(name),
-          ),
-        );
-      }
+      const buildId = BUILD_ID.exec(text)?.[1];
+      if (SAVED.test(text) && buildId) state.buildId = buildId;
       await route.fulfill({ response, body: text });
       return;
     }
@@ -206,7 +209,7 @@ test.describe("a full notebook, and a writer told to slow down", () => {
     try {
       await write(page, "بىرىنچى جۈملە.");
       await expect(page.getByTestId("save-state")).toHaveText(SAVE_LABEL.saved, { timeout: 20_000 });
-      expect(fake.template, "a real save was seen").not.toBeNull();
+      expect(fake.buildId, "a real save was seen").not.toBeNull();
 
       fake.save = { ok: false, code: "quota_bytes", error: SAVE_MESSAGES.quota_bytes };
       await write(page, " ئىككىنچى جۈملە");

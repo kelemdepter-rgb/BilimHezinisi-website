@@ -1,0 +1,61 @@
+import { expect, type Page } from "@playwright/test";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * A scratch note for a spec to work in, made without pressing «يېڭى خاتىرە».
+ *
+ * Making a note through the page is rate-limited per writer
+ * (NOTE_CREATE_RULE: 30 an hour, PROMPT-44), and every notebook project of a
+ * run writes as the same staff account — roughly 350 notes a run across the
+ * three Chromium viewports and the four Firefox/WebKit projects. Through the
+ * button the suite would spend that allowance in its first minutes and fail
+ * the rest. So a spec whose subject is NOT making a note gets its note
+ * straight from the database, as the page's own user, through the
+ * service-role key; the specs whose subject IS making one (a brand-new
+ * account's first note, keeping both versions after a conflict, the quota
+ * messages) still press the button.
+ *
+ * Written with the service role, so the quota trigger (migration 0030) does
+ * not count it either way — and RLS is not asked, which is why the owner is
+ * read from the page's own session rather than trusted from anywhere else.
+ */
+
+export function adminClient(): SupabaseClient {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+/**
+ * The id of the user this page is signed in as, read from @supabase/ssr's
+ * session cookie (`sb-<ref>-auth-token`, split into `.0`, `.1` … when long;
+ * "base64-" + base64url JSON). Nothing is sent anywhere.
+ */
+export async function signedInUserId(page: Page): Promise<string> {
+  const cookies = await page.context().cookies();
+  const parts = cookies
+    .filter((cookie) => /^sb-[a-z0-9]+-auth-token(\.\d+)?$/.test(cookie.name))
+    .sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
+  if (parts.length === 0) throw new Error("this page is not signed in");
+  let value = parts.map((cookie) => cookie.value).join("");
+  if (value.startsWith("base64-")) value = Buffer.from(value.slice("base64-".length), "base64url").toString("utf8");
+  const session = JSON.parse(value) as { user?: { id?: string } };
+  const id = session.user?.id;
+  if (!id) throw new Error("the session cookie names no user");
+  return id;
+}
+
+/** Make an empty note for the page's user, open it, and return its path. */
+export async function newNote(page: Page): Promise<string> {
+  const userId = await signedInUserId(page);
+  const { data, error } = await adminClient()
+    .from("note_documents")
+    .insert({ user_id: userId })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`could not make a scratch note: ${error?.message}`);
+  const path = `/notes/${(data as { id: number }).id}`;
+  await page.goto(path);
+  await expect(page.getByTestId("note-body")).toBeVisible();
+  return path;
+}

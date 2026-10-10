@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { hasStaffTestEnv, loadEnvLocal } from "./env";
 import { scrollPage, scrollToTop } from "./fixtures/scroll";
+import { newNote } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -31,14 +32,6 @@ const admin = () =>
   createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-
-async function newNote(page: Page): Promise<string> {
-  await page.goto("/notes");
-  await page.getByTestId("new-note").click();
-  await expect(page).toHaveURL(/\/notes\/\d+$/, { timeout: 20_000 });
-  await expect(page.getByTestId("note-body")).toBeVisible();
-  return new URL(page.url()).pathname;
-}
 
 async function deleteNote(page: Page, path: string) {
   const id = path.split("/").pop();

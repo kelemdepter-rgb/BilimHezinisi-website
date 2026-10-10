@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { hasStaffTestEnv, loadEnvLocal } from "./env";
 import { geminiCalls, installGeminiMock, setGeminiBehaviour } from "./fixtures/gemini-mock";
+import { newNote } from "./fixtures/notes";
 // The real obfuscation, so a test never reimplements it and drifts.
 import { obfuscateKey } from "../lib/ai/storage";
 
@@ -91,14 +92,6 @@ async function clearAi(page: Page) {
       // Nothing to clear.
     }
   }, AI_STORAGE_KEYS);
-}
-
-async function newNote(page: Page): Promise<string> {
-  await page.goto("/notes");
-  await page.getByTestId("new-note").click();
-  await expect(page).toHaveURL(/\/notes\/\d+$/, { timeout: 20_000 });
-  await expect(page.getByTestId("note-body")).toBeVisible();
-  return new URL(page.url()).pathname;
 }
 
 async function deleteNote(page: Page, path: string) {

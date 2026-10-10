@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import JSZip from "jszip";
 import { SEED_NEEDLE, hasStaffTestEnv, loadEnvLocal } from "./env";
 import { scrollPage, scrollToTop, wheelWorks } from "./fixtures/scroll";
+import { newNote } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -17,14 +18,6 @@ test.skip(!hasStaffTestEnv(), "Supabase env not configured");
 const BODY_TEXT = "بۇ مېنىڭ سىناق خاتىرەم.";
 /** The verse the aya tests insert. Al-Fatiha, second verse. */
 const AYA = { sura: 1, aya: 2 };
-
-async function newNote(page: Page): Promise<string> {
-  await page.goto("/notes");
-  await page.getByTestId("new-note").click();
-  await expect(page).toHaveURL(/\/notes\/\d+$/, { timeout: 20_000 });
-  await expect(page.getByTestId("note-body")).toBeVisible();
-  return new URL(page.url()).pathname;
-}
 
 async function deleteNote(page: Page, path: string) {
   const id = path.split("/").pop();

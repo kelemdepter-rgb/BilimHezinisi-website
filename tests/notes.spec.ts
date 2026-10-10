@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { READER_STATE_PATH, freshPassword, hasStaffTestEnv, loadEnvLocal, testEmail } from "./env";
 import { scrollPage } from "./fixtures/scroll";
+import { newNote } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -10,14 +11,6 @@ test.skip(!hasStaffTestEnv(), "Supabase env not configured");
 /** A word the shipped dictionary does not contain, for the spellcheck panel. */
 const MISSPELLING = "ئۇيغور";
 const BODY_TEXT = "بۇ مېنىڭ سىناق خاتىرەم.";
-
-async function newNote(page: Page): Promise<string> {
-  await page.goto("/notes");
-  await page.getByTestId("new-note").click();
-  await expect(page).toHaveURL(/\/notes\/\d+$/, { timeout: 20_000 });
-  await expect(page.getByTestId("note-body")).toBeVisible();
-  return new URL(page.url()).pathname;
-}
 
 async function deleteNote(page: Page, path: string) {
   const id = path.split("/").pop();

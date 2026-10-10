@@ -338,9 +338,25 @@ here. The table is left in place because an applied migration is never edited ·
   choice. What a note opens on (server, this device's copy, or that choice) is
   `lib/notes/opening.ts`.
 - **Result codes live in one place**, `lib/notes/save-protocol.ts`:
-  `SAVE_CODES`, `CODE_STATE` and `SAVE_MESSAGES` (stage 3 adds `quota` and
-  `rate` there). A failed session check is `failed` (retried), never
-  `needs_account`.
+  `SAVE_CODES`, `CODE_STATE` and `SAVE_MESSAGES`. A failed session check is
+  `failed` (retried), never `needs_account`.
+- **One account may not fill the database** (PROMPT-44, owner's numbers of
+  2026-10-07): **200 notes and 5 MB per account** (UTF-8 bytes of title +
+  HTML + text, the stored column `content_bytes`), enforced by the trigger
+  `note_documents_quota` in migration 0030 under a per-account advisory lock
+  (key 20261007). It raises exactly `note_quota_count` / `note_quota_bytes`
+  → codes `quota_count` / `quota_bytes` (`blocked`; the device copy stays).
+  An update no larger than before always passes, so anyone over a limit can
+  shrink or delete; every row counts, trashed ones included once there is a
+  trash. A write with no `auth.uid()` (service role, SQL Editor) is not
+  limited, nor is a row that is not the caller's (RLS refuses it). The
+  numbers are mirrored in `lib/notes/limits.ts`; the PGlite test fails if
+  they differ. In front of it, per instance and keyed on the user:
+  `NOTE_CREATE_RULE` 30/hour and `NOTE_SAVE_RULE` 600/10 min → `rate`
+  (save: waits `RATE_RETRY_MS` = 60 s before ANY resend). Specs that only
+  need a note to work in make it with `tests/fixtures/notes.ts` `newNote`
+  (service role), never by pressing «يېڭى خاتىرە» — a run writes ~350
+  notes as one staff account and would trip the create limit.
 - **Nothing over 900 KB is sent** (`MAX_SAVE_BYTES`): Server Actions refuse
   1 MB bodies, and `serverActions.bodySizeLimit` stays at its default.
 - **The whole document is replaced in one helper**, the editor's

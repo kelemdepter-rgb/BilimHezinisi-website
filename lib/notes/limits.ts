@@ -8,3 +8,17 @@
  * the whole module invalid.
  */
 export const MAX_NOTE_CHARS = 60_000;
+
+/**
+ * What one account's notebook may hold (PROMPT-44, decided by the owner on
+ * 2026-10-07): 200 notes and 5 MB, counted as the UTF-8 bytes of each note's
+ * title, HTML and plain text together.
+ *
+ * The DATABASE enforces both — supabase/migrations/0030_note_quota.sql, whose
+ * `note_quota_max_notes()` and `note_quota_max_bytes()` return these same
+ * numbers (tests/unit/note-quota-sql.test.ts holds the two to each other).
+ * These copies only let the page say where a writer stands and word the
+ * refusals; changing them here changes nothing that is enforced.
+ */
+export const NOTE_QUOTA_MAX_NOTES = 200;
+export const NOTE_QUOTA_MAX_BYTES = 5 * 1024 * 1024;

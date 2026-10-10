@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DRAFT_DELAY_MS,
   MIN_SAVE_GAP_MS,
+  RATE_RETRY_MS,
   RETRY_DELAYS_MS,
   SAVE_DEBOUNCE_MS,
   SaveLoop,
@@ -14,13 +15,16 @@ import {
 } from "@/lib/notes/save-loop";
 import {
   CODE_STATE,
+  CREATE_RATE_MESSAGE,
   MAX_SAVE_BYTES,
   SAVE_CODES,
   SAVE_LABEL,
   SAVE_MESSAGES,
+  quotaCode,
   saveFailure,
   type SaveResult,
 } from "@/lib/notes/save-protocol";
+import { NOTE_QUOTA_MAX_BYTES, NOTE_QUOTA_MAX_NOTES } from "@/lib/notes/limits";
 
 /**
  * The notebook's save loop (PROMPT-43) on fake timers: every rule about WHEN
@@ -381,6 +385,137 @@ describe("failures", () => {
     t.write("<p>ab</p>");
     await t.wait(SAVE_DEBOUNCE_MS);
     expect(t.requests).toHaveLength(1);
+  });
+});
+
+describe("a full notebook and a writer told to slow down (PROMPT-44)", () => {
+  it("quota_bytes: blocked, the copy kept, nothing retried — and deleting text is the edit that tries again", async () => {
+    const t = setup();
+    t.write("<p>ئۇزۇن بىر جۈملە</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    await t.answer(saveFailure("quota_bytes"));
+    expect(t.loop.getSnapshot()).toMatchObject({ state: "blocked", code: "quota_bytes" });
+    expect(t.label()).toBe("ساقلانمىدى");
+    expect(t.env.draft?.html).toBe("<p>ئۇزۇن بىر جۈملە</p>");
+
+    // Not by itself, not on a retry button, not when the connection returns.
+    await t.wait(10 * 60_000);
+    t.loop.retryNow();
+    t.loop.online();
+    t.loop.visibility(true);
+    expect(t.requests).toHaveLength(0);
+
+    t.write("<p>ئۇزۇن</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    expect(t.requests).toHaveLength(1);
+    expect(t.requests[0].input.html).toBe("<p>ئۇزۇن</p>");
+    await t.answer({ ok: true, updatedAt: V1 });
+    expect(t.label()).toBe("ساقلاندى");
+    expect(t.env.draft).toBeNull();
+  });
+
+  it("rate: waits a whole minute — retry button, connection and a shown page included — then sends by itself", async () => {
+    const t = setup();
+    t.write("<p>a</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    await t.answer(saveFailure("rate"));
+    expect(t.loop.getSnapshot()).toMatchObject({ state: "retrying", code: "rate" });
+    expect(t.env.draft?.html).toBe("<p>a</p>");
+
+    t.write("<p>ab</p>");
+    await t.wait(RETRY_DELAYS_MS[0]);
+    t.loop.retryNow();
+    t.loop.online();
+    t.loop.visibility(false);
+    t.loop.visibility(true);
+    await t.wait(RATE_RETRY_MS - RETRY_DELAYS_MS[0] - 1);
+    expect(t.requests, "nothing inside the minute").toHaveLength(0);
+    expect(t.env.draft?.html).toBe("<p>ab</p>");
+
+    await t.wait(1);
+    expect(t.requests).toHaveLength(1);
+    expect(t.requests[0].input.html).toBe("<p>ab</p>");
+    await t.answer({ ok: true, updatedAt: V1 });
+    expect(t.label()).toBe("ساقلاندى");
+  });
+
+  it("rate: a page hidden through the minute sends when it is shown again, not before", async () => {
+    const t = setup();
+    t.write("<p>a</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    await t.answer(saveFailure("rate"));
+    t.env.visible = false;
+    t.loop.visibility(false);
+    await t.wait(30_000);
+    t.env.visible = true;
+    t.loop.visibility(true);
+    expect(t.requests).toHaveLength(0);
+    t.env.visible = false;
+    t.loop.visibility(false);
+    await t.wait(5 * 60_000);
+    expect(t.requests).toHaveLength(0);
+    t.env.visible = true;
+    t.loop.visibility(true);
+    expect(t.requests).toHaveLength(1);
+  });
+
+  it("rate: an editor closed and reopened inside the minute still waits out the rest of it", async () => {
+    const t = setup();
+    t.write("<p>a</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    await t.answer(saveFailure("rate"));
+    await t.wait(20_000);
+    t.loop.detach();
+    t.loop.attach({ read: () => ({ ...t.env.content }) });
+    await t.wait(RATE_RETRY_MS - 20_000 - 1);
+    expect(t.requests).toHaveLength(0);
+    await t.wait(1);
+    expect(t.requests).toHaveLength(1);
+  });
+
+  it("after a rate wait, an ordinary failure goes back to the ordinary schedule", async () => {
+    const t = setup();
+    t.write("<p>a</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    await t.answer(saveFailure("rate"));
+    await t.wait(RATE_RETRY_MS);
+    await t.answer({ ok: true, updatedAt: V1 });
+    t.write("<p>ab</p>");
+    await t.wait(MIN_SAVE_GAP_MS);
+    await t.answer(saveFailure("failed"));
+    await t.wait(MIN_SAVE_GAP_MS);
+    t.loop.retryNow();
+    expect(t.requests).toHaveLength(1);
+  });
+});
+
+describe("the messages", () => {
+  it("name the limits from lib/notes/limits.ts, not numbers typed into them", () => {
+    expect(SAVE_MESSAGES.quota_count).toContain(` ${NOTE_QUOTA_MAX_NOTES} خاتىرە`);
+    expect(SAVE_MESSAGES.quota_bytes).toContain(`(${NOTE_QUOTA_MAX_BYTES / (1024 * 1024)} MB)`);
+    expect(SAVE_MESSAGES.quota_count).toBe(
+      "خاتىرە دەپتىرىڭىز تولدى: ئەڭ كۆپ 200 خاتىرە ساقلىغىلى بولىدۇ. كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز، يېڭىسىنى قوشالايسىز.",
+    );
+    expect(SAVE_MESSAGES.quota_bytes).toBe(
+      "خاتىرە دەپتىرىڭىزنىڭ ھەجمى تولدى (5 MB). كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز ياكى قىسقارتسىڭىز، ساقلاش داۋاملىشىدۇ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.",
+    );
+  });
+
+  it("the rate message's «one minute» is the loop's wait", () => {
+    expect(RATE_RETRY_MS).toBe(60_000);
+    expect(SAVE_MESSAGES.rate).toContain("بىر مىنۇتتىن كېيىن ئۆزى قايتا سىنايدۇ");
+    // A create is not retried by itself, so its sentence promises nothing.
+    expect(CREATE_RATE_MESSAGE).not.toContain("ئۆزى");
+  });
+
+  it("only the trigger's own two messages are quota refusals", () => {
+    expect(quotaCode({ message: "note_quota_count" })).toBe("quota_count");
+    expect(quotaCode({ message: "note_quota_bytes" })).toBe("quota_bytes");
+    for (const message of ["", "toString", "constructor", "note_quota", "NOTE_QUOTA_COUNT", "timeout"]) {
+      expect(quotaCode({ message }), message).toBeNull();
+    }
+    expect(quotaCode(null)).toBeNull();
+    expect(quotaCode({ message: 42 })).toBeNull();
   });
 });
 

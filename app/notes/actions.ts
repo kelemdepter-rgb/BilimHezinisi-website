@@ -5,15 +5,18 @@ import { ownerClient } from "@/lib/notes/data";
 import { noteHtmlToText, sanitizeNoteHtmlServer } from "@/lib/notes/sanitize-server";
 import { MAX_NOTE_CHARS } from "@/lib/notes/limits";
 import {
+  CREATE_RATE_MESSAGE,
   MAX_SAVE_BYTES,
   SAVE_MESSAGES,
   UNTITLED,
   normalizeTitle,
+  quotaCode,
   saveBytes,
   saveFailure,
   type SaveFailure,
   type SaveResult,
 } from "@/lib/notes/save-protocol";
+import { NOTE_CREATE_RULE, NOTE_SAVE_RULE, isRateLimited } from "@/lib/rate-limit";
 import { reportServerError } from "@/lib/server-log";
 import type { ActionResult } from "@/lib/admin/messages";
 
@@ -73,6 +76,19 @@ function isNoteId(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value > 0;
 }
 
+/**
+ * A write the database refused. The notebook's quota (200 notes, 5 MB per
+ * account — migration 0030) is enforced by a trigger, which answers with an
+ * exception of its own name; that is a full notebook, said in Uyghur, not a
+ * failure to log. Anything else is.
+ */
+function writeFailure(where: string, error: unknown): SaveFailure {
+  const quota = quotaCode(error as { message?: unknown } | null);
+  if (quota) return saveFailure(quota);
+  reportServerError(where, error);
+  return saveFailure("failed");
+}
+
 export type CreateNoteResult = { ok: true; id: number; updatedAt: string } | SaveFailure;
 
 /**
@@ -86,6 +102,11 @@ export async function createNoteAction(input?: { title?: unknown; html?: unknown
     async (): Promise<CreateNoteResult> => {
       const session = await ownerClient();
       if (!session) return { ok: false, code: "needs_account", error: SIGN_IN_TO_WRITE };
+      // Keyed on the writer, never the address: a carrier's NAT puts
+      // thousands of readers behind one IP.
+      if (isRateLimited(`note-create:${session.userId}`, NOTE_CREATE_RULE)) {
+        return { ok: false, code: "rate", error: CREATE_RATE_MESSAGE };
+      }
 
       // Called with nothing (the list's button) or with a FormData by anyone
       // who tries: only a plain object carries a text.
@@ -109,10 +130,7 @@ export async function createNoteAction(input?: { title?: unknown; html?: unknown
         .insert(row)
         .select("id, updated_at")
         .single();
-      if (error) {
-        reportServerError("createNoteAction:insert", error);
-        return saveFailure("failed");
-      }
+      if (error) return writeFailure("createNoteAction:insert", error);
 
       revalidatePath("/notes");
       const created = data as { id: number; updated_at: string };
@@ -143,6 +161,7 @@ export async function saveNoteAction(input: {
     async (): Promise<SaveResult> => {
       const session = await ownerClient();
       if (!session) return saveFailure("needs_account");
+      if (isRateLimited(`note-save:${session.userId}`, NOTE_SAVE_RULE)) return saveFailure("rate");
 
       const { id, title, html, baseUpdatedAt } = input ?? {};
       if (
@@ -167,10 +186,7 @@ export async function saveNoteAction(input: {
         .eq("updated_at", baseUpdatedAt)
         .select("updated_at")
         .maybeSingle();
-      if (error) {
-        reportServerError("saveNoteAction:update", error);
-        return saveFailure("failed");
-      }
+      if (error) return writeFailure("saveNoteAction:update", error);
 
       if (!data) {
         // Nothing matched: either the note is gone (or was never this

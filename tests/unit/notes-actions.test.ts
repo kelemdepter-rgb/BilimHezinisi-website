@@ -24,6 +24,9 @@ const state = vi.hoisted(() => ({
   rows: [] as Row[],
   calls: [] as Call[],
   failQueries: false,
+  /** What the database answers to the next insert or update (migration 0030's trigger). */
+  writeError: null as { code: string; message: string } | null,
+  reported: [] as string[],
   clock: 0,
   revalidated: [] as string[],
 }));
@@ -38,6 +41,9 @@ function version(): string {
 
 function run(call: Call) {
   if (state.failQueries) return { data: null, error: { code: "57014", message: "timeout" } };
+  if (state.writeError && (call.op === "insert" || call.op === "update")) {
+    return { data: null, error: state.writeError };
+  }
   const matches = (row: Row) =>
     call.filters.every(([column, value]) => row[column as keyof Row] === value);
   if (call.op === "insert") {
@@ -101,7 +107,7 @@ function from(table: string) {
 }
 
 vi.mock("next/cache", () => ({ revalidatePath: (path: string) => void state.revalidated.push(path) }));
-vi.mock("@/lib/server-log", () => ({ reportServerError: () => {} }));
+vi.mock("@/lib/server-log", () => ({ reportServerError: (where: string) => void state.reported.push(where) }));
 vi.mock("@/lib/notes/data", () => ({
   ownerClient: async () => {
     if (state.ownerThrows) throw new Error("auth did not answer");
@@ -111,7 +117,8 @@ vi.mock("@/lib/notes/data", () => ({
 
 const { createNoteAction, loadNoteAction, noteVersionAction, saveNoteAction, deleteNoteAction } =
   await import("@/app/notes/actions");
-const { MAX_SAVE_BYTES, SAVE_MESSAGES } = await import("@/lib/notes/save-protocol");
+const { CREATE_RATE_MESSAGE, MAX_SAVE_BYTES, SAVE_MESSAGES } = await import("@/lib/notes/save-protocol");
+const { NOTE_CREATE_RULE, NOTE_SAVE_RULE, resetRateLimits } = await import("@/lib/rate-limit");
 const { MAX_NOTE_CHARS } = await import("@/lib/notes/limits");
 
 function seed(overrides: Partial<Row> = {}): Row {
@@ -136,6 +143,9 @@ beforeEach(() => {
   state.failQueries = false;
   state.clock = 0;
   state.revalidated = [];
+  state.writeError = null;
+  state.reported = [];
+  resetRateLimits();
 });
 
 describe("saveNoteAction", () => {
@@ -322,5 +332,85 @@ describe("deleteNoteAction", () => {
     form.set("id", "7");
     expect(await deleteNoteAction(form)).toMatchObject({ ok: true });
     expect(state.rows.map((row) => row.id)).toEqual([8]);
+  });
+});
+
+describe("a full notebook (migration 0030)", () => {
+  it("a save the trigger refuses for size is quota_bytes, in Uyghur, and is not logged as a fault", async () => {
+    const row = seed();
+    state.writeError = { code: "P0001", message: "note_quota_bytes" };
+    expect(
+      await saveNoteAction({ id: 7, title: "x", html: "<p>كۆپ</p>", baseUpdatedAt: row.updated_at }),
+    ).toEqual({ ok: false, code: "quota_bytes", error: SAVE_MESSAGES.quota_bytes });
+    expect(row.content_html).toBe("<p>بىر</p>");
+    expect(state.reported).toEqual([]);
+    expect(state.revalidated).toEqual([]);
+  });
+
+  it("a new note the trigger refuses is quota_count, or quota_bytes when it is the size", async () => {
+    state.writeError = { code: "P0001", message: "note_quota_count" };
+    expect(await createNoteAction()).toEqual({ ok: false, code: "quota_count", error: SAVE_MESSAGES.quota_count });
+    state.writeError = { code: "P0001", message: "note_quota_bytes" };
+    expect(await createNoteAction({ title: "x", html: "<p>x</p>" })).toEqual({
+      ok: false,
+      code: "quota_bytes",
+      error: SAVE_MESSAGES.quota_bytes,
+    });
+    expect(state.rows).toEqual([]);
+    expect(state.reported).toEqual([]);
+  });
+
+  it("any other refusal is still a logged failure to retry", async () => {
+    const row = seed();
+    state.writeError = { code: "P0001", message: "note_quota_bytes_and_more" };
+    expect(
+      await saveNoteAction({ id: 7, title: "x", html: "<p>x</p>", baseUpdatedAt: row.updated_at }),
+    ).toMatchObject({ ok: false, code: "failed" });
+    expect(state.reported).toEqual(["saveNoteAction:update"]);
+  });
+});
+
+describe("the writer's own rate limits", () => {
+  it("saves: NOTE_SAVE_RULE's allowance, then `rate` before the database is asked — for that writer only", async () => {
+    const row = seed();
+    for (let save = 0; save < NOTE_SAVE_RULE.limit; save += 1) {
+      const result = await saveNoteAction({ id: 7, title: "x", html: `<p>${save}</p>`, baseUpdatedAt: row.updated_at });
+      expect(result.ok, `save ${save + 1}`).toBe(true);
+    }
+    state.calls = [];
+    expect(
+      await saveNoteAction({ id: 7, title: "x", html: "<p>y</p>", baseUpdatedAt: row.updated_at }),
+    ).toEqual({ ok: false, code: "rate", error: SAVE_MESSAGES.rate });
+    expect(state.calls).toEqual([]);
+
+    // Another writer is not slowed by this one.
+    state.owner = { userId: SOMEONE };
+    const theirs = seed({ id: 8, user_id: SOMEONE });
+    expect(
+      await saveNoteAction({ id: 8, title: "x", html: "<p>z</p>", baseUpdatedAt: theirs.updated_at }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("new notes: NOTE_CREATE_RULE's allowance, then `rate` with the list's own sentence", async () => {
+    for (let note = 0; note < NOTE_CREATE_RULE.limit; note += 1) {
+      expect((await createNoteAction()).ok, `note ${note + 1}`).toBe(true);
+    }
+    state.calls = [];
+    expect(await createNoteAction()).toEqual({ ok: false, code: "rate", error: CREATE_RATE_MESSAGE });
+    expect(state.calls).toEqual([]);
+    // Saving is a separate allowance.
+    const row = state.rows[0];
+    expect(
+      await saveNoteAction({ id: row.id, title: "x", html: "<p>x</p>", baseUpdatedAt: row.updated_at }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it("a signed-out caller is not counted against anyone", async () => {
+    state.owner = null;
+    for (let call = 0; call < NOTE_CREATE_RULE.limit + 5; call += 1) {
+      expect(await createNoteAction()).toMatchObject({ code: "needs_account" });
+    }
+    state.owner = { userId: ME };
+    expect(await createNoteAction()).toMatchObject({ ok: true });
   });
 });

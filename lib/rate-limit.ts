@@ -97,6 +97,28 @@ export const BOOK_DOWNLOAD_RULE: RateLimitRule = { limit: 20, windowMs: 10 * 60_
 export const NOTE_SOURCE_RULE: RateLimitRule = { limit: 90, windowMs: 10 * 60_000 };
 
 /**
+ * Making a note: «يېڭى خاتىرە», keeping both versions after a conflict, an AI
+ * answer saved from the reader. Keyed on the user, like NOTE_SOURCE_RULE.
+ *
+ * Thirty an hour is more notes than anyone starts by hand. It is a brake on a
+ * script, not the bound: the database refuses a 201st note whatever this
+ * says (migration 0030, PROMPT-44), on every instance at once.
+ */
+export const NOTE_CREATE_RULE: RateLimitRule = { limit: 30, windowMs: 60 * 60_000 };
+
+/**
+ * Saving a note. Keyed on the user, like NOTE_SOURCE_RULE.
+ *
+ * The editor's own throttle (MIN_SAVE_GAP_MS, at least 3 s between two saves
+ * of one note) keeps one busy tab under 200 saves in ten minutes, so 600
+ * leaves a writer with a few tabs open well clear of it — continuous typing
+ * never meets it. What it stops is a script calling the action in a loop.
+ * Like every rule here it is counted per instance; the database quota
+ * (migration 0030) is what actually bounds how much one account can store.
+ */
+export const NOTE_SAVE_RULE: RateLimitRule = { limit: 600, windowMs: 10 * 60_000 };
+
+/**
  * Searching the library: /search with a word, and the «show every place in
  * this book» expander beneath its results (one shared bucket per address).
  *

@@ -1,4 +1,5 @@
-import { MAX_NOTE_CHARS } from "@/lib/notes/limits";
+import { MAX_NOTE_CHARS, NOTE_QUOTA_MAX_NOTES } from "@/lib/notes/limits";
+import { QUOTA_MEGABYTES } from "@/lib/notes/usage";
 
 /**
  * What a note save can answer, shared by the Server Actions and the editor.
@@ -7,9 +8,8 @@ import { MAX_NOTE_CHARS } from "@/lib/notes/limits";
  * functions, and the editor needs the same codes, labels and limits as the
  * server — one list here, never two copies that drift.
  *
- * Adding a result code (stage 3 adds `quota` and `rate`) is one line in
- * SAVE_CODES, one in CODE_STATE and one in SAVE_MESSAGES; TypeScript refuses
- * the build until all three agree.
+ * Adding a result code is one line in SAVE_CODES, one in CODE_STATE and one
+ * in SAVE_MESSAGES; TypeScript refuses the build until all three agree.
  */
 export const SAVE_CODES = [
   "needs_account",
@@ -18,6 +18,12 @@ export const SAVE_CODES = [
   "too_large",
   "conflict",
   "failed",
+  // The account's notebook is full (PROMPT-44, migration 0030): too many
+  // notes, or too many bytes in all of them.
+  "quota_count",
+  "quota_bytes",
+  // Saving faster than any writer types (lib/rate-limit.ts NOTE_SAVE_RULE).
+  "rate",
 ] as const;
 
 export type SaveCode = (typeof SAVE_CODES)[number];
@@ -58,6 +64,12 @@ export const CODE_STATE: Record<SaveCode, "blocked" | "retrying" | "conflict"> =
   too_large: "blocked",
   conflict: "conflict",
   failed: "retrying",
+  // Nothing changes by waiting; the next edit — deleting text is one — tries
+  // again, and so does coming back after deleting other notes.
+  quota_count: "blocked",
+  quota_bytes: "blocked",
+  // Waits RATE_RETRY_MS (lib/notes/save-loop.ts), then tries by itself.
+  rate: "retrying",
 };
 
 /** The exact text of `data-testid="save-state"` in each state. */
@@ -84,7 +96,35 @@ export const SAVE_MESSAGES: Record<SaveCode, string> = {
   conflict:
     "بۇ خاتىرە باشقا يەردە (باشقا بەتكۈچ ياكى ئۈسكۈنىدە) ئۆزگەرتىلدى. يازغانلىرىڭىز يوقالمىدى.",
   failed: "مەشغۇلات مەغلۇپ بولدى. سەل تۇرۇپ قايتا سىناڭ.",
+  quota_count: `خاتىرە دەپتىرىڭىز تولدى: ئەڭ كۆپ ${NOTE_QUOTA_MAX_NOTES} خاتىرە ساقلىغىلى بولىدۇ. كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز، يېڭىسىنى قوشالايسىز.`,
+  quota_bytes: `خاتىرە دەپتىرىڭىزنىڭ ھەجمى تولدى (${QUOTA_MEGABYTES} MB). كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز ياكى قىسقارتسىڭىز، ساقلاش داۋاملىشىدۇ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.`,
+  // «بىر مىنۇت» is RATE_RETRY_MS (lib/notes/save-loop.ts); a unit test ties the two.
+  rate: "بەك تېز ساقلىنىۋاتىدۇ — بىر مىنۇتتىن كېيىن ئۆزى قايتا سىنايدۇ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.",
 };
+
+/**
+ * «يېڭى خاتىرە» pressed faster than NOTE_CREATE_RULE allows. A create is not
+ * retried by itself, so it does not say it will be — it travels as the
+ * `rate` code with this sentence instead of the save's.
+ */
+export const CREATE_RATE_MESSAGE = "بەك تېز يېڭى خاتىرە قۇرۇلۇۋاتىدۇ. بىر ئازدىن كېيىن قايتا سىناڭ.";
+
+/**
+ * The exceptions migration 0030's trigger raises, by their exact message, and
+ * the result code each one becomes. Anything else is not a quota refusal.
+ */
+export const QUOTA_EXCEPTIONS = {
+  note_quota_count: "quota_count",
+  note_quota_bytes: "quota_bytes",
+} as const satisfies Record<string, SaveCode>;
+
+/** The quota code for a database error, or null when it is some other failure. */
+export function quotaCode(error: { message?: unknown } | null | undefined): SaveCode | null {
+  const message = typeof error?.message === "string" ? error.message : "";
+  return Object.prototype.hasOwnProperty.call(QUOTA_EXCEPTIONS, message)
+    ? QUOTA_EXCEPTIONS[message as keyof typeof QUOTA_EXCEPTIONS]
+    : null;
+}
 
 export function saveFailure(code: SaveCode, serverUpdatedAt?: string): SaveFailure {
   return serverUpdatedAt === undefined

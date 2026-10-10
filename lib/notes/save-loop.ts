@@ -15,9 +15,9 @@ import {
  * it, lives here — no React, no DOM, no network of its own. The editor feeds
  * it changes and page events; the clock, the request and the device copy are
  * handed in, so a unit test can run a whole afternoon of writing on fake
- * timers. Stage 3 (quotas, a server-side rate limit) adds result codes in
- * lib/notes/save-protocol.ts; stage 5 (local history) calls `adopt` through
- * the editor's one replace-the-document helper.
+ * timers. The quota and the server's rate limit (PROMPT-44) are result codes
+ * in lib/notes/save-protocol.ts; stage 5 (local history) calls `adopt`
+ * through the editor's one replace-the-document helper.
  *
  * The rules, each with the bug it closes:
  *  - The title and body are read at the moment of sending, never captured
@@ -31,17 +31,28 @@ import {
  *    minute while the page is visible, and at once when the connection comes
  *    back (N3).
  *  - A note too large for a Server Action is never sent (N23).
+ *  - A full notebook blocks until the next edit; "too fast" waits a whole
+ *    minute before anything is sent again (N6).
  *  - Every save names the version it was written on; the server refuses one
  *    that is out of date, and the writer chooses (N5).
  */
 
 export const SAVE_DEBOUNCE_MS = 1200;
-/** Between two saves of one note — far below what stage 3 will enforce. */
+/**
+ * Between two saves of one note. It keeps one busy tab under 200 saves in ten
+ * minutes — a third of what the server allows (NOTE_SAVE_RULE).
+ */
 export const MIN_SAVE_GAP_MS = 3000;
 /** The device copy is never more than this far behind the screen. */
 export const DRAFT_DELAY_MS = 300;
 /** Then every minute: the last delay repeats. */
 export const RETRY_DELAYS_MS = [5_000, 15_000, 45_000, 60_000] as const;
+/**
+ * After the server said `rate`: nothing is sent before this has passed — not
+ * by «ھازىر قايتا سىناش», a connection coming back or the page shown again —
+ * and then the loop tries by itself. SAVE_MESSAGES.rate says «بىر مىنۇت».
+ */
+export const RATE_RETRY_MS = 60_000;
 /** A tab hidden this long asks whether the note changed elsewhere meanwhile. */
 export const VERSION_CHECK_AFTER_MS = 60_000;
 
@@ -107,6 +118,8 @@ export class SaveLoop {
   private flushWanted = false;
   private lastSendAt = Number.NEGATIVE_INFINITY;
   private retryCount = 0;
+  /** Set by a `rate` answer: no retry of any kind before this moment. */
+  private retryNotBefore = Number.NEGATIVE_INFINITY;
   private hiddenAt: number | null = null;
 
   private saveTimer: unknown = null;
@@ -209,6 +222,8 @@ export class SaveLoop {
   /** «ھازىر قايتا سىناش», a connection that came back, a page shown again. */
   retryNow(): void {
     if (this.state !== "offline" && this.state !== "retrying") return;
+    // Told to slow down: the timer already set goes off when the wait is over.
+    if (this.deps.clock.now() < this.retryNotBefore) return;
     this.clearRetryTimer();
     this.trySend();
   }
@@ -293,6 +308,7 @@ export class SaveLoop {
     this.code = null;
     this.serverUpdatedAt = null;
     this.retryCount = 0;
+    this.retryNotBefore = Number.NEGATIVE_INFINITY;
     this.deps.removeDraft();
     this.setState("saved");
   }
@@ -373,6 +389,7 @@ export class SaveLoop {
       this.base = result.updatedAt;
       this.confirmed = Math.max(this.confirmed, revision);
       this.retryCount = 0;
+      this.retryNotBefore = Number.NEGATIVE_INFINITY;
       this.clearRetryTimer();
       this.code = null;
       if (revision === this.revision) {
@@ -400,6 +417,7 @@ export class SaveLoop {
     } else if (next === "blocked") {
       this.setState("blocked");
     } else {
+      if (this.code === "rate") this.retryNotBefore = this.deps.clock.now() + RATE_RETRY_MS;
       this.setState("retrying");
       this.scheduleRetry();
     }
@@ -475,7 +493,8 @@ export class SaveLoop {
   private scheduleRetry(): void {
     this.clearRetryTimer();
     if (this.attachment === null) return;
-    const delay = RETRY_DELAYS_MS[Math.min(this.retryCount, RETRY_DELAYS_MS.length - 1)];
+    const backoff = RETRY_DELAYS_MS[Math.min(this.retryCount, RETRY_DELAYS_MS.length - 1)];
+    const delay = Math.max(backoff, this.retryNotBefore - this.deps.clock.now());
     this.retryCount++;
     this.retryTimer = this.deps.clock.setTimeout(() => {
       this.retryTimer = null;

@@ -872,11 +872,25 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 يېڭى خاتىرە قىلىپ ساقلاش
               </button>
             )}
+            {/* Room is made on the list; this note's text waits on this device. */}
+            {(save.code === "quota_bytes" || save.code === "quota_count") && (
+              <Link href="/notes" className="hbtn mt-2" data-testid="note-quota-list">
+                <Icon name="notebook-pen" />
+                خاتىرىلەر تىزىملىكى
+              </Link>
+            )}
           </div>
         )}
 
+        {/* Told to slow down: it tries again by itself, and nothing sooner would help. */}
+        {save.state === "retrying" && save.code === "rate" && (
+          <p role="status" className={`${NOTICE} bg-ab`} data-testid="note-rate">
+            {SAVE_MESSAGES.rate}
+          </p>
+        )}
+
         {/* The label above says what happened; this is what to do about it. */}
-        {(save.state === "offline" || save.state === "retrying") && (
+        {(save.state === "offline" || (save.state === "retrying" && save.code !== "rate")) && (
           <div className="mt-3" data-testid="save-retry-row">
             <button
               type="button"

@@ -10,6 +10,8 @@ export type NoteSummary = {
   updated_at: string;
   /** Characters of plain text, for the list's "how long is this" hint. */
   length: number;
+  /** What the note counts against the account's 5 MB (migration 0030). */
+  bytes: number;
 };
 
 export type NoteDocument = {
@@ -59,6 +61,10 @@ export async function ownerClient() {
 /**
  * The signed-in user's notes, newest edit first. Null when not signed in.
  *
+ * Metadata only: `content_length` and `content_bytes` are stored generated
+ * columns (0018, 0030), so the list — and the usage line above it — never
+ * downloads a note's text.
+ *
  * Throws when the read fails (PROMPT-40). An empty list is what /notes shows
  * as «تېخى خاتىرە يوق», and a writer whose notes did not load must never be
  * told they have none — on 2026-10-07 one was, a moment after creating a note.
@@ -70,17 +76,18 @@ export async function listNotes(): Promise<NoteSummary[] | null> {
 
   const { data, error } = await owner.supabase
     .from("note_documents")
-    .select("id, title, updated_at, content_length")
+    .select("id, title, updated_at, content_length, content_bytes")
     .eq("user_id", owner.userId)
     .order("updated_at", { ascending: false });
   throwIfUnavailable("notes-list", error);
 
-  type Row = { id: number; title: string; updated_at: string; content_length: number };
+  type Row = { id: number; title: string; updated_at: string; content_length: number; content_bytes: number };
   return ((data as Row[] | null) ?? []).map((row) => ({
     id: row.id,
     title: row.title,
     updated_at: row.updated_at,
     length: row.content_length,
+    bytes: row.content_bytes,
   }));
 }
 

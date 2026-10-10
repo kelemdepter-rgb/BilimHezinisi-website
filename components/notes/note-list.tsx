@@ -5,9 +5,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { createNoteAction, deleteNoteAction } from "@/app/notes/actions";
+import { NOTES_USAGE_ID } from "@/components/notes/notes-usage";
 import type { NoteSummary } from "@/lib/notes/data";
 
-export function NoteList({ notes }: { notes: NoteSummary[] }) {
+/**
+ * `countFull`: the account holds as many notes as it may. «يېڭى خاتىرە» still
+ * asks — the server is the judge, and a note deleted in another tab may have
+ * made room — and its refusal says what to do (SAVE_MESSAGES.quota_count).
+ */
+export function NoteList({ notes, countFull = false }: { notes: NoteSummary[]; countFull?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -34,14 +40,21 @@ export function NoteList({ notes }: { notes: NoteSummary[] }) {
   return (
     <>
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button type="button" className="btn-am" data-testid="new-note" disabled={pending} onClick={create}>
+        <button
+          type="button"
+          className="btn-am"
+          data-testid="new-note"
+          disabled={pending}
+          aria-describedby={countFull ? NOTES_USAGE_ID : undefined}
+          onClick={create}
+        >
           <Icon name="plus" />
           يېڭى خاتىرە
         </button>
       </div>
 
       {error && (
-        <p role="alert" className="mt-3 rounded-[var(--radius)] bg-ab2 px-3.5 py-3 text-[13px]">
+        <p role="alert" className="mt-3 rounded-[var(--radius)] bg-ab2 px-3.5 py-3 text-[13px]" data-testid="notes-error">
           {error}
         </p>
       )}

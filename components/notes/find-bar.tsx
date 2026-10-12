@@ -7,9 +7,12 @@ import {
   FIND_CURRENT_HIGHLIGHT,
   FIND_HIGHLIGHT,
   findInEditor,
-  replacedHtml,
+  replaceHits,
   type FindHit,
 } from "@/lib/notes/find";
+
+/** A replace-all that «ھەممىنى يېنىۋېلىش» can still take back. */
+type Undoable = { count: number; snapshot: string };
 
 /**
  * Find and replace, as a bar in the notebook's sticky header.
@@ -21,10 +24,13 @@ import {
  * further down while it is open. Stepping to a match scrolls that match into
  * the middle of the screen, so a hit can never be left hiding under the header.
  *
- * REPLACE IS ONE UNDO STEP. Every replacement is computed on a detached clone
- * (lib/notes/find.ts) and written back with a single selectAll + insertHTML, so
- * the browser records one undo entry for the whole operation — Ctrl+Z after a
- * replace-all restores the document exactly, in one press.
+ * A REPLACEMENT TOUCHES ONLY ITS HIT. Each one is an `insertText` on that hit's
+ * own Range (lib/notes/find.ts), so the note's headings, quotes and lists stay
+ * exactly as they were. Replace-one is one native undo step. Replace-all is one
+ * step per hit, run inside the editor's batch so autosave, the counts and the
+ * spellchecker hear about it once — and «ھەممىنى يېنىۋېلىش» takes all of them
+ * back in one tap: that many native undos, then a check against the note as it
+ * was before, written back whole if the browser's undo stack fell short.
  */
 export function FindBar({
   open,
@@ -32,7 +38,8 @@ export function FindBar({
   revision,
   initialQuery,
   onClose,
-  onDocumentChanged,
+  batch,
+  onRestore,
 }: {
   open: boolean;
   editorRef: React.RefObject<HTMLDivElement | null>;
@@ -40,7 +47,10 @@ export function FindBar({
   revision: number;
   initialQuery: string;
   onClose: () => void;
-  onDocumentChanged: () => void;
+  /** Run editing commands as one change: the editor's input handling waits for the end. */
+  batch: (work: () => void) => void;
+  /** Put a whole earlier version of the note back on screen. */
+  onRestore: (html: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
@@ -48,6 +58,7 @@ export function FindBar({
   const [hits, setHits] = useState<FindHit[]>([]);
   const [index, setIndex] = useState(-1);
   const [notice, setNotice] = useState<string | null>(null);
+  const [undoable, setUndoable] = useState<Undoable | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   /**
@@ -59,12 +70,16 @@ export function FindBar({
   /**
    * Pre-fill from the note's selection, exactly as the desktop does. Adjusted
    * during render because it is state derived from a prop changing, not a side
-   * effect on an external system.
+   * effect on an external system. Closing the bar drops what it last said.
    */
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
     setWasOpen(open);
     if (open && initialQuery.trim()) setQuery(initialQuery.trim());
+    if (!open) {
+      setNotice(null);
+      setUndoable(null);
+    }
   }
 
   /** Take the paint off. Called on close, on unmount and before every repaint. */
@@ -145,6 +160,26 @@ export function FindBar({
 
   useEffect(() => clearPaint, [clearPaint]);
 
+  /**
+   * «ھەممىنى يېنىۋېلىش» is about the replace-all that just happened, so it goes
+   * with the next change of any kind: typing in the note or the title, a
+   * toolbar command, a panel writing into the note. Any of those would sit on
+   * the undo stack above the replacements, and undoing "that many" steps would
+   * then take back the wrong ones.
+   */
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!undoable || !editor) return;
+    const drop = () => setUndoable(null);
+    const watcher = new MutationObserver(drop);
+    watcher.observe(editor, { childList: true, characterData: true, subtree: true });
+    document.addEventListener("input", drop, true);
+    return () => {
+      watcher.disconnect();
+      document.removeEventListener("input", drop, true);
+    };
+  }, [editorRef, undoable]);
+
   const step = useCallback(
     (delta: number) => {
       if (hits.length === 0) return;
@@ -158,27 +193,84 @@ export function FindBar({
   );
 
   /**
-   * Write the clone back over the whole document in one command, which is what
-   * makes the operation a single undo step.
+   * Run `work` against the note as one batch, with the page held where it
+   * is: an editing command scrolls its caret into view, and replacing from
+   * the last hit to the first would otherwise drag the page to the end of
+   * the note and back.
    */
-  const applyReplacement = useCallback(
-    (all: boolean) => {
-      const editor = editorRef.current;
-      if (!editor || hits.length === 0) return;
+  function editInPlace(editor: HTMLDivElement, work: (selection: Selection) => void) {
+    const selection = window.getSelection();
+    if (!selection) return;
+    const { scrollX, scrollY } = window;
+    batch(() => {
+      editor.focus({ preventScroll: true });
+      work(selection);
+    });
+    window.scrollTo(scrollX, scrollY);
+  }
 
-      const { html, count } = replacedHtml(editor, query, replacement, all ? -1 : Math.max(index, 0));
-      if (count === 0) return;
+  /** One hit's text, replaced as one native editing command. */
+  function writeOver(selection: Selection, range: Range) {
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.execCommand("insertText", false, replacement);
+  }
 
-      editor.focus();
-      document.execCommand("selectAll", false);
-      document.execCommand("insertHTML", false, html);
+  function replaceOne() {
+    const editor = editorRef.current;
+    if (!editor || hits.length === 0) return;
+    const ordinal = Math.max(index, 0);
+    let written = 0;
+    editInPlace(editor, (selection) => {
+      written = replaceHits(editor, query, ordinal, (range) => writeOver(selection, range));
+    });
+    if (written === 0) return;
+    setUndoable(null);
+    setNotice("1 ئورۇن ئالماشتۇرۇلدى. «يېنىۋېلىش» كۇنۇپكىسى ئۇنى ئەسلىگە قايتۇرىدۇ.");
+    // The hit after it now has this number, so the next tap carries on there.
+    indexRef.current = ordinal;
+  }
 
-      setNotice(`${count} ئورۇن ئالماشتۇرۇلدى. «يېنىۋېلىش» كۇنۇپكىسى ئۇنى ئەسلىگە قايتۇرىدۇ.`);
-      indexRef.current = 0;
-      onDocumentChanged();
-    },
-    [editorRef, hits.length, index, onDocumentChanged, query, replacement],
-  );
+  function replaceAll() {
+    const editor = editorRef.current;
+    if (!editor || hits.length === 0) return;
+    const snapshot = editor.innerHTML;
+    const current = Math.max(index, 0);
+    let written = 0;
+    // The paint holds live Ranges over every hit; there is no point keeping
+    // three hundred of them up to date while they are being replaced.
+    clearPaint();
+    editInPlace(editor, (selection) => {
+      let caret: Range | null = null;
+      written = replaceHits(editor, query, "all", (range, ordinal) => {
+        writeOver(selection, range);
+        if (ordinal === current && selection.rangeCount > 0) caret = selection.getRangeAt(0).cloneRange();
+      });
+      // The caret ends where the writer was looking, not at the first hit.
+      if (caret) {
+        selection.removeAllRanges();
+        selection.addRange(caret);
+      }
+    });
+    if (written === 0) return;
+    setUndoable({ count: written, snapshot });
+    setNotice(`${written} ئورۇن ئالماشتۇرۇلدى.`);
+    indexRef.current = 0;
+  }
+
+  /** «ھەممىنى يېنىۋېلىش» — every replacement of that replace-all, at once. */
+  function undoAll() {
+    const editor = editorRef.current;
+    if (!editor || !undoable) return;
+    editInPlace(editor, () => {
+      for (let taken = 0; taken < undoable.count; taken += 1) document.execCommand("undo");
+    });
+    // Browsers cap their undo stacks and engines differ in what one step is;
+    // the note as it was is the only thing that counts.
+    if (editor.innerHTML !== undoable.snapshot) onRestore(undoable.snapshot);
+    setUndoable(null);
+    setNotice("ئەسلىگە قايتۇرۇلدى.");
+  }
 
   if (!open) return null;
 
@@ -273,7 +365,7 @@ export function FindBar({
             className="hbtn"
             data-testid="replace-one"
             disabled={hits.length === 0}
-            onClick={() => applyReplacement(false)}
+            onClick={replaceOne}
           >
             ئالماشتۇرۇش
           </button>
@@ -282,7 +374,7 @@ export function FindBar({
             className="hbtn"
             data-testid="replace-all"
             disabled={hits.length === 0}
-            onClick={() => applyReplacement(true)}
+            onClick={replaceAll}
           >
             ھەممىنى ئالماشتۇرۇش
           </button>
@@ -290,13 +382,17 @@ export function FindBar({
       )}
 
       {notice && (
-        <p
-          className="mx-auto mt-1.5 w-full max-w-4xl text-[12px] leading-5 text-ink3"
-          data-testid="find-notice"
-          role="status"
-        >
-          {notice}
-        </p>
+        <div className="mx-auto mt-1.5 flex w-full max-w-4xl flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-[12px] leading-5 text-ink3" data-testid="find-notice" role="status">
+            {notice}
+          </p>
+          {undoable && (
+            <button type="button" className="hbtn" data-testid="find-undo-all" onClick={undoAll}>
+              <Icon name="undo" />
+              ھەممىنى يېنىۋېلىش
+            </button>
+          )}
+        </div>
       )}
 
       {!canHighlight() && (

@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import JSZip from "jszip";
 import { SEED_NEEDLE, hasStaffTestEnv, loadEnvLocal } from "./env";
 import { scrollPage, scrollToTop, wheelWorks } from "./fixtures/scroll";
-import { newNote } from "./fixtures/notes";
+import { newNote, openFind } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -227,7 +227,7 @@ test.describe("citing a verse from a note", () => {
 });
 
 test.describe("find and replace", () => {
-  test("counts, steps, replaces all, and one undo puts it all back", async ({ page }) => {
+  test("counts, steps, replaces all, and one tap puts it all back", async ({ page }) => {
     const path = await newNote(page);
     await page.getByTestId("note-body").click();
     await page.keyboard.type("كىتاب بىر");
@@ -239,8 +239,7 @@ test.describe("find and replace", () => {
     const body = page.getByTestId("note-body");
     const before = await body.innerHTML();
 
-    await page.getByTestId("find-open").click();
-    await expect(page.getByTestId("find-bar")).toBeVisible();
+    await openFind(page);
     await page.getByTestId("find-input").fill("كىتاب");
     await expect(page.getByTestId("find-count")).toHaveText("1 / 3");
 
@@ -257,10 +256,9 @@ test.describe("find and replace", () => {
     await expect(body).not.toContainText("كىتاب");
     await expect(page.getByTestId("find-notice")).toContainText("3");
 
-    // ONE undo. A replace-all that cannot be taken back in a single press will
-    // eventually destroy somebody's work.
-    await body.click();
-    await page.keyboard.press("Control+Z");
+    // ONE tap. A replace-all that cannot be taken back in a single press will
+    // eventually destroy somebody's work — and a phone has no Ctrl+Z.
+    await page.getByTestId("find-undo-all").click();
     await expect(body).not.toContainText("دەپتەر");
     expect(await body.innerHTML()).toBe(before);
 
@@ -274,7 +272,7 @@ test.describe("find and replace", () => {
     await page.keyboard.press("Enter");
     await page.keyboard.type("كىتاب ئىككى");
 
-    await page.getByTestId("find-open").click();
+    await openFind(page);
     await page.getByTestId("find-input").fill("كىتاب");
     await page.getByTestId("find-toggle-replace").click();
     await page.getByTestId("replace-input").fill("دەپتەر");
@@ -293,7 +291,7 @@ test.describe("find and replace", () => {
     await page.keyboard.type("كىتاب ئوقۇش");
     await expect(page.getByTestId("save-state")).toHaveText("ساقلاندى", { timeout: 25_000 });
 
-    await page.getByTestId("find-open").click();
+    await openFind(page);
     await page.getByTestId("find-input").fill("كىتاب");
     await expect(page.getByTestId("find-count")).toHaveText("1 / 1");
 
@@ -352,8 +350,7 @@ test.describe("on every screen", () => {
     // The find bar is a row in the header, not a box over the text, so at the
     // top of the document the editor simply starts further down.
     await scrollToTop(page);
-    await page.getByTestId("find-open").click();
-    await expect(page.getByTestId("find-bar")).toBeVisible();
+    await openFind(page);
     expect(await overflow(), `no horizontal scroll at ${width}px`).toBeLessThanOrEqual(1);
 
     const header = (await page.getByTestId("note-toolbar").boundingBox())!;

@@ -80,3 +80,13 @@ export async function dropNote(path: string): Promise<void> {
   if (error) throw new Error(`could not delete scratch note ${id}: ${error.message}`);
 }
 
+/**
+ * Open the find bar wherever its button is: in the tool row where there is
+ * room, under «باشقا ئىقتىدارلار» on a phone (PROMPT-45).
+ */
+export async function openFind(page: Page): Promise<void> {
+  const button = page.getByTestId("find-open");
+  if (!(await button.isVisible())) await page.getByTestId("toolbar-more").click();
+  await button.click();
+  await expect(page.getByTestId("find-bar")).toBeVisible();
+}

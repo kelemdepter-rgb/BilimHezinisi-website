@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { findInEditor, replacedHtml } from "@/lib/notes/find";
+import { findInEditor, replaceHits } from "@/lib/notes/find";
 import { rangeFor } from "@/lib/spellcheck/marks";
 
 /**
@@ -110,32 +110,136 @@ describe("find lands where it always did", () => {
   }
 });
 
+/**
+ * Replacing, hit by hit (PROMPT-45).
+ *
+ * The notebook writes each replacement with one `insertText` command on that
+ * hit's own Range — jsdom has no execCommand, so these tests write by
+ * splicing the text node, which is what the three engines were measured to
+ * do. What is pinned down here is everything around the write: which Ranges
+ * are handed over, in which order, and that the markup around them is never
+ * touched. The same four notes go through the real engines in
+ * tests/notes-editing.spec.ts.
+ */
+const OLD = "ئالما";
+const NEW = "ئۆرۈك";
+
+/** The note shapes that a whole-document rewrite used to corrupt (N7). */
+const SHAPES: [label: string, html: string][] = [
+  [
+    "a heading",
+    '<h2>ئالما باغچىسى</h2><div>بۇ يىل ئالما كۆپ.</div><div style="text-align: center;">ئالما ۋە ئۆرۈك</div>',
+  ],
+  [
+    "a citation",
+    '<blockquote dir="rtl">ئالما دەرىخى ئېگىز.</blockquote><p dir="rtl" style="font-size:13px;color:#8a8a8a"><a href="/books/1/read?page=2">«ئالما» — 2-بەت</a></p><p><br></p>',
+  ],
+  ["a list", "<ul><li>ئالما</li><li>نەشپۈت ۋە ئالما</li></ul><div>ئالما يېگىنىم.</div>"],
+  ["plain text", "ئالما بىر<div>ئالما ئىككى</div><div>ئالما ئۈچ</div>"],
+];
+
+/** Write over a Range the way the engines do: inside its own text node. */
+function splice(text: string) {
+  return (range: Range) => {
+    const node = range.startContainer as Text;
+    node.replaceData(range.startOffset, range.endOffset - range.startOffset, text);
+  };
+}
+
+/** `html` with only its `ordinal`-th occurrence of `word` replaced. */
+function replaceNth(html: string, word: string, ordinal: number, replacement: string): string {
+  let at = -1;
+  for (let seen = 0; seen <= ordinal; seen += 1) at = html.indexOf(word, at + 1);
+  return html.slice(0, at) + replacement + html.slice(at + word.length);
+}
+
 describe("replacing in a note", () => {
-  it("replaces every occurrence and leaves the markup alone", () => {
+  for (const [label, html] of SHAPES) {
+    it(`replace-all keeps the shape of a note that starts with ${label}`, () => {
+      const editor = editorWith(html);
+      const before = editor.innerHTML;
+      const count = replaceHits(editor, OLD, "all", splice(NEW));
+      expect(count).toBe(before.split(OLD).length - 1);
+      expect(editor.innerHTML).toBe(before.split(OLD).join(NEW));
+    });
+
+    it(`replace-one keeps the shape of a note that starts with ${label}`, () => {
+      const editor = editorWith(html);
+      const before = editor.innerHTML;
+      expect(replaceHits(editor, OLD, 1, splice(NEW))).toBe(1);
+      expect(editor.innerHTML).toBe(replaceNth(before, OLD, 1, NEW));
+    });
+  }
+
+  it("hands the hits over from the last to the first", () => {
     const editor = editorWith("<p>كىتاب <b>كىتاب</b></p><p>كىتاب</p>");
-    const { html, count } = replacedHtml(editor, "كىتاب", "دەپتەر", -1);
-    expect(count).toBe(3);
-    expect(html).toBe("<p>دەپتەر <b>دەپتەر</b></p><p>دەپتەر</p>");
+    const order: number[] = [];
+    replaceHits(editor, "كىتاب", "all", (range, ordinal) => {
+      order.push(ordinal);
+      splice("دەپتەر")(range);
+    });
+    expect(order).toEqual([2, 1, 0]);
+    expect(editor.innerHTML).toBe("<p>دەپتەر <b>دەپتەر</b></p><p>دەپتەر</p>");
   });
 
-  it("replaces only the hit that was asked for", () => {
-    const editor = editorWith("<p>كىتاب</p><p>كىتاب</p>");
-    const { html, count } = replacedHtml(editor, "كىتاب", "دەپتەر", 1);
-    expect(count).toBe(1);
-    expect(html).toBe("<p>كىتاب</p><p>دەپتەر</p>");
+  it("hands over Ranges that never leave one text node", () => {
+    const editor = editorWith("<p>كىتاب <b>كىتاب</b> كىتاب</p>");
+    replaceHits(editor, "كىتاب", "all", (range) => {
+      expect(range.startContainer).toBe(range.endContainer);
+      expect(range.startContainer.nodeType).toBe(Node.TEXT_NODE);
+      expect(range.toString()).toBe("كىتاب");
+      splice("دەپتەر")(range);
+    });
   });
 
-  it("does not touch the editor it was given", () => {
+  it("finds its place again when an engine rebuilds a text node instead of editing it", () => {
+    const editor = editorWith("<p>كىتاب ۋە كىتاب</p><p>كىتاب</p>");
+    replaceHits(editor, "كىتاب", "all", (range) => {
+      const node = range.startContainer as Text;
+      const data = node.data;
+      node.replaceWith(
+        document.createTextNode(data.slice(0, range.startOffset) + "دەپتەر" + data.slice(range.endOffset)),
+      );
+    });
+    expect(editor.innerHTML).toBe("<p>دەپتەر ۋە دەپتەر</p><p>دەپتەر</p>");
+  });
+
+  it("replaces the same hit the find bar numbered", () => {
+    const html = "كىتاب بىر<div>كىتاب ئىككى</div><div>كىتاب ئۈچ</div>";
+    for (const ordinal of [0, 1, 2]) {
+      const editor = editorWith(html);
+      const { map, hits } = findInEditor(editor, "كىتاب");
+      const shown = rangeFor(map, hits[ordinal].start, hits[ordinal].end)!;
+      let written: Range | null = null;
+      replaceHits(editor, "كىتاب", ordinal, (range) => {
+        written = range;
+      });
+      expect(written!.startContainer).toBe(shown.startContainer);
+      expect(written!.startOffset).toBe(shown.startOffset);
+    }
+  });
+
+  it("writes nothing for a hit that is not there, or an empty query", () => {
     const editor = editorWith("<p>كىتاب</p>");
-    replacedHtml(editor, "كىتاب", "دەپتەر", -1);
-    // The caller writes the result back itself, in one undoable command.
+    const write = () => {
+      throw new Error("must not be called");
+    };
+    expect(replaceHits(editor, "كىتاب", 3, write)).toBe(0);
+    expect(replaceHits(editor, "كىتاب", -1, write)).toBe(0);
+    expect(replaceHits(editor, "   ", "all", write)).toBe(0);
+    expect(replaceHits(editor, "دەپتەر", "all", write)).toBe(0);
     expect(editor.innerHTML).toBe("<p>كىتاب</p>");
   });
 
   it("replaces the ORIGINAL spelling when the query was written without tashkil", () => {
     const editor = editorWith("<p>ٱلۡحَمۡدُ للە</p>");
-    const { html, count } = replacedHtml(editor, "الحمد", "شۈكۈر", -1);
-    expect(count).toBe(1);
-    expect(html).toBe("<p>شۈكۈر للە</p>");
+    expect(replaceHits(editor, "الحمد", "all", splice("شۈكۈر"))).toBe(1);
+    expect(editor.innerHTML).toBe("<p>شۈكۈر للە</p>");
+  });
+
+  it("survives a replacement that contains what was searched for", () => {
+    const editor = editorWith("<p>ئالما ۋە ئالما</p>");
+    expect(replaceHits(editor, OLD, "all", splice(`${OLD} شېكەر`))).toBe(2);
+    expect(editor.innerHTML).toBe("<p>ئالما شېكەر ۋە ئالما شېكەر</p>");
   });
 });

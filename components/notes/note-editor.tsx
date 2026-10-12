@@ -376,16 +376,55 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   }
 
   /**
+   * Everything that follows a change to the body: autosave and its device
+   * copy, the counts, the find bar's hits, the spellchecker.
+   */
+  const afterEdit = useCallback(() => {
+    noteChanged();
+    recount();
+    markChanged();
+    spell.scheduleCheck();
+  }, [markChanged, recount, noteChanged, spell]);
+
+  /**
+   * Several editing commands as one change (PROMPT-45). Every command fires
+   * its own input event; inside a batch the editor lets them pass and runs
+   * what follows a change once, at the end — a replace-all of 300 hits is one
+   * autosave and one recount, not 300.
+   */
+  const batching = useRef(0);
+  const runBatch = useCallback(
+    (work: () => void) => {
+      batching.current += 1;
+      try {
+        work();
+      } finally {
+        batching.current -= 1;
+      }
+      afterEdit();
+    },
+    [afterEdit],
+  );
+
+  /**
    * execCommand is deprecated and still the only thing every mobile browser
    * implements for rich text in a contentEditable. The desktop app uses it too.
    */
   function exec(command: string, value?: string) {
-    editorRef.current?.focus();
-    document.execCommand(command, false, value);
-    noteChanged();
-    recount();
-    markChanged();
+    runBatch(() => {
+      editorRef.current?.focus();
+      document.execCommand(command, false, value);
+    });
   }
+
+  /** An earlier version of the note, back on screen as an edit to be saved. */
+  const restoreBody = useCallback(
+    (html: string) => {
+      putDocument({ title: titleRef.current, html });
+      loopRef.current?.change();
+    },
+    [putDocument],
+  );
 
   /** The note's current selection as plain text, for pre-filling a panel. */
   function currentSelection(): string {
@@ -498,19 +537,6 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     },
     [markChanged, recount, noteChanged, spell],
   );
-
-  /**
-   * The panel rewrote blocks itself (proofread apply, or its undo). The
-   * document changed without an input event, so everything that normally
-   * follows one has to be run by hand — including autosave, or a correction
-   * would sit on screen and never reach the database.
-   */
-  const afterPanelEdit = useCallback(() => {
-    noteChanged();
-    recount();
-    markChanged();
-    spell.scheduleCheck();
-  }, [markChanged, recount, noteChanged, spell]);
 
   /** Re-read the selection and the note, for the panel's scope line. */
   const captureAiScope = useCallback(() => {
@@ -807,12 +833,8 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           revision={revision}
           initialQuery={selectionText}
           onClose={() => setFindOpen(false)}
-          onDocumentChanged={() => {
-            noteChanged();
-            recount();
-            markChanged();
-            spell.scheduleCheck();
-          }}
+          batch={runBatch}
+          onRestore={restoreBody}
         />
       </header>
 
@@ -959,10 +981,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           }}
           className="md-body paper min-h-[60dvh] w-full px-4 py-5 outline-none sm:px-6"
           onInput={() => {
-            noteChanged();
-            recount();
-            markChanged();
-            spell.scheduleCheck();
+            // Inside a batch, its end does this once (runBatch).
+            if (batching.current > 0) return;
+            afterEdit();
           }}
           onPaste={onPaste}
           // There is no element around a misspelled word to click — the marks
@@ -1035,7 +1056,10 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           onRescope={captureAiScope}
           onInsert={insertText}
           onReplaceSelection={replaceSelectionWith}
-          onDocumentChanged={afterPanelEdit}
+          // The panel rewrites blocks itself (proofread apply, or its undo),
+          // with no input event: without this a correction would sit on
+          // screen and never reach the database.
+          onDocumentChanged={afterEdit}
         />
       )}
 

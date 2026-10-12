@@ -1,7 +1,7 @@
 /**
  * Find and replace inside the notebook.
  *
- * Two decisions carry the whole file.
+ * Three decisions carry the whole file.
  *
  * NOTHING IS INSERTED TO SHOW A MATCH. The desktop wraps every hit in a
  * `<mark>` and has to remember to strip them again before saving
@@ -16,6 +16,13 @@
  * over the flattened document, so a phrase can never straddle two paragraphs
  * and «ياخشى» at the end of one line plus «كۈن» at the start of the next is not
  * a hit. It is also what the desktop does.
+ *
+ * A REPLACEMENT TOUCHES ONLY ITS HIT. Each one is written over that hit's own
+ * Range, last hit first, and nothing else in the note is rewritten. Writing
+ * the whole document back instead (`selectAll` + `insertHTML`) merged the
+ * note's first block into everything after it — a heading swallowed the note,
+ * a citation's quote took it in, a list took the next paragraph (N7,
+ * PROMPT-45). tests/unit/note-whole-document.test.ts keeps that out.
  *
  * Matching itself is `findOccurrences` — the same matcher as the search page,
  * the reader and the snippets, so a phrase typed with tashkil finds the same
@@ -55,46 +62,74 @@ export function findInEditor(root: HTMLElement, query: string): FindResult {
   return { map, hits };
 }
 
+/** One hit where the document holds it: a stretch of one text node. */
+type Spot = { node: Text; start: number; end: number; text: string };
+
+/** The same hits as `findInEditor`, in the same order, as places in the DOM. */
+function spotsIn(root: HTMLElement, term: string): Spot[] {
+  const spots: Spot[] = [];
+  for (const node of readTextMap(root).nodes) {
+    for (const found of findOccurrences(node.data, term)) {
+      spots.push({ node, start: found.start, end: found.end, text: node.data.slice(found.start, found.end) });
+    }
+  }
+  return spots;
+}
+
+/** Is this hit still where it was found, still holding what it held? */
+function holds(root: HTMLElement, spot: Spot | undefined, text: string): spot is Spot {
+  return (
+    spot !== undefined &&
+    spot.node.isConnected &&
+    root.contains(spot.node) &&
+    spot.node.data.slice(spot.start, spot.end) === text
+  );
+}
+
 /**
- * The editor's HTML with replacements applied — WITHOUT touching the editor.
+ * Replace hits where they stand: hit `which` (numbered as the find bar shows
+ * them), or all of them.
  *
- * The caller writes the result back with one selectAll + insertHTML, which is
- * what makes a replace-all a single undo step. That matters more than it
- * sounds: a replace-all that cannot be taken back in one press will eventually
- * destroy somebody's afternoon.
+ * `write` puts the replacement over one hit's Range — in the notebook a single
+ * `insertText` command, so the browser keeps its undo stack and the markup
+ * around the hit is never touched. Hits are handed over from the last to the
+ * first, so a replacement can never move a hit still waiting its turn.
  *
- * `ordinal` is the hit to replace, or -1 for all of them. The clone is walked
- * in the same order `readTextMap` walks the original, so the numbering the
- * caller sees on screen is the numbering applied here.
+ * The three engines were measured editing the text node in place. Should one
+ * ever rebuild the node instead, the hits are found again: every hit not yet
+ * replaced comes before every hit that was, so it keeps its number.
+ *
+ * Returns how many were written.
  */
-export function replacedHtml(
+export function replaceHits(
   root: HTMLElement,
   query: string,
-  replacement: string,
-  ordinal: number,
-): { html: string; count: number } {
+  which: number | "all",
+  write: (range: Range, ordinal: number) => void,
+): number {
   const term = query.trim();
-  const clone = root.cloneNode(true) as HTMLElement;
-  if (!term) return { html: clone.innerHTML, count: 0 };
+  if (!term) return 0;
+  let spots = spotsIn(root, term);
+  const texts = spots.map((spot) => spot.text);
+  const chosen =
+    which === "all" ? spots.map((_, ordinal) => ordinal) : which >= 0 && which < spots.length ? [which] : [];
 
-  const walker = document.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
-  let index = 0;
-  let count = 0;
-
-  let node = walker.nextNode() as Text | null;
-  while (node) {
-    const found = findOccurrences(node.data, term);
-    // Applied back to front so an earlier replacement cannot shift the offsets
-    // of a later one inside the same node.
-    for (let i = found.length - 1; i >= 0; i -= 1) {
-      const globalIndex = index + i;
-      if (ordinal >= 0 && globalIndex !== ordinal) continue;
-      node.data = node.data.slice(0, found[i].start) + replacement + node.data.slice(found[i].end);
-      count += 1;
+  let written = 0;
+  for (let k = chosen.length - 1; k >= 0; k -= 1) {
+    const ordinal = chosen[k];
+    let spot: Spot | undefined = spots[ordinal];
+    if (!holds(root, spot, texts[ordinal])) {
+      spots = spotsIn(root, term);
+      spot = spots[ordinal];
+      // Not where it should be even after looking again: stop rather than
+      // write over anything else.
+      if (!holds(root, spot, texts[ordinal])) break;
     }
-    index += found.length;
-    node = walker.nextNode() as Text | null;
+    const range = root.ownerDocument.createRange();
+    range.setStart(spot.node, spot.start);
+    range.setEnd(spot.node, spot.end);
+    write(range, ordinal);
+    written += 1;
   }
-
-  return { html: clone.innerHTML, count };
+  return written;
 }

@@ -364,6 +364,44 @@ here. The table is left in place because an applied migration is never edited ·
   tells the loop what the text is (`adopt(version)` for a server version,
   `change()` for an edit). Never `selectAll` + `insertHTML`.
 
+## Notebook editing (PROMPT-45 — a command does what it says)
+- **Nothing rewrites a whole note through the editing commands.**
+  Find-and-replace writes each hit with one `insertText` on that hit's own
+  Range, last hit first (`replaceHits`, `lib/notes/find.ts`);
+  `selectAll` + `insertHTML` merged a note's first block into everything
+  after it (a heading swallowed the note, a citation's quote took it in).
+  A whole document goes on screen only through the editor's `putDocument`.
+  `tests/unit/note-whole-document.test.ts` fails on `selectAll` and on any
+  `insertHTML` beyond the two caret insertions (citation, paste).
+- **Several commands, one change:** the editor's `runBatch` lets each
+  command's input event pass and runs autosave, the counts, the revision and
+  the spellcheck once at the end; every toolbar command goes through it.
+  Replace-all runs inside one, with the page held still. «ھەممىنى
+  يېنىۋېلىش» runs that many native undos, compares the note with the
+  snapshot taken before, and writes the snapshot back through `putDocument`
+  if they differ; it goes with the next change of any kind, on closing the
+  find bar, or once used.
+- **Block style** is one menu — «ئادەتتىكى تېكىست» / «ماۋزۇ» / «نەقىل» —
+  showing where the caret is. A heading becomes normal text with
+  `formatBlock div`; a quote goes whole, with `formatBlock div` if it holds
+  text and line breaks and `outdent` if it holds blocks
+  (`lib/notes/blocks.ts`, measured in Chromium 151, Firefox 153 and WebKit
+  26.5). One native undo step each. Known leftover: WebKit's `outdent` on a
+  quote of mixed text and blocks — a shape none of the three engines makes
+  by typing; it arrives by pasting — leaves an empty `<blockquote>`.
+- **The phone header is two rows, ≤ 112 px** (below 640 px, menus and find
+  bar closed): back · title · save state · spellcheck · AI, then undo ·
+  redo · bold · block style · list · «مەنبە قىستۇرۇش» · «باشقا
+  ئىقتىدارلار». Italic, underline and find join the tool row from 640 px up
+  and sit under «باشقا ئىقتىدارلار» below it (`useWideToolbar`) — one button
+  in one place, never a copy in each. Undo and redo never go into the
+  overflow; the back link wears `arrow-right`, never `undo`; no UI text
+  names Ctrl+Z.
+- **The spell popup follows its word** on scroll, resize and visualViewport
+  changes, at most once a frame, and closes only when the word leaves the
+  visible part of the page (below the toolbar, inside the visual viewport),
+  on an outside tap, on Escape or on an edit.
+
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
 `npm run lint` + `npm run build` → Playwright smoke (mobile + desktop viewports) →

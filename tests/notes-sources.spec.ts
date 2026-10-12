@@ -401,7 +401,7 @@ test.describe("on every screen", () => {
     await scrollPage(page, 4000);
     expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
     await scrollPage(page, -6000);
-    for (const id of ["notes-back", "note-title", "format-bold", "source-open", "find-open", "toolbar-more"]) {
+    for (const id of ["notes-back", "note-title", "format-undo", "format-bold", "source-open", "toolbar-more"]) {
       await expect(page.getByTestId(id), id).toBeVisible();
     }
     await page.getByTestId("source-open").click();

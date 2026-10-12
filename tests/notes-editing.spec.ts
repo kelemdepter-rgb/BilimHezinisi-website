@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { hasStaffTestEnv, loadEnvLocal } from "./env";
 import { dropNote, newNote, openFind } from "./fixtures/notes";
-import { scrollToTop } from "./fixtures/scroll";
+import { scrollPage, scrollToTop } from "./fixtures/scroll";
 
 loadEnvLocal();
 
@@ -76,6 +76,10 @@ async function expectTappable(control: Locator, name: string) {
     return hit !== null && element.contains(hit);
   });
   expect(onTop, `${name} is not covered`).toBe(true);
+}
+
+function horizontalOverflow(page: Page): Promise<number> {
+  return page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
 }
 
 /** Lines of invented text, so the page scrolls at every viewport. */
@@ -398,6 +402,109 @@ test.describe("the spell popup", () => {
       // Scrolled away: the word left the screen, and the popup with it.
       await page.evaluate(() => window.scrollBy(0, 3000));
       await expect(popup).toHaveCount(0);
+    } finally {
+      await dropNote(path);
+    }
+  });
+});
+
+test.describe("the toolbar on a phone", () => {
+  /** Every control a writer reaches without opening anything. */
+  const ALWAYS = [
+    "notes-back",
+    "note-title",
+    "spell-toggle",
+    "format-undo",
+    "format-redo",
+    "format-bold",
+    "block-style",
+    "list-style",
+    "source-open",
+    "toolbar-more",
+  ];
+  /** Inside «باشقا ئىقتىدارلار» on a phone; some sit in the tool row when there is room. */
+  const OVERFLOW = [
+    "find-open",
+    "format-italic",
+    "format-underline",
+    "format-align-right",
+    "format-align-center",
+    "format-align-left",
+    "format-eraser",
+    "note-color",
+    "export-docx",
+    "note-font",
+    "note-size-down",
+    "note-size-up",
+    "note-line-height",
+  ];
+
+  async function headerHeight(page: Page): Promise<number> {
+    await scrollToTop(page);
+    return page.getByTestId("note-toolbar").evaluate((header) => header.getBoundingClientRect().height);
+  }
+
+  test("a title row and one tool row, ≤ 112 px, and every control reachable after scrolling", async ({
+    page,
+  }, testInfo) => {
+    const own = testInfo.project.use.viewport!;
+    const phone = own.width < 640;
+    const path = await newNote(page, { html: longNote(80) });
+    try {
+      // The measurements the report records.
+      const sizes: [number, number][] = testInfo.project.use.isMobile
+        ? [[360, 740], [375, 667], [390, 844]]
+        : [[360, 740], [375, 667], [390, 844], [1280, 800]];
+      for (const [width, height] of sizes) {
+        await page.setViewportSize({ width, height });
+        const closed = await headerHeight(page);
+        await openFind(page);
+        const withFind = await headerHeight(page);
+        await page.getByTestId("find-close").click();
+        await expect(page.getByTestId("find-bar")).toHaveCount(0);
+        console.log(
+          `[${testInfo.project.name}] header at ${width}×${height}: ${closed.toFixed(1)} px; with the find bar open: ${withFind.toFixed(1)} px`,
+        );
+        if (width < 640) {
+          // Soft, so a failing run still prints every size.
+          expect
+            .soft(closed, `header at ${width} px with overflow and find closed`)
+            .toBeLessThanOrEqual(112);
+        }
+        if (width === 360) {
+          expect(await horizontalOverflow(page), "no sideways scroll at 360 px").toBeLessThanOrEqual(1);
+        }
+      }
+
+      // Every control, at this project's own size and — on a phone — at 360.
+      for (const width of phone ? [own.width, 360] : [own.width]) {
+        await page.setViewportSize({ width, height: own.height });
+        await scrollPage(page, 4000);
+        await expect(page.getByTestId("note-toolbar")).toBeInViewport();
+        await scrollPage(page, -6000);
+        await scrollToTop(page);
+
+        for (const id of ALWAYS) await expectTappable(page.getByTestId(id), `${id} at ${width}px`);
+
+        for (const [menu, items] of [
+          ["block-style", ["format-normal", "format-heading", "format-quote"]],
+          ["list-style", ["format-list", "format-list-ordered"]],
+        ] as const) {
+          await page.getByTestId(menu).click();
+          await expect(page.getByTestId(`${menu}-menu`)).toBeVisible();
+          for (const id of items) await expectTappable(page.getByTestId(id), `${id} at ${width}px`);
+          expect(await horizontalOverflow(page), `${menu} stays on screen`).toBeLessThanOrEqual(1);
+          await page.keyboard.press("Escape");
+          await expect(page.getByTestId(`${menu}-menu`)).toHaveCount(0);
+        }
+
+        await page.getByTestId("toolbar-more").click();
+        await expect(page.getByTestId("toolbar-overflow")).toBeVisible();
+        for (const id of OVERFLOW) await expectTappable(page.getByTestId(id), `${id} at ${width}px`);
+        expect(await horizontalOverflow(page), "the overflow stays on screen").toBeLessThanOrEqual(1);
+        await page.getByTestId("toolbar-more").click();
+        await expect(page.getByTestId("toolbar-overflow")).toHaveCount(0);
+      }
     } finally {
       await dropNote(path);
     }

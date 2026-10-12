@@ -44,9 +44,16 @@ import { SourcePanel } from "@/components/notes/source-panel";
 import { NotesAiPanel } from "@/components/notes/ai-panel";
 import { FindBar } from "@/components/notes/find-bar";
 import { ToolMenu } from "@/components/notes/tool-menu";
+import { useWideToolbar } from "@/components/notes/use-wide-toolbar";
 import { useAiState } from "@/lib/ai/use-ai-state";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
-import { blockStyleAt, quoteToNormalCommand, type BlockStyle } from "@/lib/notes/blocks";
+import {
+  blockStyleAt,
+  listStyleAt,
+  quoteToNormalCommand,
+  type BlockStyle,
+  type ListStyle,
+} from "@/lib/notes/blocks";
 
 /** Warn while there is still room to finish a thought. */
 const WARN_AT = Math.round(MAX_NOTE_CHARS * 0.9);
@@ -74,10 +81,16 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [title, setTitle] = useState(note.title);
   const [counts, setCounts] = useState({ words: 0, chars: 0 });
   const [overflowOpen, setOverflowOpen] = useState(false);
-  /** The toolbar's menu that is open, if one is. */
-  const [menu, setMenu] = useState<"block" | null>(null);
-  /** The block the caret is in, for what the block-style button shows. */
+  /** Which of the toolbar's two menus is open, if either. */
+  const [menu, setMenu] = useState<"block" | "list" | null>(null);
+  /** Where the caret is, for what the block and list buttons show. */
   const [blockStyle, setBlockStyle] = useState<BlockStyle>("normal");
+  const [listStyle, setListStyle] = useState<ListStyle>(null);
+  /**
+   * Below 640 px the tool row holds only what a writer reaches for all the
+   * time; italic, underline and find join it where there is room.
+   */
+  const wide = useWideToolbar();
   const [spellOpen, setSpellOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -147,7 +160,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     setRevision((value) => value + 1);
   }, []);
 
-  /** Remember the caret, and read the block it is in for the toolbar to show. */
+  /** Remember the caret, and read the block and list it is in for the toolbar to show. */
   const readCaret = useCallback(() => {
     const editor = editorRef.current;
     const selection = document.getSelection();
@@ -156,6 +169,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     if (!editor.contains(range.commonAncestorContainer)) return;
     savedRange.current = range.cloneRange();
     setBlockStyle(blockStyleAt(editor, range.startContainer).style);
+    setListStyle(listStyleAt(editor, range.startContainer));
   }, []);
 
   useEffect(() => {
@@ -477,6 +491,11 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     readCaret();
   }
 
+  /** A bulleted or numbered list; the kind the caret is already in takes the list away. */
+  function setList(kind: Exclude<ListStyle, null>) {
+    exec(kind === "bulleted" ? "insertUnorderedList" : "insertOrderedList");
+  }
+
   /** An earlier version of the note, back on screen as an edit to be saved. */
   const restoreBody = useCallback(
     (html: string) => {
@@ -644,6 +663,26 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const overLimit = counts.chars > MAX_NOTE_CHARS;
   const nearLimit = counts.chars > WARN_AT;
 
+  // In the tool row where there is room, under «باشقا ئىقتىدارلار» on a phone —
+  // one button either way, so it is the same control wherever it sits.
+  const italicButton = <FormatButton icon="italic" label="يانتۇ" onClick={() => exec("italic")} />;
+  const underlineButton = (
+    <FormatButton icon="underline" label="ئاستى سىزىق" onClick={() => exec("underline")} />
+  );
+  const findButton = (
+    <FormatButton
+      icon="search"
+      label="تېپىش ۋە ئالماشتۇرۇش"
+      testId="find-open"
+      onClick={() => {
+        setSelectionText(currentSelection());
+        // From the overflow, the find bar takes the overflow's place.
+        setOverflowOpen(false);
+        setFindOpen((open) => (wide ? !open : true));
+      }}
+    />
+  );
+
   return (
     <div className="flex min-h-dvh flex-col">
       {/*
@@ -658,7 +697,13 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         data-testid="note-toolbar"
         className="grain safe-top safe-x sticky top-0 z-30 border-b border-bd bg-bg2/95 backdrop-blur print:hidden"
       >
-        <div className="mx-auto flex w-full max-w-4xl items-center gap-1 px-2 py-2 sm:px-4">
+        {/*
+          Two rows on a phone, and no more (N18): the title row, and one row
+          of the tools a writer reaches for all the time. Everything else is
+          one tap away under «باشقا ئىقتىدارلار». With the keyboard up, every
+          row up here is a row less to write in.
+        */}
+        <div className="mx-auto flex w-full max-w-4xl items-center gap-1 px-2 py-1.5 sm:px-4">
           {/* An arrow to the start of the line — away from this note, in RTL
               — and never the undo icon: a writer who wants to undo must not
               leave the note by mistake (N11). */}
@@ -667,7 +712,8 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           </Link>
           <input
             autoComplete="off"
-            className="min-w-0 flex-1 bg-transparent px-2 text-[15px] font-bold text-ink outline-none"
+            // As tall as the row's buttons: the whole row is the target, at no cost in height.
+            className="min-h-11 min-w-0 flex-1 truncate bg-transparent px-1.5 text-[15px] font-bold text-ink outline-none"
             value={title}
             // The server keeps 200 characters; the field stops at the same
             // place, so nothing typed is ever cut off without a sign (N21).
@@ -684,21 +730,51 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           {/* A long state wraps onto a second line rather than squeezing the
               title away on a 360 px phone. */}
           <span
-            className="max-w-[45%] shrink-0 px-1 text-[12px] leading-4 text-ink3"
+            className="max-w-[38%] shrink-0 px-1 text-[12px] leading-4 text-ink3"
             data-testid="save-state"
             role="status"
           >
             {SAVE_LABEL[save.state]}
           </span>
+          <button
+            type="button"
+            className={spellOpen ? "hbtn on" : "hbtn"}
+            data-testid="spell-toggle"
+            aria-pressed={spellOpen}
+            onClick={() => setSpellOpen((open) => !open)}
+          >
+            <Icon name="check" />
+            <span className="hidden sm:inline">ئىملا</span>
+          </button>
+          {aiAvailable && (
+            <button
+              type="button"
+              className="hbtn"
+              data-testid="notes-ai-toggle"
+              aria-label="سۈنئىي ئىدراك ياردەمچىسى"
+              aria-expanded={aiOpen}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                // Read the selection HERE, while it still exists: opening a
+                // panel moves focus and collapses it.
+                captureAiScope();
+                setAiToken((token) => token + 1);
+                setAiOpen(true);
+              }}
+            >
+              <Icon name="sparkles" />
+              <span className="hidden sm:inline">AI</span>
+            </button>
+          )}
         </div>
 
-        <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-0.5 px-1 pb-2 sm:px-3">
+        <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-between gap-y-1 px-1 pb-1.5 sm:justify-start sm:gap-0.5 sm:px-3">
           {/* Undo and redo first, on every screen: a phone has no Ctrl+Z. */}
           <FormatButton icon="undo" label="يېنىۋېلىش" onClick={() => exec("undo")} />
           <FormatButton icon="redo" label="قايتىلاش" onClick={() => exec("redo")} />
           <FormatButton icon="bold" label="توم" onClick={() => exec("bold")} />
-          <FormatButton icon="italic" label="يانتۇ" onClick={() => exec("italic")} />
-          <FormatButton icon="underline" label="ئاستى سىزىق" onClick={() => exec("underline")} />
+          {wide && italicButton}
+          {wide && underlineButton}
           {/* One control for the block style, showing the one the caret is
               in — and the only way back to normal text (N9). */}
           <ToolMenu
@@ -732,11 +808,29 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               },
             ]}
           />
-          <FormatButton icon="list" label="تىزىملىك" onClick={() => exec("insertUnorderedList")} />
-          <FormatButton
-            icon="list-ordered"
-            label="نومۇرلۇق تىزىملىك"
-            onClick={() => exec("insertOrderedList")}
+          <ToolMenu
+            testId="list-style"
+            label="تىزىملىك"
+            icon={listStyle === "numbered" ? "list-ordered" : "list"}
+            state={listStyle ?? "none"}
+            open={menu === "list"}
+            onOpenChange={(open) => setMenu(open ? "list" : null)}
+            items={[
+              {
+                testId: "format-list",
+                icon: "list",
+                label: "تىزىملىك",
+                checked: listStyle === "bulleted",
+                onSelect: () => setList("bulleted"),
+              },
+              {
+                testId: "format-list-ordered",
+                icon: "list-ordered",
+                label: "نومۇرلۇق تىزىملىك",
+                checked: listStyle === "numbered",
+                onSelect: () => setList("numbered"),
+              },
+            ]}
           />
 
           {/* Both panels keep the note's selection: the button refuses focus on
@@ -751,60 +845,22 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               setSourceOpen(true);
             }}
           />
-          <FormatButton
-            icon="search"
-            label="تېپىش ۋە ئالماشتۇرۇش"
-            testId="find-open"
-            onClick={() => {
-              setSelectionText(currentSelection());
-              setFindOpen((open) => !open);
-            }}
-          />
+          {wide && findButton}
 
           {/* Everything that does not fit lives behind a tap, not a hover. */}
           <button
             type="button"
-            className="ibtn"
+            className={overflowOpen ? "ibtn bg-bg3 text-ink" : "ibtn"}
             data-testid="toolbar-more"
             aria-label="باشقا ئىقتىدارلار"
             aria-expanded={overflowOpen}
-            onClick={() => setOverflowOpen((open) => !open)}
+            onClick={() => {
+              setMenu(null);
+              setOverflowOpen((open) => !open);
+            }}
           >
             <Icon name="menu" className="ic-lg" />
           </button>
-
-          <span className="ms-auto flex items-center gap-0.5">
-            {aiAvailable && (
-              <button
-                type="button"
-                className="hbtn"
-                data-testid="notes-ai-toggle"
-                aria-label="سۈنئىي ئىدراك ياردەمچىسى"
-                aria-expanded={aiOpen}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  // Read the selection HERE, while it still exists: opening a
-                  // panel moves focus and collapses it.
-                  captureAiScope();
-                  setAiToken((token) => token + 1);
-                  setAiOpen(true);
-                }}
-              >
-                <Icon name="sparkles" />
-                <span className="hidden sm:inline">AI</span>
-              </button>
-            )}
-            <button
-              type="button"
-              className={spellOpen ? "hbtn on" : "hbtn"}
-              data-testid="spell-toggle"
-              aria-pressed={spellOpen}
-              onClick={() => setSpellOpen((open) => !open)}
-            >
-              <Icon name="check" />
-              <span className="hidden sm:inline">ئىملا</span>
-            </button>
-          </span>
         </div>
 
         {overflowOpen && (
@@ -813,6 +869,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             data-testid="toolbar-overflow"
           >
             <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-1">
+              {!wide && findButton}
+              {!wide && italicButton}
+              {!wide && underlineButton}
               <FormatButton icon="align-right" label="ئوڭغا" onClick={() => exec("justifyRight")} />
               <FormatButton icon="align-center" label="ئوتتۇرىغا" onClick={() => exec("justifyCenter")} />
               <FormatButton icon="align-left" label="سولغا" onClick={() => exec("justifyLeft")} />
@@ -821,7 +880,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 label="فورماتنى تازىلاش"
                 onClick={() => exec("removeFormat")}
               />
-              <label className="hbtn cursor-pointer">
+              <label className="hbtn cursor-pointer" data-testid="note-color">
                 <Icon name="brush" />
                 <span className="hidden sm:inline">رەڭ</span>
                 <input
@@ -899,7 +958,8 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               <label className="flex items-center gap-1.5 text-[12.5px] text-ink2">
                 قۇر ئارىلىقى {typography.lineHeight.toFixed(1)}
                 <input
-                  className="w-28 accent-[var(--am)]"
+                  // As tall as a fingertip, like every other control here.
+                  className="h-11 w-28 accent-[var(--am)]"
                   type="range"
                   data-testid="note-line-height"
                   min={MIN_NOTE_LEADING}

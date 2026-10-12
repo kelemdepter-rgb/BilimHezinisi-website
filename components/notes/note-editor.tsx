@@ -773,8 +773,14 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           <FormatButton icon="undo" label="يېنىۋېلىش" onClick={() => exec("undo")} />
           <FormatButton icon="redo" label="قايتىلاش" onClick={() => exec("redo")} />
           <FormatButton icon="bold" label="توم" onClick={() => exec("bold")} />
-          {wide && italicButton}
-          {wide && underlineButton}
+          {/* Before the width is known, in the row for a wide screen and
+              hidden on a phone — so nothing shifts when the page hydrates. */}
+          {wide !== false && (
+            <span className="hidden sm:contents">
+              {italicButton}
+              {underlineButton}
+            </span>
+          )}
           {/* One control for the block style, showing the one the caret is
               in — and the only way back to normal text (N9). */}
           <ToolMenu
@@ -845,7 +851,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               setSourceOpen(true);
             }}
           />
-          {wide && findButton}
+          {wide !== false && <span className="hidden sm:contents">{findButton}</span>}
 
           {/* Everything that does not fit lives behind a tap, not a hover. */}
           <button
@@ -869,9 +875,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             data-testid="toolbar-overflow"
           >
             <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-1">
-              {!wide && findButton}
-              {!wide && italicButton}
-              {!wide && underlineButton}
+              {wide === false && findButton}
+              {wide === false && italicButton}
+              {wide === false && underlineButton}
               <FormatButton icon="align-right" label="ئوڭغا" onClick={() => exec("justifyRight")} />
               <FormatButton icon="align-center" label="ئوتتۇرىغا" onClick={() => exec("justifyCenter")} />
               <FormatButton icon="align-left" label="سولغا" onClick={() => exec("justifyLeft")} />

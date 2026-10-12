@@ -11,6 +11,12 @@ import { useSyncExternalStore } from "react";
  * there is room for italic, underline and find in the row as well. Each of
  * those is one button that sits in one place or the other — never a copy in
  * each — so it is the same control, with the same name, wherever it is.
+ *
+ * `null` until the browser has said: the server cannot know the width. The
+ * editor then renders those buttons in the row behind `hidden sm:inline-flex`,
+ * so a wide screen shows them from the first paint and the row does not
+ * shift under a finger when the page hydrates, while a phone shows nothing
+ * extra.
  */
 const WIDE_QUERY = "(min-width: 640px)";
 
@@ -20,12 +26,10 @@ function subscribe(callback: () => void) {
   return () => query.removeEventListener("change", callback);
 }
 
-export function useWideToolbar(): boolean {
-  return useSyncExternalStore(
+export function useWideToolbar(): boolean | null {
+  return useSyncExternalStore<boolean | null>(
     subscribe,
     () => window.matchMedia(WIDE_QUERY).matches,
-    // The server cannot know the width; the phone row is complete on its
-    // own, and the editor takes no input until it has hydrated anyway.
-    () => false,
+    () => null,
   );
 }

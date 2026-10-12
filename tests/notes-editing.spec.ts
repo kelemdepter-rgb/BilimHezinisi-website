@@ -50,6 +50,20 @@ async function openReplace(page: Page, query: string, replacement: string) {
   await page.getByTestId("replace-input").fill(replacement);
 }
 
+/** Put the caret two letters into the first text inside `selector`. */
+async function caretIn(page: Page, selector: string) {
+  await page.getByTestId("note-body").evaluate((editor, inside) => {
+    (editor as HTMLElement).focus();
+    const text = document.createTreeWalker(editor.querySelector(inside)!, NodeFilter.SHOW_TEXT).nextNode()!;
+    const caret = document.createRange();
+    caret.setStart(text, 2);
+    caret.collapse(true);
+    const selection = getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(caret);
+  }, selector);
+}
+
 /** Visible, a 44 px target, and the thing under its centre is itself. */
 async function expectTappable(control: Locator, name: string) {
   await expect(control, name).toBeInViewport({ ratio: 1 });
@@ -210,6 +224,86 @@ test.describe("find and replace keep the note's shape", () => {
         await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
       }
       expect(await bodyHtml(page)).toBe(before.split(OLD).join(NEW));
+    } finally {
+      await dropNote(path);
+    }
+  });
+});
+
+test.describe("block style", () => {
+  const CASES: [label: string, html: string, at: string, style: "heading" | "quote", normal: string][] = [
+    [
+      "a heading",
+      "<div>بىرىنچى</div><h2>ماۋزۇ قۇرى</h2><div>ئاخىرى</div>",
+      "h2",
+      "heading",
+      "<div>بىرىنچى</div><div>ماۋزۇ قۇرى</div><div>ئاخىرى</div>",
+    ],
+    [
+      "a quote",
+      "<div>بىرىنچى</div><blockquote>نەقىل قۇرى</blockquote><div>ئاخىرى</div>",
+      "blockquote",
+      "quote",
+      "<div>بىرىنچى</div><div>نەقىل قۇرى</div><div>ئاخىرى</div>",
+    ],
+    [
+      "a quote of several lines",
+      "<div>بىرىنچى</div><blockquote>بىر قۇر<br>ئىككى قۇر</blockquote><div>ئاخىرى</div>",
+      "blockquote",
+      "quote",
+      "<div>بىرىنچى</div><div>بىر قۇر<br>ئىككى قۇر</div><div>ئاخىرى</div>",
+    ],
+    [
+      "a heading that opens the note",
+      "<h2>ماۋزۇ قۇرى</h2><div>ئاخىرى</div>",
+      "h2",
+      "heading",
+      "<div>ماۋزۇ قۇرى</div><div>ئاخىرى</div>",
+    ],
+  ];
+
+  for (const [label, html, at, style, normal] of CASES) {
+    test(`«ئادەتتىكى تېكىست» turns ${label} back into normal text, in one undoable step`, async ({
+      page,
+    }) => {
+      const path = await newNote(page, { html });
+      try {
+        expect(await bodyHtml(page)).toBe(html);
+        await caretIn(page, at);
+
+        // The control says where the caret is.
+        await page.getByTestId("block-style").click();
+        const menu = page.getByTestId("block-style-menu");
+        await expect(menu).toBeVisible();
+        await expect(page.getByTestId(`format-${style}`)).toHaveAttribute("aria-checked", "true");
+        await expect(page.getByTestId("format-normal")).toHaveAttribute("aria-checked", "false");
+
+        await page.getByTestId("format-normal").click();
+        await expect(menu).toHaveCount(0);
+        await expect.poll(() => bodyHtml(page)).toBe(normal);
+        await expect(page.getByTestId("block-style")).toHaveAttribute("data-style", "normal");
+
+        await page.getByTestId("format-undo").click();
+        await expect.poll(() => bodyHtml(page)).toBe(html);
+      } finally {
+        await dropNote(path);
+      }
+    });
+  }
+
+  test("makes a line a quote and a heading from the same menu", async ({ page }) => {
+    const path = await newNote(page, { html: "<div>بىرىنچى</div><div>ئىككىنچى</div>" });
+    try {
+      await caretIn(page, "div:nth-child(2)");
+      await page.getByTestId("block-style").click();
+      await page.getByTestId("format-quote").click();
+      await expect(page.locator('[data-testid="note-body"] blockquote')).toHaveText("ئىككىنچى");
+      await expect(page.getByTestId("block-style")).toHaveAttribute("data-style", "quote");
+
+      await page.getByTestId("block-style").click();
+      await page.getByTestId("format-heading").click();
+      await expect(page.locator('[data-testid="note-body"] h2')).toHaveText("ئىككىنچى");
+      await expect(page.getByTestId("block-style")).toHaveAttribute("data-style", "heading");
     } finally {
       await dropNote(path);
     }

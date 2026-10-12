@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { READER_STATE_PATH, freshPassword, hasStaffTestEnv, loadEnvLocal, testEmail } from "./env";
 import { scrollPage } from "./fixtures/scroll";
-import { newNote } from "./fixtures/notes";
+import { chooseBlock, newNote } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -133,7 +133,7 @@ test.describe("notebook", () => {
     await page.getByTestId("note-body").click();
     await page.keyboard.type("ماۋزۇ قۇرى");
     await page.keyboard.press("Control+A");
-    await page.getByTestId("format-heading").click();
+    await chooseBlock(page, "heading");
     await expect(page.getByTestId("save-state")).toHaveText("ساقلاندى", { timeout: 20_000 });
 
     await page.reload();
@@ -388,7 +388,7 @@ test.describe("the spellchecker at line ends", () => {
       async (page) => {
         await page.keyboard.type(APPLE);
         await page.keyboard.press("Control+A");
-        await page.getByTestId("format-heading").click();
+        await chooseBlock(page, "heading");
         await page.keyboard.press("End");
         await page.keyboard.press("Enter");
         await page.keyboard.type(APRICOT);

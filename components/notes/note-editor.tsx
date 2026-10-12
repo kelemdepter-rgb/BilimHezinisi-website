@@ -43,8 +43,10 @@ import { useSpellcheck } from "@/components/notes/use-spellcheck";
 import { SourcePanel } from "@/components/notes/source-panel";
 import { NotesAiPanel } from "@/components/notes/ai-panel";
 import { FindBar } from "@/components/notes/find-bar";
+import { ToolMenu } from "@/components/notes/tool-menu";
 import { useAiState } from "@/lib/ai/use-ai-state";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
+import { blockStyleAt, quoteToNormalCommand, type BlockStyle } from "@/lib/notes/blocks";
 
 /** Warn while there is still room to finish a thought. */
 const WARN_AT = Math.round(MAX_NOTE_CHARS * 0.9);
@@ -63,12 +65,18 @@ const CHOICE_FAILED =
 /** The frame every notice under the toolbar shares. */
 const NOTICE = "mt-3 rounded-[var(--radius)] px-3.5 py-2.5 text-[13px] leading-6";
 
+const BLOCK_ICON: Record<BlockStyle, IconName> = { normal: "type", heading: "heading", quote: "quote" };
+
 export function NoteEditor({ note }: { note: NoteDocument }) {
   const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
   const [title, setTitle] = useState(note.title);
   const [counts, setCounts] = useState({ words: 0, chars: 0 });
   const [overflowOpen, setOverflowOpen] = useState(false);
+  /** The toolbar's menu that is open, if one is. */
+  const [menu, setMenu] = useState<"block" | null>(null);
+  /** The block the caret is in, for what the block-style button shows. */
+  const [blockStyle, setBlockStyle] = useState<BlockStyle>("normal");
   const [spellOpen, setSpellOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -138,18 +146,21 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     setRevision((value) => value + 1);
   }, []);
 
-  useEffect(() => {
-    const onSelectionChange = () => {
-      const editor = editorRef.current;
-      const selection = document.getSelection();
-      if (!editor || !selection || selection.rangeCount === 0) return;
-      const range = selection.getRangeAt(0);
-      if (!editor.contains(range.commonAncestorContainer)) return;
-      savedRange.current = range.cloneRange();
-    };
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  /** Remember the caret, and read the block it is in for the toolbar to show. */
+  const readCaret = useCallback(() => {
+    const editor = editorRef.current;
+    const selection = document.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!editor.contains(range.commonAncestorContainer)) return;
+    savedRange.current = range.cloneRange();
+    setBlockStyle(blockStyleAt(editor, range.startContainer).style);
   }, []);
+
+  useEffect(() => {
+    document.addEventListener("selectionchange", readCaret);
+    return () => document.removeEventListener("selectionchange", readCaret);
+  }, [readCaret]);
 
   /**
    * Saving (PROMPT-43). lib/notes/save-loop.ts decides when the note is sent
@@ -415,6 +426,54 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       editorRef.current?.focus();
       document.execCommand(command, false, value);
     });
+    readCaret();
+  }
+
+  /**
+   * Normal text, a heading or a quote, for the block the caret is in — each
+   * one native command, so each is one step for «يېنىۋېلىش». Which command
+   * turns what back into normal text was measured per engine; see
+   * lib/notes/blocks.ts.
+   */
+  function setBlock(style: BlockStyle) {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (style === "heading") {
+      exec("formatBlock", "<h2>");
+      return;
+    }
+    if (style === "quote") {
+      exec("formatBlock", "<blockquote>");
+      return;
+    }
+
+    editor.focus();
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const { style: current, element } = blockStyleAt(editor, selection.getRangeAt(0).startContainer);
+    if (!element) return; // already normal text
+    if (current === "heading") {
+      exec("formatBlock", "<div>");
+      return;
+    }
+
+    // A quote goes whole, however many lines it holds: the command runs over
+    // all of its content, and the caret goes back where it was.
+    const caret = { node: selection.anchorNode, offset: selection.anchorOffset };
+    const whole = document.createRange();
+    whole.selectNodeContents(element);
+    selection.removeAllRanges();
+    selection.addRange(whole);
+    const { command, value } = quoteToNormalCommand(element);
+    exec(command, value);
+    const back = caret.node;
+    if (back && back.isConnected && editor.contains(back)) {
+      const end = back.nodeType === Node.TEXT_NODE ? (back as Text).length : back.childNodes.length;
+      selection.collapse(back, Math.min(caret.offset, end));
+    } else {
+      selection.collapseToEnd();
+    }
+    readCaret();
   }
 
   /** An earlier version of the note, back on screen as an edit to be saved. */
@@ -638,10 +697,38 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           <FormatButton icon="bold" label="توم" onClick={() => exec("bold")} />
           <FormatButton icon="italic" label="يانتۇ" onClick={() => exec("italic")} />
           <FormatButton icon="underline" label="ئاستى سىزىق" onClick={() => exec("underline")} />
-          <FormatButton
-            icon="heading"
-            label="ماۋزۇ"
-            onClick={() => exec("formatBlock", "<h2>")}
+          {/* One control for the block style, showing the one the caret is
+              in — and the only way back to normal text (N9). */}
+          <ToolMenu
+            testId="block-style"
+            label="تېكىست شەكلى"
+            icon={BLOCK_ICON[blockStyle]}
+            state={blockStyle}
+            open={menu === "block"}
+            onOpenChange={(open) => setMenu(open ? "block" : null)}
+            items={[
+              {
+                testId: "format-normal",
+                icon: "type",
+                label: "ئادەتتىكى تېكىست",
+                checked: blockStyle === "normal",
+                onSelect: () => setBlock("normal"),
+              },
+              {
+                testId: "format-heading",
+                icon: "heading",
+                label: "ماۋزۇ",
+                checked: blockStyle === "heading",
+                onSelect: () => setBlock("heading"),
+              },
+              {
+                testId: "format-quote",
+                icon: "quote",
+                label: "نەقىل",
+                checked: blockStyle === "quote",
+                onSelect: () => setBlock("quote"),
+              },
+            ]}
           />
           <FormatButton icon="list" label="تىزىملىك" onClick={() => exec("insertUnorderedList")} />
           <FormatButton
@@ -649,7 +736,6 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             label="نومۇرلۇق تىزىملىك"
             onClick={() => exec("insertOrderedList")}
           />
-          <FormatButton icon="quote" label="نەقىل" onClick={() => exec("formatBlock", "<blockquote>")} />
 
           {/* Both panels keep the note's selection: the button refuses focus on
               mousedown, so whatever was highlighted is still highlighted when

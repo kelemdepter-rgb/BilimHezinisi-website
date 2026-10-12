@@ -90,3 +90,10 @@ export async function openFind(page: Page): Promise<void> {
   await button.click();
   await expect(page.getByTestId("find-bar")).toBeVisible();
 }
+
+/** Choose a block style for the block the caret is in, from its menu. */
+export async function chooseBlock(page: Page, style: "normal" | "heading" | "quote"): Promise<void> {
+  await page.getByTestId("block-style").click();
+  await page.getByTestId(`format-${style}`).click();
+  await expect(page.getByTestId("block-style-menu")).toHaveCount(0);
+}

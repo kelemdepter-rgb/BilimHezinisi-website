@@ -46,8 +46,9 @@ export async function signedInUserId(page: Page): Promise<string> {
 }
 
 /**
- * Make an empty note for the page's user, open it, and return its path —
- * once the editor takes input.
+ * Make a note for the page's user, open it, and return its path — once the
+ * editor takes input. Empty, or holding `html` exactly as given, for a spec
+ * about a note of a particular shape (one that starts with a heading, say).
  *
  * Opening the note is a full page load, and the body is on screen (rendered
  * on the server) before the editor is hydrated and ready; an `input` event
@@ -56,16 +57,26 @@ export async function signedInUserId(page: Page): Promise<string> {
  * where that gap hardly existed. The editor says it is ready by turning
  * contentEditable on.
  */
-export async function newNote(page: Page): Promise<string> {
+export async function newNote(page: Page, content: { html?: string } = {}): Promise<string> {
   const userId = await signedInUserId(page);
-  const { data, error } = await adminClient()
-    .from("note_documents")
-    .insert({ user_id: userId })
-    .select("id")
-    .single();
+  const row: { user_id: string; content_html?: string; content_text?: string } = { user_id: userId };
+  if (content.html !== undefined) {
+    row.content_html = content.html;
+    // Only the search and the counts read this column; tags off is enough.
+    row.content_text = content.html.replace(/<[^>]*>/g, " ");
+  }
+  const { data, error } = await adminClient().from("note_documents").insert(row).select("id").single();
   if (error || !data) throw new Error(`could not make a scratch note: ${error?.message}`);
   const path = `/notes/${(data as { id: number }).id}`;
   await page.goto(path);
   await expect(page.getByTestId("note-body")).toHaveAttribute("contenteditable", "true");
   return path;
 }
+
+/** Delete a scratch note by its path, straight from the database. */
+export async function dropNote(path: string): Promise<void> {
+  const id = Number(path.split("/").pop());
+  const { error } = await adminClient().from("note_documents").delete().eq("id", id);
+  if (error) throw new Error(`could not delete scratch note ${id}: ${error.message}`);
+}
+

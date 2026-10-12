@@ -173,7 +173,7 @@ export function FindBar({
       document.execCommand("selectAll", false);
       document.execCommand("insertHTML", false, html);
 
-      setNotice(`${count} ئورۇن ئالماشتۇرۇلدى. يېنىۋېلىش (Ctrl+Z) بىلەن ئەسلىگە قايتىدۇ.`);
+      setNotice(`${count} ئورۇن ئالماشتۇرۇلدى. «يېنىۋېلىش» كۇنۇپكىسى ئۇنى ئەسلىگە قايتۇرىدۇ.`);
       indexRef.current = 0;
       onDocumentChanged();
     },

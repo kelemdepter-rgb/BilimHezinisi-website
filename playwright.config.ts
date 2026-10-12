@@ -307,6 +307,25 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Editing that does what it says (PROMPT-45): replacing without
+         * touching a note's structure, block style back to normal text,
+         * undo within reach, the spell popup that follows its word, and the
+         * phone toolbar's height. Runs in Firefox and WebKit too, below.
+         */
+        name: `notes-editing-${viewport.name}`,
+        testMatch: /[\\/]notes-editing\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Licence attribution, the legal pages, password recovery and the
         // account page. Anonymous by default — everything a reader without an
         // account must be able to reach — with the account block opting into
@@ -704,10 +723,11 @@ export default defineConfig({
       },
     ]),
     ...NOTEBOOK_ENGINES.map((engine) => ({
-      // The same four specs, setup and signed-in state as the Chromium
-      // notes, notes-sources, notes-save and notes-ai projects above.
+      // The same five specs, setup and signed-in state as the Chromium
+      // notes, notes-sources, notes-save, notes-editing and notes-ai
+      // projects above.
       name: `notebook-${engine.name}`,
-      testMatch: /[\\/]notes(-sources|-save|-ai)?\.spec\.ts$/,
+      testMatch: /[\\/]notes(-sources|-save|-editing|-ai)?\.spec\.ts$/,
       dependencies: ["setup"],
       use: {
         browserName: engine.browser,

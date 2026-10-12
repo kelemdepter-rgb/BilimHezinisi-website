@@ -572,8 +572,11 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         className="grain safe-top safe-x sticky top-0 z-30 border-b border-bd bg-bg2/95 backdrop-blur print:hidden"
       >
         <div className="mx-auto flex w-full max-w-4xl items-center gap-1 px-2 py-2 sm:px-4">
+          {/* An arrow to the start of the line — away from this note, in RTL
+              — and never the undo icon: a writer who wants to undo must not
+              leave the note by mistake (N11). */}
           <Link href="/notes" className="ibtn" aria-label="خاتىرىلەر تىزىملىكى" data-testid="notes-back">
-            <Icon name="undo" className="ic-lg" />
+            <Icon name="arrow-right" className="ic-lg" />
           </Link>
           <input
             autoComplete="off"
@@ -603,6 +606,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         </div>
 
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-0.5 px-1 pb-2 sm:px-3">
+          {/* Undo and redo first, on every screen: a phone has no Ctrl+Z. */}
+          <FormatButton icon="undo" label="يېنىۋېلىش" onClick={() => exec("undo")} />
+          <FormatButton icon="redo" label="قايتىلاش" onClick={() => exec("redo")} />
           <FormatButton icon="bold" label="توم" onClick={() => exec("bold")} />
           <FormatButton icon="italic" label="يانتۇ" onClick={() => exec("italic")} />
           <FormatButton icon="underline" label="ئاستى سىزىق" onClick={() => exec("underline")} />
@@ -696,8 +702,6 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               <FormatButton icon="align-right" label="ئوڭغا" onClick={() => exec("justifyRight")} />
               <FormatButton icon="align-center" label="ئوتتۇرىغا" onClick={() => exec("justifyCenter")} />
               <FormatButton icon="align-left" label="سولغا" onClick={() => exec("justifyLeft")} />
-              <FormatButton icon="undo" label="يېنىۋېلىش" onClick={() => exec("undo")} />
-              <FormatButton icon="redo" label="قايتىلاش" onClick={() => exec("redo")} />
               <FormatButton
                 icon="eraser"
                 label="فورماتنى تازىلاش"

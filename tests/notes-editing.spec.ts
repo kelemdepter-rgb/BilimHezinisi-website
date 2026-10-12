@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { hasStaffTestEnv, loadEnvLocal } from "./env";
 import { dropNote, newNote, openFind } from "./fixtures/notes";
+import { scrollToTop } from "./fixtures/scroll";
 
 loadEnvLocal();
 
@@ -75,6 +76,12 @@ async function expectTappable(control: Locator, name: string) {
     return hit !== null && element.contains(hit);
   });
   expect(onTop, `${name} is not covered`).toBe(true);
+}
+
+/** Lines of invented text, so the page scrolls at every viewport. */
+function longNote(lines: number): string {
+  const filler = "بۇ بىر سىناق قۇرى، ئۇنىڭدا مۇھىم نەرسە يوق.";
+  return Array.from({ length: lines }, () => `<div>${filler}</div>`).join("");
 }
 
 test.describe("find and replace keep the note's shape", () => {
@@ -334,6 +341,63 @@ test.describe("undo in reach", () => {
       await expect(page.getByTestId("save-state")).toHaveText("ساقلاندى", { timeout: 20_000 });
       await page.getByTestId("notes-back").click();
       await expect(page).toHaveURL(/\/notes$/);
+    } finally {
+      await dropNote(path);
+    }
+  });
+});
+
+test.describe("the spell popup", () => {
+  /** Not in the shipped dictionary, so it is underlined. */
+  const MISSPELLED = "ئۇيغور";
+
+  async function markBox(page: Page, word: string) {
+    return page.evaluate((needle) => {
+      const highlight = CSS.highlights?.get("bh-spell-error");
+      if (!highlight) return null;
+      for (const abstract of highlight) {
+        const range = abstract as Range;
+        if (range.toString() === needle) {
+          const box = range.getBoundingClientRect();
+          return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        }
+      }
+      return null;
+    }, word);
+  }
+
+  test("stays open while its word is on screen, follows it, and closes once it is not", async ({
+    page,
+  }) => {
+    // The word sits a few lines down, so a short scroll keeps it on screen.
+    const html = longNote(4) + `<div>بۇ ${MISSPELLED} دېگەن سۆز.</div>` + longNote(60);
+    const path = await newNote(page, { html });
+    try {
+      await page.getByTestId("spell-toggle").click();
+      await expect(page.getByTestId("spell-summary")).toBeVisible({ timeout: 90_000 });
+      await scrollToTop(page);
+      await expect.poll(() => markBox(page, MISSPELLED), { timeout: 30_000 }).not.toBeNull();
+      const box = (await markBox(page, MISSPELLED))!;
+      await page.mouse.click(box.x, box.y);
+
+      const popup = page.getByTestId("spell-popup");
+      await expect(popup).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByTestId("spell-popup-word")).toHaveText(MISSPELLED);
+      // Two seconds untouched — the keyboard rising on a phone scrolls the
+      // page, and that used to close it the moment it opened.
+      await page.waitForTimeout(2000);
+      await expect(popup).toBeVisible();
+
+      // A short scroll: the word is still there, so the popup is too, and it
+      // moved with it.
+      const top = (await popup.boundingBox())!.y;
+      await page.evaluate(() => window.scrollBy(0, 40));
+      await expect.poll(async () => (await popup.boundingBox())?.y ?? Infinity).toBeLessThan(top - 20);
+      await expect(popup).toBeVisible();
+
+      // Scrolled away: the word left the screen, and the popup with it.
+      await page.evaluate(() => window.scrollBy(0, 3000));
+      await expect(popup).toHaveCount(0);
     } finally {
       await dropNote(path);
     }

@@ -7,8 +7,6 @@ import type { SpellPopupState } from "@/components/notes/use-spellcheck";
 /** Kept clear of the viewport edges and of the sticky toolbar above. */
 const EDGE = 8;
 const GAP = 6;
-/** The notebook's toolbar is roughly this tall at its tallest (two rows). */
-const TOOLBAR_ALLOWANCE = 104;
 
 /**
  * The corrections for one word, anchored at the word itself.
@@ -50,8 +48,9 @@ export function SpellPopup({
     const viewWidth = viewport?.width ?? window.innerWidth;
     const box = node.getBoundingClientRect();
 
-    // Never above the toolbar, never below the keyboard.
-    const topLimit = viewTop + TOOLBAR_ALLOWANCE + EDGE;
+    // Never over the toolbar — measured, with the find bar or the overflow
+    // open as much as without — and never below the keyboard.
+    const topLimit = Math.max(viewTop, state.clearTop) + EDGE;
     const bottomLimit = viewTop + viewHeight - EDGE;
 
     let top = state.rect.bottom + GAP;
@@ -73,7 +72,7 @@ export function SpellPopup({
       maxHeight: Math.max(120, bottomLimit - top),
       visibility: "visible",
     });
-  }, [state.rect]);
+  }, [state.rect, state.clearTop]);
 
   // Outside tap closes. Pointerdown rather than click so it fires before the
   // editor's own handler re-opens a popup for the same word.

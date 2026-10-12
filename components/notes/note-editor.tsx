@@ -70,6 +70,7 @@ const BLOCK_ICON: Record<BlockStyle, IconName> = { normal: "type", heading: "hea
 export function NoteEditor({ note }: { note: NoteDocument }) {
   const router = useRouter();
   const editorRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLElement>(null);
   const [title, setTitle] = useState(note.title);
   const [counts, setCounts] = useState({ words: 0, chars: 0 });
   const [overflowOpen, setOverflowOpen] = useState(false);
@@ -120,7 +121,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
    * panel. It owns the marks, the popup and the worker; the editor only has to
    * tell it when the text changed and where a tap landed.
    */
-  const spell = useSpellcheck(editorRef, spellOpen);
+  const spell = useSpellcheck(editorRef, spellOpen, toolbarRef);
 
   /**
    * AI exists in the notebook only for a writer who switched it on at /my/ai
@@ -653,6 +654,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         the caret. The find bar joins it for the same reason.
       */}
       <header
+        ref={toolbarRef}
         data-testid="note-toolbar"
         className="grain safe-top safe-x sticky top-0 z-30 border-b border-bd bg-bg2/95 backdrop-blur print:hidden"
       >

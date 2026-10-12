@@ -52,13 +52,26 @@ export type SpellPopupState = {
   mark: MarkedWord;
   /** Viewport coordinates of the word, for anchoring. */
   rect: { top: number; bottom: number; left: number; right: number };
+  /** Where the visible page starts: below the sticky toolbar, or the top of the visual viewport. */
+  clearTop: number;
   suggestions: string[];
   loading: boolean;
 };
 
+/** The part of the page a word can be seen in, in viewport coordinates. */
+function visibleArea(toolbar: HTMLElement | null): { top: number; bottom: number } {
+  const viewport = window.visualViewport;
+  const viewTop = viewport?.offsetTop ?? 0;
+  const viewBottom = viewTop + (viewport?.height ?? window.innerHeight);
+  const toolbarBottom = toolbar?.getBoundingClientRect().bottom ?? 0;
+  return { top: Math.max(viewTop, toolbarBottom), bottom: viewBottom };
+}
+
 export function useSpellcheck(
   editorRef: React.RefObject<HTMLDivElement | null>,
   enabled: boolean,
+  /** The sticky toolbar: a word scrolled under it is out of sight. */
+  toolbarRef?: React.RefObject<HTMLElement | null>,
 ) {
   const checker = useRef<SpellChecker | null>(null);
   const [status, setStatus] = useState<SpellStatus>("off");
@@ -97,6 +110,12 @@ export function useSpellcheck(
   const observer = useRef<MutationObserver | null>(null);
   /** The most recent pass to start. One that started earlier and finishes later is dropped. */
   const latestPass = useRef(0);
+  /**
+   * The open popup's word, as a live Range. Nothing in the note changes
+   * while the popup is open — an edit closes it — so the Range keeps
+   * pointing at the word as the page scrolls around it.
+   */
+  const popupWord = useRef<Range | null>(null);
 
   /**
    * The ref is what the pointer handler reads and the state is what the summary
@@ -174,9 +193,14 @@ export function useSpellcheck(
     paint(map, next);
   }, [commitMarks, editorRef, paint, pullChanges]);
 
-  /** Called by the editor on every change; coalesced into one pass. */
+  /**
+   * Called by the editor on every change; coalesced into one pass. A change
+   * also closes the popup: the word it offered corrections for may have just
+   * been edited.
+   */
   const scheduleCheck = useCallback(() => {
     if (!enabled) return;
+    setPopup(null);
     revision.current += 1;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => void runCheck(), RECHECK_MS);
@@ -231,21 +255,53 @@ export function useSpellcheck(
   );
 
   /**
-   * Marks are painted, not built from elements, so they do not move when the
-   * page reflows — the ranges do, but their painted position is recomputed by
-   * the browser. What DOES need re-doing is the popup's anchor, which is a
-   * snapshot of where the word was.
+   * The popup follows its word while the word can be seen (N16).
+   *
+   * Marks are painted, not built from elements, so the browser moves them
+   * with the page by itself. The popup's anchor is a snapshot of where the
+   * word was, and used to be thrown away on any scroll or resize — but on a
+   * phone, tapping a word focuses the note, the keyboard rises and the page
+   * scrolls, which closed the popup the moment it opened. Now a scroll or a
+   * resize, of the page or of the visual viewport the keyboard shrinks, moves
+   * the anchor instead, at most once a frame; the popup closes only when the
+   * word has left the visible part of the page (or on an outside tap, Escape
+   * or an edit).
    */
+  const popupOpen = popup !== null;
   useEffect(() => {
-    if (!popup) return;
-    const reposition = () => setPopup(null);
-    window.addEventListener("scroll", reposition, { passive: true, capture: true });
-    window.addEventListener("resize", reposition);
-    return () => {
-      window.removeEventListener("scroll", reposition, { capture: true });
-      window.removeEventListener("resize", reposition);
+    if (!popupOpen) return;
+    let frame = 0;
+    const follow = () => {
+      frame = 0;
+      const range = popupWord.current;
+      if (!range) return;
+      const box = range.getBoundingClientRect();
+      const view = visibleArea(toolbarRef?.current ?? null);
+      const gone =
+        (box.width === 0 && box.height === 0) || box.bottom <= view.top || box.top >= view.bottom;
+      if (gone) {
+        setPopup(null);
+        return;
+      }
+      const rect = { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
+      setPopup((current) => (current ? { ...current, rect, clearTop: view.top } : current));
     };
-  }, [popup]);
+    const schedule = () => {
+      if (frame === 0) frame = requestAnimationFrame(follow);
+    };
+    const viewport = window.visualViewport;
+    window.addEventListener("scroll", schedule, { passive: true, capture: true });
+    window.addEventListener("resize", schedule);
+    viewport?.addEventListener("resize", schedule);
+    viewport?.addEventListener("scroll", schedule);
+    return () => {
+      if (frame !== 0) cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule, { capture: true });
+      window.removeEventListener("resize", schedule);
+      viewport?.removeEventListener("resize", schedule);
+      viewport?.removeEventListener("scroll", schedule);
+    };
+  }, [popupOpen, toolbarRef]);
 
   /** Open the corrections for the marked word at a screen position, if there is one. */
   const openAt = useCallback((x: number, y: number) => {
@@ -257,14 +313,17 @@ export function useSpellcheck(
     // — in which case showing nothing beats showing a word that is not there.
     const range = mark ? wordRange(map, mark) : null;
     if (!mark || !range) {
+      popupWord.current = null;
       setPopup(null);
       return;
     }
 
+    popupWord.current = range;
     const box = range.getBoundingClientRect();
     setPopup({
       mark,
       rect: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
+      clearTop: visibleArea(toolbarRef?.current ?? null).top,
       suggestions: [],
       loading: true,
     });
@@ -276,7 +335,7 @@ export function useSpellcheck(
           : current,
       );
     });
-  }, []);
+  }, [toolbarRef]);
 
   /**
    * A tap on the note. If anything changed since the last check, the pending

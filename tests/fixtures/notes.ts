@@ -45,7 +45,17 @@ export async function signedInUserId(page: Page): Promise<string> {
   return id;
 }
 
-/** Make an empty note for the page's user, open it, and return its path. */
+/**
+ * Make an empty note for the page's user, open it, and return its path —
+ * once the editor takes input.
+ *
+ * Opening the note is a full page load, and the body is on screen (rendered
+ * on the server) before the editor is hydrated and ready; an `input` event
+ * dispatched in between is never heard and the edit never saved. Pressing
+ * «يېڭى خاتىرە» arrived by an in-app navigation on a page already running,
+ * where that gap hardly existed. The editor says it is ready by turning
+ * contentEditable on.
+ */
 export async function newNote(page: Page): Promise<string> {
   const userId = await signedInUserId(page);
   const { data, error } = await adminClient()
@@ -56,6 +66,6 @@ export async function newNote(page: Page): Promise<string> {
   if (error || !data) throw new Error(`could not make a scratch note: ${error?.message}`);
   const path = `/notes/${(data as { id: number }).id}`;
   await page.goto(path);
-  await expect(page.getByTestId("note-body")).toBeVisible();
+  await expect(page.getByTestId("note-body")).toHaveAttribute("contenteditable", "true");
   return path;
 }

@@ -35,6 +35,18 @@ const nextConfig: NextConfig = {
    * Compile and runtime errors are still surfaced without it.
    */
   devIndicators: false,
+  /**
+   * In development Next prints every Server Action call with its arguments
+   * — a note's title and HTML on each save, the words typed into the
+   * notebook's search. Notes are private, and what is searched is never
+   * logged (CLAUDE.md, PROMPT-47): not in the deployed site's logs, which
+   * never had these lines, and not in a terminal on the owner's computer
+   * either, where an assistant reading the dev server's output would see
+   * them. The request lines themselves stay.
+   */
+  logging: {
+    serverFunctions: false,
+  },
   images: {
     formats: ["image/webp"],
     // Covers are small; these are the only widths worth generating.

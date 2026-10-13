@@ -15,7 +15,8 @@ import {
   normalizeTitle,
 } from "@/lib/notes/save-protocol";
 import type { NoteContent, SaveLoop, SaveSnapshot } from "@/lib/notes/save-loop";
-import { noteHistory, type VersionReason } from "@/lib/notes/history";
+import { noteHistory, type NoteVersion, type VersionReason } from "@/lib/notes/history";
+import { HISTORY_RESTORED, HISTORY_TITLE } from "@/lib/notes/history-labels";
 import {
   forgetNoteSession,
   holdNoteOpen,
@@ -44,6 +45,7 @@ import { useSpellcheck } from "@/components/notes/use-spellcheck";
 import { SourcePanel } from "@/components/notes/source-panel";
 import { NotesAiPanel } from "@/components/notes/ai-panel";
 import { FindBar } from "@/components/notes/find-bar";
+import { HistoryPanel } from "@/components/notes/history-panel";
 import { ToolMenu } from "@/components/notes/tool-menu";
 import { useWideToolbar } from "@/components/notes/use-wide-toolbar";
 import { useAiState } from "@/lib/ai/use-ai-state";
@@ -96,6 +98,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [sourceOpen, setSourceOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   /** Bumped on every open so the panel resets itself during render. */
   const [aiToken, setAiToken] = useState(0);
@@ -307,7 +310,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   /**
    * The one way a whole document goes on screen: this device's copy once the
    * opening has settled, the server's version after a conflict or a change
-   * made elsewhere — and, in stage 5, a version from this device's history.
+   * made elsewhere, and a version from this device's history (PROMPT-46).
    * The caller tells the save loop what the new text is.
    *
    * A direct, sanitized write of the node's HTML — never `selectAll` +
@@ -552,6 +555,24 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     },
     [putDocument],
   );
+
+  /**
+   * «بۇ نۇسخىغا قايتۇرۇش»: the note as it is now is kept first, then the
+   * version goes on screen through the one whole-document helper and is
+   * saved like any edit — a conflict with another device is still caught.
+   */
+  const restoreVersion = useCallback(
+    (version: NoteVersion) => {
+      keepVersion("before-restore");
+      putDocument({ title: version.title, html: version.html });
+      loopRef.current?.change();
+      setHistoryOpen(false);
+      setNotice(HISTORY_RESTORED);
+    },
+    [keepVersion, putDocument],
+  );
+
+  const closeHistory = useCallback(() => setHistoryOpen(false), []);
 
   /** The AI panel's «ئەسلىگە قايتۇرۇش»: what it would discard is kept first. */
   const undoAiCorrection = useCallback(
@@ -970,6 +991,18 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 <Icon name="download" />
                 Word
               </button>
+              <button
+                type="button"
+                className="hbtn"
+                data-testid="history-open"
+                onClick={() => {
+                  setOverflowOpen(false);
+                  setHistoryOpen(true);
+                }}
+              >
+                <Icon name="clock" />
+                {HISTORY_TITLE}
+              </button>
             </div>
 
             {/* Typography for the page, not for the selection — see
@@ -1257,6 +1290,16 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         initialQuery={selectionText}
         onClose={() => setSourceOpen(false)}
         onInsert={insertAtCaret}
+      />
+
+      <HistoryPanel
+        open={historyOpen}
+        userId={note.user_id}
+        noteId={note.id}
+        typography={typography}
+        canRestore={ready && !choosing}
+        onRestore={restoreVersion}
+        onClose={closeHistory}
       />
 
       {aiAvailable && (

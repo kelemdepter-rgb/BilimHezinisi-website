@@ -326,6 +326,26 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * «ئىلگىرىكى نۇسخىلار» (PROMPT-46): earlier versions of a note kept
+         * in this browser's IndexedDB — putting one back, the version a
+         * replace-all leaves, a browser that refuses the store, signing out
+         * emptying it, and the panel on a phone. The sign-out test makes and
+         * removes an account of its own. Runs in Firefox and WebKit too, below.
+         */
+        name: `notes-history-${viewport.name}`,
+        testMatch: /[\\/]notes-history\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Licence attribution, the legal pages, password recovery and the
         // account page. Anonymous by default — everything a reader without an
         // account must be able to reach — with the account block opting into
@@ -723,11 +743,11 @@ export default defineConfig({
       },
     ]),
     ...NOTEBOOK_ENGINES.map((engine) => ({
-      // The same five specs, setup and signed-in state as the Chromium
-      // notes, notes-sources, notes-save, notes-editing and notes-ai
-      // projects above.
+      // The same six specs, setup and signed-in state as the Chromium
+      // notes, notes-sources, notes-save, notes-editing, notes-history and
+      // notes-ai projects above.
       name: `notebook-${engine.name}`,
-      testMatch: /[\\/]notes(-sources|-save|-editing|-ai)?\.spec\.ts$/,
+      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-ai)?\.spec\.ts$/,
       dependencies: ["setup"],
       use: {
         browserName: engine.browser,

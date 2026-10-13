@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { NoteEditor } from "@/components/notes/note-editor";
+import { TrashedNoteView } from "@/components/notes/trashed-note";
 import { getNote } from "@/lib/notes/data";
 import { getSessionInfo } from "@/lib/data";
 
@@ -23,6 +24,10 @@ export default async function NotePage({ params }: PageProps<"/notes/[id]">) {
 
   const note = await getNote(noteId);
   if (!note) notFound();
+
+  // A note in the trash is read, never written: put back, it opens in the
+  // editor (PROMPT-47).
+  if (note.deleted_at) return <TrashedNoteView note={note} />;
 
   // Keyed by note: moving from one note to another is a new editor, never
   // the old one holding the previous note's text.

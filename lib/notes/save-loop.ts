@@ -293,6 +293,23 @@ export class SaveLoop {
     this.trySend(true);
   }
 
+  /**
+   * What blocked the loop is settled — the note is back from the trash
+   * (PROMPT-47) — so what waits is sent now. Putting a note back does not
+   * move its version (0031), so the base the text was written on still holds,
+   * and a change made elsewhere meanwhile is still a conflict.
+   */
+  resume(): void {
+    if (this.state !== "blocked") return;
+    this.code = null;
+    if (!this.hasUnsent()) {
+      this.setState("saved");
+      return;
+    }
+    this.setState("dirty");
+    this.trySend(true);
+  }
+
   /** A refusal the editor learned about itself (a note deleted elsewhere). */
   block(code: SaveCode): void {
     this.code = code;

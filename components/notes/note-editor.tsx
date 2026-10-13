@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
-import { createNoteAction, loadNoteAction, type LoadNoteResult } from "@/app/notes/actions";
+import { createNoteAction, loadNoteAction, restoreNoteAction, type LoadNoteResult } from "@/app/notes/actions";
 import { MAX_NOTE_CHARS } from "@/lib/notes/limits";
 import { sanitizeNoteHtml } from "@/lib/notes/sanitize";
 import {
@@ -13,6 +13,7 @@ import {
   SAVE_MESSAGES,
   STORAGE_FULL_MESSAGE,
   normalizeTitle,
+  type SaveCode,
 } from "@/lib/notes/save-protocol";
 import type { NoteContent, SaveLoop, SaveSnapshot } from "@/lib/notes/save-loop";
 import { noteHistory, type NoteVersion, type VersionReason } from "@/lib/notes/history";
@@ -74,6 +75,8 @@ const CHOICE_FAILED =
   "ئۇلىنىش يوق — سەل تۇرۇپ قايتا سىناڭ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.";
 /** The frame every notice under the toolbar shares. */
 const NOTICE = "mt-3 rounded-[var(--radius)] px-3.5 py-2.5 text-[13px] leading-6";
+/** A conflict choice that finds the note in one of these stops there, and says why. */
+const BLOCKING_CODES: ReadonlySet<SaveCode> = new Set(["not_found", "needs_account", "in_trash"]);
 
 const BLOCK_ICON: Record<BlockStyle, IconName> = { normal: "type", heading: "heading", quote: "quote" };
 
@@ -206,6 +209,12 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     loop ? loop.getSnapshot : idleSnapshot,
     idleSnapshot,
   );
+  /**
+   * Moved to the trash in another tab or on another device (PROMPT-47): the
+   * save was refused, the text is on this device, and the note holds still
+   * — as one opened from the trash does — until «قايتۇرۇش».
+   */
+  const inTrash = save.state === "blocked" && save.code === "in_trash";
   /** The editor's node, kept after React lets go of it: leaving reads it once more. */
   const nodeRef = useRef<HTMLDivElement | null>(null);
   /** The title as typed, read at the moment of sending — never a stale copy (N4). */
@@ -380,7 +389,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     try {
       const server = await loadNoteAction(note.id);
       if (!server.ok) {
-        if (server.code === "not_found" || server.code === "needs_account") current.block(server.code);
+        if (BLOCKING_CODES.has(server.code)) current.block(server.code);
         else setNotice(CHOICE_FAILED);
         return;
       }
@@ -416,13 +425,37 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     try {
       const server = await loadNoteAction(note.id);
       if (!server.ok) {
-        if (server.code === "not_found" || server.code === "needs_account") current.block(server.code);
+        if (BLOCKING_CODES.has(server.code)) current.block(server.code);
         else setNotice(CHOICE_FAILED);
         return;
       }
       keepVersion("before-conflict", { title: server.title, html: server.html });
       current.keepMine(server.updatedAt);
       setNotice(null);
+    } catch {
+      setNotice(CHOICE_FAILED);
+    } finally {
+      setChoosing(false);
+    }
+  }
+
+  /**
+   * «قايتۇرۇش» after a save found the note in the trash: out of the trash,
+   * then the text that waited on this device is sent — over the version it
+   * was written on, which putting a note back does not move (0031).
+   */
+  async function restoreFromTrash() {
+    const current = loopRef.current;
+    if (!current || choosing) return;
+    setChoosing(true);
+    try {
+      const result = await restoreNoteAction(note.id);
+      if (result.ok) {
+        current.resume();
+        setNotice(null);
+      } else {
+        setNotice(result.code === "failed" ? CHOICE_FAILED : result.error);
+      }
     } catch {
       setNotice(CHOICE_FAILED);
     } finally {
@@ -796,7 +829,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             // The server keeps 200 characters; the field stops at the same
             // place, so nothing typed is ever cut off without a sign (N21).
             maxLength={MAX_TITLE_CHARS}
-            readOnly={!ready || choosing}
+            readOnly={!ready || choosing || inTrash}
             aria-label="خاتىرە ماۋزۇسى"
             data-testid="note-title"
             onChange={(event) => {
@@ -1145,6 +1178,18 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 يېڭى خاتىرە قىلىپ ساقلاش
               </button>
             )}
+            {save.code === "in_trash" && (
+              <button
+                type="button"
+                className="btn-am mt-2"
+                data-testid="note-restore"
+                disabled={choosing}
+                onClick={() => void restoreFromTrash()}
+              >
+                <Icon name="undo" />
+                قايتۇرۇش
+              </button>
+            )}
             {/* Room is made on the list; this note's text waits on this device. */}
             {(save.code === "quota_bytes" || save.code === "quota_count") && (
               <Link href="/notes" className="hbtn mt-2" data-testid="note-quota-list">
@@ -1212,8 +1257,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         <div
           ref={attachEditor}
           // Held still until the note is in it, and while a conflict choice is
-          // on its way, so nothing typed in either moment is written over.
-          contentEditable={ready && !choosing}
+          // on its way, so nothing typed in either moment is written over —
+          // and while the note is in the trash, which is never written into.
+          contentEditable={ready && !choosing && !inTrash}
           suppressContentEditableWarning
           dir="rtl"
           role="textbox"

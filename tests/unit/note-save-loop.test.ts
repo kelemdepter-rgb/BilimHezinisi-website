@@ -528,15 +528,61 @@ describe("a full notebook and a writer told to slow down (PROMPT-44)", () => {
   });
 });
 
+describe("a note moved to the trash elsewhere (PROMPT-47)", () => {
+  it("in_trash: blocked, the copy kept, nothing retried — not by time, a button, the connection or the page", async () => {
+    const t = setup();
+    t.write("<p>يېڭى جۈملە</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    await t.answer(saveFailure("in_trash"));
+    expect(CODE_STATE.in_trash).toBe("blocked");
+    expect(t.loop.getSnapshot()).toMatchObject({ state: "blocked", code: "in_trash" });
+    expect(t.label()).toBe("ساقلانمىدى");
+    expect(t.env.draft?.html).toBe("<p>يېڭى جۈملە</p>");
+
+    await t.wait(10 * 60_000);
+    t.loop.retryNow();
+    t.loop.online();
+    t.loop.visibility(true);
+    expect(t.requests).toHaveLength(0);
+  });
+
+  it("put back, it sends what waited — over the version it was written on", async () => {
+    const t = setup();
+    t.write("<p>يېڭى جۈملە</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    await t.answer(saveFailure("in_trash"));
+
+    t.loop.resume();
+    expect(t.requests).toHaveLength(1);
+    expect(t.requests[0].input).toMatchObject({ html: "<p>يېڭى جۈملە</p>", baseUpdatedAt: V0 });
+    await t.answer({ ok: true, updatedAt: V1 });
+    expect(t.label()).toBe("ساقلاندى");
+    expect(t.env.draft).toBeNull();
+  });
+
+  it("resume does nothing to a loop that is not blocked, and is clean when nothing waits", async () => {
+    const t = setup();
+    t.loop.resume();
+    expect(t.requests).toHaveLength(0);
+    expect(t.state()).toBe("idle");
+
+    t.loop.block("in_trash");
+    t.loop.resume();
+    expect(t.requests).toHaveLength(0);
+    expect(t.state()).toBe("saved");
+  });
+});
+
 describe("the messages", () => {
   it("name the limits from lib/notes/limits.ts, not numbers typed into them", () => {
     expect(SAVE_MESSAGES.quota_count).toContain(` ${NOTE_QUOTA_MAX_NOTES} خاتىرە`);
-    expect(SAVE_MESSAGES.quota_bytes).toContain(`(${NOTE_QUOTA_MAX_BYTES / (1024 * 1024)} MB)`);
+    expect(SAVE_MESSAGES.quota_bytes).toContain(`(${NOTE_QUOTA_MAX_BYTES / (1024 * 1024)} MB،`);
+    // Since PROMPT-47 both say the trash counts too (migration 0031).
     expect(SAVE_MESSAGES.quota_count).toBe(
-      "خاتىرە دەپتىرىڭىز تولدى: ئەڭ كۆپ 200 خاتىرە ساقلىغىلى بولىدۇ. كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز، يېڭىسىنى قوشالايسىز.",
+      "خاتىرە دەپتىرىڭىز تولدى: ئەڭ كۆپ 200 خاتىرە ساقلىغىلى بولىدۇ (ئەخلەت ساندۇقىدىكىلەرمۇ ھېسابلىنىدۇ). كېرەكسىز خاتىرىلەرنى ئۆچۈرۈپ، ئەخلەت ساندۇقىنى بوشاتسىڭىز، يېڭىسىنى قوشالايسىز.",
     );
     expect(SAVE_MESSAGES.quota_bytes).toBe(
-      "خاتىرە دەپتىرىڭىزنىڭ ھەجمى تولدى (5 MB). كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز ياكى قىسقارتسىڭىز، ساقلاش داۋاملىشىدۇ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.",
+      "خاتىرە دەپتىرىڭىزنىڭ ھەجمى تولدى (5 MB، ئەخلەت ساندۇقى بىلەن). ئەخلەت ساندۇقىنى بوشاتسىڭىز ياكى خاتىرىلەرنى قىسقارتسىڭىز، ساقلاش داۋاملىشىدۇ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.",
     );
   });
 

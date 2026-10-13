@@ -182,7 +182,7 @@ describe("the notes", () => {
 
   it("an expiry that failed leaves the trash readable; a trash that did not load throws", async () => {
     state.remove = async () => ({ data: null, error: { code: "57014", message: "timeout" } });
-    expect(await openTrash()).toEqual([]);
+    expect((await openTrash())?.notes).toEqual([]);
     state.read = failed;
     await expect(openTrash()).rejects.toThrow(LibraryUnavailableError);
   });

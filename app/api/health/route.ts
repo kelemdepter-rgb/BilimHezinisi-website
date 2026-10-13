@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sweepUnconfirmedAccounts } from "@/lib/auth/account-security";
 import { sweepAttempts } from "@/lib/auth/attempts";
+import { purgeNoteTrash } from "@/lib/notes/trash-purge";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   SEARCH_HEALTH_KEY,
@@ -26,6 +27,13 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /**
+ * The trash purge goes last, and only while there is time left for its one
+ * call (bounded by the admin client's 10 s timeout) to finish inside the
+ * minute. A day it is skipped, the next day's run takes what is due.
+ */
+const TRASH_PURGE_STARTS_BEFORE_MS = 45_000;
+
+/**
  * Keep-alive endpoint.
  *
  * A Supabase free project pauses after about 7 idle days, which would take a
@@ -44,10 +52,13 @@ export const maxDuration = 60;
  * And it sweeps: the failed-attempt counter (lib/auth/attempts.ts), rows a
  * day past their window and lock; and — on the production deployment only,
  * once the owner has switched it on in /admin — accounts never confirmed
- * after 7 days (lib/auth/account-security.ts, at most 200 a day). Vercel
- * Hobby allows no second cron, so housekeeping rides along here.
+ * after 7 days (lib/auth/account-security.ts, at most 200 a day). Then, on
+ * the production deployment only, the notebook's trash: notes in it longer
+ * than 30 days (lib/notes/trash-purge.ts, at most 500 a day). Vercel Hobby
+ * allows no second cron, so housekeeping rides along here.
  */
 export async function GET(request: Request) {
+  const started = Date.now();
   const secret = process.env.CRON_SECRET;
   if (secret) {
     const header = request.headers.get("authorization") ?? "";
@@ -93,8 +104,11 @@ export async function GET(request: Request) {
   // a developer's machine — the Playwright suite starts two, and calls this
   // route — talks to the same project through .env.local, and must never
   // delete anyone.
+  const production = process.env.VERCEL_ENV === "production";
   const sweptAttempts = await sweepAttempts();
-  const sweptAccounts = process.env.VERCEL_ENV === "production" ? await sweepUnconfirmedAccounts() : null;
+  const sweptAccounts = production ? await sweepUnconfirmedAccounts() : null;
+  const purgedNotes =
+    production && Date.now() - started < TRASH_PURGE_STARTS_BEFORE_MS ? await purgeNoteTrash() : null;
 
   return NextResponse.json(
     {
@@ -102,6 +116,7 @@ export async function GET(request: Request) {
       at: new Date().toISOString(),
       sweptAttempts,
       sweptAccounts,
+      purgedNotes,
       search:
         searchHealth &&
         Object.fromEntries(

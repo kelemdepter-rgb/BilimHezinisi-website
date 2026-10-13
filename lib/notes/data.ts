@@ -151,8 +151,11 @@ export async function loadNotebook(): Promise<Notebook | null> {
  * it can only ever reach this account's rows, of which the quota allows 200.
  * A delete that fails is not the page failing: the expired notes are left
  * for the daily run, and not shown.
+ *
+ * `now` comes back with the notes, so the page counts the days left from the
+ * same moment on the server and in the browser.
  */
-export async function openTrash(now: number = Date.now()): Promise<TrashedNote[] | null> {
+export async function openTrash(now: number = Date.now()): Promise<{ notes: TrashedNote[]; now: number } | null> {
   const owner = await ownerClient();
   if (!owner) return null;
 
@@ -174,7 +177,7 @@ export async function openTrash(now: number = Date.now()): Promise<TrashedNote[]
     .order("deleted_at", { ascending: false });
   throwIfUnavailable("notes-trash", error);
 
-  return ((data as (SummaryRow & { deleted_at: string })[] | null) ?? []).map(toTrashedNote);
+  return { notes: ((data as (SummaryRow & { deleted_at: string })[] | null) ?? []).map(toTrashedNote), now };
 }
 
 /** One note, or null when it does not exist or belongs to someone else. */

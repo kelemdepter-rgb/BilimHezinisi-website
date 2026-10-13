@@ -4,7 +4,13 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
-import { createNoteAction, loadNoteAction, restoreNoteAction, type LoadNoteResult } from "@/app/notes/actions";
+import {
+  createNoteAction,
+  discardIfEmptyAction,
+  loadNoteAction,
+  restoreNoteAction,
+  type LoadNoteResult,
+} from "@/app/notes/actions";
 import { MAX_NOTE_CHARS } from "@/lib/notes/limits";
 import { sanitizeNoteHtml } from "@/lib/notes/sanitize";
 import {
@@ -12,6 +18,7 @@ import {
   SAVE_LABEL,
   SAVE_MESSAGES,
   STORAGE_FULL_MESSAGE,
+  UNTITLED,
   normalizeTitle,
   type SaveCode,
 } from "@/lib/notes/save-protocol";
@@ -21,6 +28,7 @@ import { HISTORY_RESTORED, HISTORY_TITLE } from "@/lib/notes/history-labels";
 import {
   forgetNoteSession,
   holdNoteOpen,
+  noteOpenInAnotherTab,
   openNoteSession,
   type NoteSession,
 } from "@/components/notes/note-session";
@@ -77,6 +85,8 @@ const CHOICE_FAILED =
 const NOTICE = "mt-3 rounded-[var(--radius)] px-3.5 py-2.5 text-[13px] leading-6";
 /** A conflict choice that finds the note in one of these stops there, and says why. */
 const BLOCKING_CODES: ReadonlySet<SaveCode> = new Set(["not_found", "needs_account", "in_trash"]);
+/** The back arrow waits at most this long for an untouched note to be discarded. */
+const DISCARD_WAIT_MS = 3000;
 
 const BLOCK_ICON: Record<BlockStyle, IconName> = { normal: "type", heading: "heading", quote: "quote" };
 
@@ -248,6 +258,51 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   );
 
   /**
+   * A new note left exactly as it was made — the default title, no text, not
+   * one edit in this tab — goes away on the way out (PROMPT-47), so a
+   * «يېڭى خاتىرە» pressed and abandoned leaves nothing behind in the list or
+   * the quota. This is only the editor's opinion, read from refs when the
+   * writer leaves: the server decides (discard_note_if_empty), and keeps
+   * anything with text, a title of its own or a save behind it.
+   */
+  const untouched = useCallback((): boolean => {
+    const current = loopRef.current;
+    if (!current || current.wasEdited() || current.isBusy()) return false;
+    if (normalizeTitle(note.title) !== UNTITLED || note.content_text.trim() !== "") return false;
+    if (normalizeTitle(titleRef.current) !== UNTITLED) return false;
+    return (nodeRef.current?.textContent ?? "").trim() === "";
+  }, [note.title, note.content_text]);
+
+  /** One request at most, however many ways the writer leaves at once. */
+  const discarding = useRef<Promise<boolean> | null>(null);
+  const discardIfUntouched = useCallback((): Promise<boolean> => {
+    if (discarding.current) return discarding.current;
+    if (!session || !untouched()) return Promise.resolve(false);
+    const leaving = session;
+    discarding.current = (async () => {
+      // Another tab may be writing in it, its first save still on the way.
+      if (await noteOpenInAnotherTab(leaving)) return false;
+      try {
+        const result = await discardIfEmptyAction(note.id);
+        if (result.ok && result.discarded) {
+          forgetNoteSession(leaving);
+          return true;
+        }
+      } catch {
+        // Left as it is: one empty note, never anything written.
+      }
+      return false;
+    })();
+    return discarding.current;
+  }, [note.id, session, untouched]);
+  /** The latest discardIfUntouched, for the effect's cleanup. */
+  const discardRef = useRef(discardIfUntouched);
+  /** Leaving was handled by the back arrow, which waited for the discard. */
+  const leftByArrow = useRef(false);
+  /** A discard asked for by the effect's cleanup, cancelled if the effect runs again. */
+  const pendingDiscard = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
    * The editor is uncontrolled on purpose: React must never re-render the
    * contentEditable while someone is typing in it, or the caret jumps. So the
    * content is written once, by hand, the moment the node exists — a ref
@@ -279,6 +334,11 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
 
   useEffect(() => {
     if (!session) return;
+    // React ran this effect again rather than the writer leaving.
+    if (pendingDiscard.current) {
+      clearTimeout(pendingDiscard.current);
+      pendingDiscard.current = null;
+    }
     const current = session.loop;
     current.attach({
       read: () => ({ title: titleRef.current, html: nodeRef.current?.innerHTML ?? "" }),
@@ -301,6 +361,10 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     // A phone switching apps, a tab put in the background: the copy is
     // written and the save started now, while the page can still run.
     const onVisibility = () => current.visibility(document.visibilityState !== "hidden");
+    // Not a discard as well: pagehide fires on a reload too, and the note
+    // would be gone from under the page asking for it again. A tab closed
+    // on an untouched note is tidied when the list next opens
+    // (lib/notes/data.ts loadNotebook).
     const onPageHide = () => current.flush();
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
@@ -313,8 +377,19 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       // Leaving inside the app — a link, the back button — where pagehide
       // never fires (N2).
       current.detach();
+      // An untouched note goes too — but only once it is certain the writer
+      // left: in development React runs every effect's cleanup once right
+      // after mounting, and its second run cancels this before it fires.
+      // Whatever page the writer went to is then drawn again without it.
+      pendingDiscard.current = setTimeout(() => {
+        pendingDiscard.current = null;
+        if (leftByArrow.current) return;
+        void discardRef.current().then((gone) => {
+          if (gone) router.refresh();
+        });
+      }, 0);
     };
-  }, [session, keepVersion]);
+  }, [session, keepVersion, router]);
 
   /**
    * The one way a whole document goes on screen: this device's copy once the
@@ -373,6 +448,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   useEffect(() => {
     onRemoteNewer.current = () => void showRemoteVersion();
     showCopy.current = putDocument;
+    discardRef.current = discardIfUntouched;
   });
 
   /**
@@ -818,7 +894,22 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           {/* An arrow to the start of the line — away from this note, in RTL
               — and never the undo icon: a writer who wants to undo must not
               leave the note by mistake (N11). */}
-          <Link href="/notes" className="ibtn" aria-label="خاتىرىلەر تىزىملىكى" data-testid="notes-back">
+          <Link
+            href="/notes"
+            className="ibtn"
+            aria-label="خاتىرىلەر تىزىملىكى"
+            data-testid="notes-back"
+            onClick={(event) => {
+              // An untouched note goes first, so the list it returns to is
+              // already without it — never there for a moment and then gone.
+              if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+              if (!untouched()) return;
+              event.preventDefault();
+              leftByArrow.current = true;
+              const waited = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), DISCARD_WAIT_MS));
+              void Promise.race([discardIfUntouched(), waited]).finally(() => router.push("/notes"));
+            }}
+          >
             <Icon name="arrow-right" className="ic-lg" />
           </Link>
           <input

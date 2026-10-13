@@ -111,6 +111,8 @@ export class SaveLoop {
   private revision = 0;
   /** The newest revision the server is known to hold. */
   private confirmed = 0;
+  /** Anything at all was written, in this tab, since the loop was made. */
+  private edited = false;
   private base: string | null;
   private state: SaveState = "idle";
   private code: SaveCode | null = null;
@@ -165,6 +167,14 @@ export class SaveLoop {
     return this.inFlight || this.hasUnsent();
   }
 
+  /**
+   * Was the note ever written in, in this tab — by hand or by a panel? A new
+   * note left without one is discarded on the way out (PROMPT-47).
+   */
+  wasEdited(): boolean {
+    return this.edited;
+  }
+
   /** Nothing pending, nothing in flight, nothing on screen: safe to forget. */
   isIdle(): boolean {
     return this.attachment === null && !this.inFlight && !this.hasUnsent();
@@ -205,6 +215,7 @@ export class SaveLoop {
 
   /** Every edit, of the body or the title, by hand or by a panel. */
   change(): void {
+    this.edited = true;
     this.revision++;
     this.scheduleDraft();
     if (this.state === "conflict" || this.state === "offline" || this.state === "retrying") {

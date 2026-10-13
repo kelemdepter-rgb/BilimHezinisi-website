@@ -560,6 +560,16 @@ describe("a note moved to the trash elsewhere (PROMPT-47)", () => {
     expect(t.env.draft).toBeNull();
   });
 
+  it("knows whether the note was ever written in — what an untouched new note is discarded by", () => {
+    const fresh = setup();
+    expect(fresh.loop.wasEdited()).toBe(false);
+    fresh.loop.adopt(V1);
+    fresh.loop.restore();
+    expect(fresh.loop.wasEdited()).toBe(false);
+    fresh.retitle("ماۋزۇ");
+    expect(fresh.loop.wasEdited()).toBe(true);
+  });
+
   it("resume does nothing to a loop that is not blocked, and is clean when nothing waits", async () => {
     const t = setup();
     t.loop.resume();

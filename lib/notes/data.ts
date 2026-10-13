@@ -2,6 +2,7 @@ import { cache } from "react";
 import { isAuthApiError, isAuthSessionMissingError } from "@supabase/supabase-js";
 import { throwIfUnavailable } from "@/lib/cache";
 import { NOTE_TRASH_DAYS } from "@/lib/notes/limits";
+import { UNTITLED, versionMicros } from "@/lib/notes/save-protocol";
 import { reportServerError } from "@/lib/server-log";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { SESSION_DEADLINE_MS, withDeadline } from "@/lib/supabase/timeouts";
@@ -75,6 +76,23 @@ function toTrashedNote(row: SummaryRow & { deleted_at: string }): TrashedNote {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** At most this many abandoned notes are tidied per visit to the list. */
+const ABANDONED_PER_VISIT = 20;
+
+/**
+ * A note made and never written in, a day or more ago: the default title,
+ * no text, never saved since it was made. The editor discards one the
+ * moment it is left inside the app; a tab closed on it, or a request lost on
+ * the way, leaves it behind — and it would sit in the list and in the 200.
+ * A day, so a note open in another tab right now is never touched.
+ */
+function isAbandoned(row: SummaryRow, now: number): boolean {
+  if (row.deleted_at || row.title !== UNTITLED || row.content_length !== 0) return false;
+  if (row.updated_at !== row.created_at) return false;
+  const made = versionMicros(row.created_at);
+  return made !== null && now - made / 1000 >= DAY_MS;
+}
+
 /** A session check that ran out of time: no answer at all. */
 const UNANSWERED = { data: { user: null }, error: { code: "deadline" } } as const;
 
@@ -123,7 +141,7 @@ export async function ownerClient() {
  * told they have none — on 2026-10-07 one was, a moment after creating a note.
  * app/notes/error.tsx says the notebook did not open, and offers to try again.
  */
-export async function loadNotebook(): Promise<Notebook | null> {
+export async function loadNotebook(now: number = Date.now()): Promise<Notebook | null> {
   const owner = await ownerClient();
   if (!owner) return null;
 
@@ -133,9 +151,25 @@ export async function loadNotebook(): Promise<Notebook | null> {
     .eq("user_id", owner.userId)
     .order("updated_at", { ascending: false });
   throwIfUnavailable("notes-list", error);
+  const rows = (data as SummaryRow[] | null) ?? [];
+
+  // Abandoned new notes go before the list is drawn. The database decides
+  // each one again (discard_note_if_empty, 0031); one it keeps stays listed.
+  const gone = new Set<number>();
+  const abandoned = rows.filter((row) => isAbandoned(row, now)).slice(0, ABANDONED_PER_VISIT);
+  await Promise.all(
+    abandoned.map(async (row) => {
+      const { data: discarded, error: discardError } = await owner.supabase.rpc("discard_note_if_empty", {
+        p_id: row.id,
+      });
+      if (discardError) reportServerError("notes-list:discard", discardError);
+      else if (discarded === true) gone.add(row.id);
+    }),
+  );
 
   const notebook: Notebook = { notes: [], trash: [] };
-  for (const row of (data as SummaryRow[] | null) ?? []) {
+  for (const row of rows) {
+    if (gone.has(row.id)) continue;
     if (row.deleted_at) notebook.trash.push(toTrashedNote({ ...row, deleted_at: row.deleted_at }));
     else notebook.notes.push(toNoteSummary(row));
   }

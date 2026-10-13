@@ -23,6 +23,9 @@ const state = vi.hoisted(() => ({
   remove: null as null | (() => Promise<unknown>),
   filters: [] as [string, unknown][],
   deletes: [] as [string, unknown][][],
+  rpcs: [] as [string, number][],
+  /** The ids discard_note_if_empty agrees to remove. */
+  discards: new Set<number>(),
 }));
 
 const never = (): Promise<never> => new Promise<never>(() => undefined);
@@ -60,6 +63,10 @@ vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({
     auth: { getUser: () => state.getUser!() },
     from: () => query(),
+    rpc: async (name: string, args: { p_id: number }) => {
+      state.rpcs.push([name, args.p_id]);
+      return { data: state.discards.has(args.p_id), error: null };
+    },
   }),
 }));
 
@@ -84,6 +91,8 @@ beforeEach(() => {
   state.remove = async () => ({ data: null, error: null });
   state.filters = [];
   state.deletes = [];
+  state.rpcs = [];
+  state.discards = new Set();
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
@@ -167,6 +176,42 @@ describe("the notes", () => {
       notes: [summary],
       trash: [{ ...summary, id: 4144, deleted_at: trashed.deleted_at }],
     });
+  });
+
+  it("a new note never written in, a day or more ago, is tidied away before the list is drawn", async () => {
+    const now = Date.parse("2026-10-13T12:00:00.000Z");
+    const empty = (id: number, made: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      title: "يېڭى خاتىرە",
+      preview: "",
+      created_at: made,
+      updated_at: made,
+      pinned_at: null,
+      deleted_at: null,
+      content_length: 0,
+      content_bytes: 22,
+      ...extra,
+    });
+    state.read = async () => ({
+      data: [
+        empty(1, "2026-10-11T09:00:00.123456+00:00"), // abandoned two days ago
+        empty(2, "2026-10-13T09:00:00+00:00"), // made this morning: maybe open right now
+        empty(3, "2026-10-10T09:00:00+00:00", { updated_at: "2026-10-10T09:05:00+00:00" }), // saved once
+        empty(4, "2026-10-10T09:00:00+00:00", { title: "ئۆز ماۋزۇسى" }),
+        empty(5, "2026-10-10T09:00:00+00:00", { content_length: 3 }),
+        empty(6, "2026-10-10T09:00:00+00:00", { deleted_at: "2026-10-11T09:00:00+00:00" }),
+        empty(7, "2026-10-09T09:00:00+00:00"), // the database keeps this one after all
+      ],
+      error: null,
+    });
+    state.discards = new Set([1]);
+    const notebook = await loadNotebook(now);
+    expect(state.rpcs).toEqual([
+      ["discard_note_if_empty", 1],
+      ["discard_note_if_empty", 7],
+    ]);
+    expect(notebook?.notes.map((note) => note.id)).toEqual([2, 3, 4, 5, 7]);
+    expect(notebook?.trash.map((note) => note.id)).toEqual([6]);
   });
 
   it("opening the trash first deletes this writer's own notes whose 30 days are over", async () => {

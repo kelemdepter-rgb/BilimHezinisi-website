@@ -65,6 +65,25 @@ export function holdNoteOpen(session: NoteSession): () => void {
   return () => release();
 }
 
+/**
+ * Does any OTHER tab have this note open? Asked before an untouched note is
+ * discarded on the way out (PROMPT-47): another tab may be writing in it,
+ * with its first save not landed yet. True when nobody can tell — then the
+ * note is left alone, which costs one empty note at most.
+ */
+export async function noteOpenInAnotherTab(session: NoteSession): Promise<boolean> {
+  try {
+    const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+    if (!locks) return true;
+    const { held = [] } = await locks.query();
+    const mine = openLockName(session.key, TAB);
+    const prefix = `${OPEN_LOCK}${session.key}:`;
+    return held.some((lock) => lock.name?.startsWith(prefix) && lock.name !== mine);
+  } catch {
+    return true;
+  }
+}
+
 /** Does `tab` still have this note open? False when nobody can tell. */
 async function openElsewhere(key: string, tab: string): Promise<boolean> {
   try {

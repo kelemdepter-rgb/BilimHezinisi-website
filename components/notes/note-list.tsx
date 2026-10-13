@@ -12,6 +12,7 @@ import {
   trashNoteAction,
   type SearchNotesResult,
 } from "@/app/notes/actions";
+import { LocalTime } from "@/components/notes/local-time";
 import { NOTES_USAGE_ID } from "@/components/notes/notes-usage";
 import {
   MOVED_TO_TRASH,
@@ -407,7 +408,7 @@ function NoteRow({ note, onPin, onTrash }: { note: NoteSummary; onPin: () => voi
           </span>
         )}
         <span className="mt-1 block text-[12px] text-ink3" data-testid="note-meta">
-          {String(note.updated_at).slice(0, 10)} · {note.length.toLocaleString("en-US")} ھەرپ
+          <LocalTime stamp={note.updated_at} /> · {note.length.toLocaleString("en-US")} ھەرپ
         </span>
       </Link>
       <button

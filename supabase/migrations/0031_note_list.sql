@@ -193,7 +193,8 @@ $fn$;
 -- «يېڭى خاتىرە» creates the row at once, so a writer who opens a new note and
 -- leaves it would otherwise leave an empty «يېڭى خاتىرە» behind — and since
 -- 0030, one that counts against the 200. The editor asks for it to go when it
--- is left untouched; THIS decides. Only the caller's own note (SECURITY
+-- is left untouched, and the list asks again for one still untouched a day
+-- later (a tab closed on it); THIS decides. Only the caller's own note (SECURITY
 -- INVOKER, RLS and the explicit filter), only outside the trash, only with
 -- the default title and no text, and only if it was never saved after it was
 -- made (updated_at moves on every save — see the trigger above). One

@@ -13,6 +13,7 @@ import {
   type SearchNotesResult,
 } from "@/app/notes/actions";
 import { LocalTime } from "@/components/notes/local-time";
+import { useHydrated } from "@/components/notes/use-hydrated";
 import { NOTES_USAGE_ID } from "@/components/notes/notes-usage";
 import {
   MOVED_TO_TRASH,
@@ -74,6 +75,7 @@ export function NoteList({
   countFull?: boolean;
 }) {
   const router = useRouter();
+  const hydrated = useHydrated();
   const [creating, startCreate] = useTransition();
   const [, startChange] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -251,7 +253,11 @@ export function NoteList({
 
   return (
     <>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+      <div
+        className="mt-4 flex flex-wrap items-center justify-between gap-2"
+        data-testid="notes-controls"
+        data-ready={hydrated ? "true" : "false"}
+      >
         <button
           type="button"
           className="btn-am"
@@ -289,6 +295,10 @@ export function NoteList({
               placeholder="خاتىرىلىرىمدىن ئىزدەش"
               // Longer finds nothing (search_my_notes): it cannot be typed.
               maxLength={SEARCH_MAX_CHARS}
+              // Typing waits for the page to be ready (useHydrated), as the
+              // note editor's does: before that a word would sit in the box
+              // while the list went on showing everything.
+              readOnly={!hydrated}
               value={query}
               onChange={(event) => changeQuery(event.target.value)}
               onKeyDown={(event) => {

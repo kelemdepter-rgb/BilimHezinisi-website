@@ -55,9 +55,24 @@ function row(page: Page, id: number) {
   return page.locator(`[data-testid="note-row"][data-note-id="${id}"]`);
 }
 
+/**
+ * The list, once React has taken it over: the server-rendered page is on
+ * screen before its controls answer, and a word typed in that gap is never
+ * heard (the box is read-only until then, so `fill` would wait anyway).
+ */
 async function openList(page: Page) {
   await page.goto("/notes");
-  await expect(page.getByTestId("new-note")).toBeVisible();
+  await expect(page.locator('[data-testid="notes-controls"][data-ready="true"]')).toBeVisible();
+}
+
+/** The trash, likewise ready for a tap. */
+async function waitForTrash(page: Page) {
+  await expect(page.locator('[data-testid="trash"][data-ready="true"]')).toBeAttached();
+}
+
+async function openTrash(page: Page) {
+  await page.goto("/notes/trash");
+  await waitForTrash(page);
 }
 
 /** Search, and wait for the answer to the words typed. */
@@ -74,8 +89,10 @@ async function horizontalOverflow(page: Page): Promise<number> {
 async function expectTappable(page: Page, control: ReturnType<Page["locator"]>, name: string) {
   await expect(control, name).toBeInViewport({ ratio: 1 });
   const box = (await control.boundingBox())!;
-  expect(box.height, `${name} is a 44 px target`).toBeGreaterThanOrEqual(44);
-  expect(box.width, `${name} is a 44 px target`).toBeGreaterThanOrEqual(44);
+  // Rounded: Firefox reports a 44 px button centred with translate(-50%)
+  // as 43.99998 px — a measuring artefact, not a smaller target.
+  expect(Math.round(box.height), `${name} is a 44 px target`).toBeGreaterThanOrEqual(44);
+  expect(Math.round(box.width), `${name} is a 44 px target`).toBeGreaterThanOrEqual(44);
   const onTop = await control.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -152,7 +169,7 @@ test.describe("finding a note", () => {
       // Uyghur order in every engine: ئ, then ا, ە, ب.
       await page.getByTestId("notes-sort").selectOption("title");
       expect(await order()).toEqual([ids.a, ids.b, ids.c]);
-      await page.reload();
+      await openList(page);
       await expect(page.getByTestId("notes-sort")).toHaveValue("title");
 
       // Pinning: the note goes up under its heading, and stays there.
@@ -161,7 +178,7 @@ test.describe("finding a note", () => {
       await expect(page.locator(`[data-testid="notes-pinned"] [data-note-id="${ids.c}"]`)).toBeVisible();
       await expect(page.getByRole("heading", { name: "مىقلانغانلار" })).toBeVisible();
       await expect.poll(async () => (await stored(ids.c))?.pinned_at ?? null).not.toBeNull();
-      await page.reload();
+      await openList(page);
       await expect(page.locator(`[data-testid="notes-pinned"] [data-note-id="${ids.c}"]`)).toBeVisible();
       await expect(row(page, ids.c).getByTestId("pin-note")).toHaveAttribute("aria-pressed", "true");
 
@@ -222,9 +239,10 @@ test.describe("the trash", () => {
       await expect(moved).toHaveCount(0, { timeout: 15_000 });
       await expect(row(page, id)).toHaveCount(0);
 
-      await page.reload();
+      await openList(page);
       await page.getByTestId("trash-link").click();
       await expect(page).toHaveURL(/\/notes\/trash$/);
+      await waitForTrash(page);
       const inTrash = page.locator(`[data-testid="trash-row"][data-note-id="${id}"]`);
       await expect(inTrash.getByTestId("trash-countdown")).toHaveText("30 كۈندىن كېيىن مەڭگۈلۈك ئۆچىدۇ");
       await inTrash.getByTestId("trash-restore").click();
@@ -241,7 +259,7 @@ test.describe("the trash", () => {
       await openList(page);
       await row(page, id).getByTestId("delete-note").click();
       await expect.poll(async () => (await stored(id))?.deleted_at ?? null).not.toBeNull();
-      await page.goto("/notes/trash");
+      await openTrash(page);
       await inTrash.getByTestId("trash-delete").click();
       await expect(inTrash.getByTestId("trash-delete-confirm-box")).toBeVisible();
       await inTrash.getByTestId("trash-cancel").click();
@@ -262,7 +280,7 @@ test.describe("the trash", () => {
       await seedNote(page, { title: "ئەخلەت ئىككى", text: "ئىككى", trashed: true }),
     ];
     try {
-      await page.goto("/notes/trash");
+      await openTrash(page);
       for (const id of ids) await expect(page.locator(`[data-testid="trash-row"][data-note-id="${id}"]`)).toBeVisible();
       await page.getByTestId("trash-empty-all").click();
       await expect(page.getByTestId("trash-empty-confirm-box")).toBeVisible();
@@ -414,7 +432,7 @@ test.describe("on a phone", () => {
         await expectTappable(page, row(page, first).getByTestId("pin-note"), `pin at ${width}px`);
         await expectTappable(page, row(page, first).getByTestId("delete-note"), `delete at ${width}px`);
 
-        await page.goto("/notes/trash");
+        await openTrash(page);
         const trashed = page.locator(`[data-testid="trash-row"][data-note-id="${ids[12]}"]`);
         await expect(trashed).toBeVisible();
         // A list page, not a writing surface: the site's own header and

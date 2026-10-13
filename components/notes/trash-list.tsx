@@ -4,6 +4,7 @@ import { useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
 import { Icon } from "@/components/icons";
 import { deleteNoteForeverAction, emptyTrashAction, restoreNoteAction } from "@/app/notes/actions";
+import { useHydrated } from "@/components/notes/use-hydrated";
 import { TRASH_EMPTY, trashCountdown, trashDaysLeft } from "@/lib/notes/list-protocol";
 import type { TrashedNote } from "@/lib/notes/data";
 
@@ -21,6 +22,7 @@ type Asking = number | "all" | null;
  * brings the trash as the server now has it.
  */
 export function TrashList({ notes, now }: { notes: TrashedNote[]; now: number }) {
+  const hydrated = useHydrated();
   const [shown, remove] = useOptimistic(notes, (current, gone: number | "all") =>
     gone === "all" ? [] : current.filter((note) => note.id !== gone),
   );
@@ -64,7 +66,7 @@ export function TrashList({ notes, now }: { notes: TrashedNote[]; now: number })
   }
 
   return (
-    <>
+    <div data-testid="trash" data-ready={hydrated ? "true" : "false"}>
       {error && (
         <p role="alert" className="mt-3 rounded-[var(--radius)] bg-ab2 px-3.5 py-3 text-[13px]" data-testid="trash-error">
           {error}
@@ -167,7 +169,7 @@ export function TrashList({ notes, now }: { notes: TrashedNote[]; now: number })
           </ul>
         </>
       )}
-    </>
+    </div>
   );
 }
 

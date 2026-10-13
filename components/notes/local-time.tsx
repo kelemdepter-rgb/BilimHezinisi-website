@@ -1,11 +1,7 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useHydrated } from "@/components/notes/use-hydrated";
 import { formatNoteTime } from "@/lib/notes/dates";
-
-const subscribeNothing = () => () => {};
-const inBrowser = () => true;
-const onServer = () => false;
 
 /** As wide as a real one, so nothing moves when the time arrives. */
 const PLACEHOLDER = "0000-00-00 00:00";
@@ -20,7 +16,7 @@ const PLACEHOLDER = "0000-00-00 00:00";
  * would otherwise trade places around the space between them.
  */
 export function LocalTime({ stamp }: { stamp: string }) {
-  const browser = useSyncExternalStore(subscribeNothing, inBrowser, onServer);
+  const browser = useHydrated();
   return (
     <time
       dateTime={stamp}

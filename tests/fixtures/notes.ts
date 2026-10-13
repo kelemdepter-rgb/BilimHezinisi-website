@@ -103,7 +103,9 @@ async function noteState(id: number): Promise<"live" | "trash" | "gone"> {
 export async function deleteNote(page: Page, path: string): Promise<void> {
   const id = Number(path.split("/").pop());
   await page.goto("/notes");
-  await expect(page.getByTestId("new-note")).toBeVisible();
+  // Once React has the list: a tap on the server-rendered button before
+  // then is never heard.
+  await expect(page.locator('[data-testid="notes-controls"][data-ready="true"]')).toBeVisible();
   const row = page.locator('[data-testid="note-row"]').filter({ has: page.locator(`a[href="/notes/${id}"]`) });
   if ((await row.count()) === 0) {
     expect(await noteState(id), `note ${id} is in the database but not in the list`).toBe("gone");

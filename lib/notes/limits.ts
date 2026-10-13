@@ -22,3 +22,11 @@ export const MAX_NOTE_CHARS = 60_000;
  */
 export const NOTE_QUOTA_MAX_NOTES = 200;
 export const NOTE_QUOTA_MAX_BYTES = 5 * 1024 * 1024;
+
+/**
+ * How long a note waits in the trash before it is deleted for good
+ * (PROMPT-47). supabase/migrations/0031_note_list.sql's `note_trash_days()`
+ * is what the daily purge uses; tests/unit/note-list-sql.test.ts holds the
+ * two to each other. This copy words «N كۈندىن كېيىن مەڭگۈلۈك ئۆچىدۇ».
+ */
+export const NOTE_TRASH_DAYS = 30;

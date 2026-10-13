@@ -4,7 +4,7 @@ import { Icon } from "@/components/icons";
 import { AnnotationList } from "@/components/my/annotation-list";
 import { getMyAnnotations } from "@/lib/my";
 
-export const metadata: Metadata = { title: "خاتىرىلىرىم" };
+export const metadata: Metadata = { title: "كىتابتىكى خاتىرىلىرىم" };
 
 export default async function MyNotesPage() {
   const groups = await getMyAnnotations("note");
@@ -13,8 +13,8 @@ export default async function MyNotesPage() {
   return (
     <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
       <h1 className="flex items-center gap-2.5 text-xl font-bold">
-        <Icon name="notebook-pen" className="ic-lg text-am" />
-        خاتىرىلىرىم
+        <Icon name="book-open" className="ic-lg text-am" />
+        كىتابتىكى خاتىرىلىرىم
       </h1>
 
       {groups.length === 0 ? (

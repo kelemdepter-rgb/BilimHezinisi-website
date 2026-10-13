@@ -287,7 +287,8 @@ export function NoteList({
               data-testid="notes-search"
               aria-label="خاتىرىلىرىمدىن ئىزدەش"
               placeholder="خاتىرىلىرىمدىن ئىزدەش"
-              maxLength={SEARCH_MAX_CHARS * 2}
+              // Longer finds nothing (search_my_notes): it cannot be typed.
+              maxLength={SEARCH_MAX_CHARS}
               value={query}
               onChange={(event) => changeQuery(event.target.value)}
               onKeyDown={(event) => {

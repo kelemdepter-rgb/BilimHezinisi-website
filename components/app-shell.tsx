@@ -78,12 +78,13 @@ export function AppShell({
    * (a single sura) reads exactly like a book, so it is bare too — /quran
    * itself keeps the shell, being an index page. The note editor is the same
    * case in reverse: it is a writing surface with its own top toolbar, which
-   * has to stay reachable while the on-screen keyboard is up.
+   * has to stay reachable while the on-screen keyboard is up. A note's
+   * address is a number; /notes/trash is a list page and keeps the shell.
    */
   const bare =
     /^\/books\/[^/]+\/read$/.test(pathname) ||
     /^\/quran\/[^/]+$/.test(pathname) ||
-    /^\/notes\/[^/]+$/.test(pathname);
+    /^\/notes\/\d+$/.test(pathname);
 
   // Lock body scroll only while the drawer is open (mobile rule: the page
   // must scroll normally again the moment it closes).

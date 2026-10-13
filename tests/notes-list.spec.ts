@@ -417,6 +417,10 @@ test.describe("on a phone", () => {
         await page.goto("/notes/trash");
         const trashed = page.locator(`[data-testid="trash-row"][data-note-id="${ids[12]}"]`);
         await expect(trashed).toBeVisible();
+        // A list page, not a writing surface: the site's own header and
+        // footer stay (only a note's own address is bare).
+        await expect(page.locator("header"), "the trash keeps the site header").toHaveCount(1);
+        await expect(page.locator("footer"), "the trash keeps the site footer").toHaveCount(1);
         expect(await horizontalOverflow(page), `no sideways scroll in the trash at ${width}px`).toBeLessThanOrEqual(1);
         await scrollPage(page, 3000);
         await scrollPage(page, -5000);

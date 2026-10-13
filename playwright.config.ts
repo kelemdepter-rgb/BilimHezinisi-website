@@ -346,6 +346,25 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * The list and the trash (PROMPT-47): search, the three orders, pins,
+         * the trash and putting back, deleting for good in two steps, a
+         * trashed note read-only, untouched new notes that go, local dates.
+         * Runs in Firefox and WebKit too, below.
+         */
+        name: `notes-list-${viewport.name}`,
+        testMatch: /[\\/]notes-list\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Licence attribution, the legal pages, password recovery and the
         // account page. Anonymous by default — everything a reader without an
         // account must be able to reach — with the account block opting into
@@ -743,11 +762,11 @@ export default defineConfig({
       },
     ]),
     ...NOTEBOOK_ENGINES.map((engine) => ({
-      // The same six specs, setup and signed-in state as the Chromium
-      // notes, notes-sources, notes-save, notes-editing, notes-history and
-      // notes-ai projects above.
+      // The same seven specs, setup and signed-in state as the Chromium
+      // notes, notes-sources, notes-save, notes-editing, notes-history,
+      // notes-list and notes-ai projects above.
       name: `notebook-${engine.name}`,
-      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-ai)?\.spec\.ts$/,
+      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-list|-ai)?\.spec\.ts$/,
       dependencies: ["setup"],
       use: {
         browserName: engine.browser,

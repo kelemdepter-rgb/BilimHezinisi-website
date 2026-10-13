@@ -482,6 +482,13 @@ here. The table is left in place because an applied migration is never edited ·
 - Dates in the list are the reader's local time (`LocalTime`, filled in the
   browser), never a UTC slice. /my/notes is «كىتابتىكى خاتىرىلىرىم» — a
   different name and icon from «خاتىرە دەپتىرىم».
+- The list's search box is read-only until the page has hydrated
+  (`useHydrated`); a word typed before that was kept on screen and never
+  searched. Specs wait for `[data-testid="notes-controls"][data-ready="true"]`
+  (the trash: `[data-testid="trash"][data-ready="true"]`) before any tap.
+- `logging.serverFunctions` stays `false` in next.config.ts: in development
+  Next otherwise prints every Server Action's arguments — note HTML, search
+  words — to the terminal.
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +

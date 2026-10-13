@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { DeleteAccount } from "@/components/my/delete-account";
+import { NoteHistoryStorage } from "@/components/my/note-history-storage";
 import { OfflineStorage } from "@/components/my/offline-storage";
 import { SearchHistoryControl } from "@/components/my/search-history-control";
 import { countAdmins, getAccountOwner } from "@/lib/my/account";
@@ -150,6 +151,7 @@ export default async function AccountPage({ searchParams }: PageProps<"/my/accou
           تورسىز ئوقۇش ئۈچۈن ساقلانغان مەزمۇن
         </h2>
         <OfflineStorage />
+        <NoteHistoryStorage />
       </section>
 
       <section className="paper grain mt-4 p-5 sm:p-6" aria-labelledby="account-password">

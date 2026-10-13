@@ -61,9 +61,12 @@ export function OfflineStorage() {
       <p className="mt-3 text-[14px] font-semibold" data-testid="offline-storage-size">
         ھازىر ساقلانغان: <span dir="ltr">{usage ? formatBytes(usage.bytes) : "…"}</span>
         {usage && usage.entries > 0 && (
-          <span className="ps-2 text-[12.5px] font-normal text-ink3" dir="ltr">
-            ({usage.entries})
-          </span>
+          <>
+            {" "}
+            <span className="text-[12.5px] font-normal text-ink3" dir="ltr">
+              ({usage.entries})
+            </span>
+          </>
         )}
       </p>
 

@@ -422,3 +422,44 @@ test("the panel fits, scrolls inside itself, and every control stays in reach", 
     await dropNote(path);
   }
 });
+
+test("/my/account shows how much the history holds, and clears it after asking once more", async ({
+  page,
+}, testInfo) => {
+  const path = await newNote(page, { html: "<div>ھېسابات بېتى ئۈچۈن خاتىرە</div>" });
+  try {
+    await expect.poll(async () => (await storedVersions(page)).length).toBeGreaterThan(0);
+    await page.goto("/my/account");
+    const card = page.getByTestId("note-history-storage");
+    await expect(card).toContainText("خاتىرىلەرنىڭ ئىلگىرىكى نۇسخىلىرى");
+    await expect(page.getByTestId("note-history-size")).not.toContainText("…");
+    await expect(page.getByTestId("note-history-size")).not.toContainText("0 B");
+
+    const { width: own, height } = testInfo.project.use.viewport!;
+    for (const width of own < 768 ? [own, 360] : [own]) {
+      await page.setViewportSize({ width, height });
+      expect(await horizontalOverflow(page), `no sideways scroll at ${width}px`).toBeLessThanOrEqual(1);
+    }
+
+    // One tap only asks; «بىكار قىلىش» leaves everything where it was.
+    const clear = page.getByTestId("note-history-clear");
+    await clear.scrollIntoViewIfNeeded();
+    await expectTappable(clear, "note-history-clear");
+    await clear.click();
+    await expect(page.getByTestId("note-history-confirm-box")).toBeVisible();
+    await expectTappable(page.getByTestId("note-history-confirm"), "note-history-confirm");
+    await expectTappable(page.getByTestId("note-history-cancel"), "note-history-cancel");
+    await page.getByTestId("note-history-cancel").click();
+    expect((await storedVersions(page)).length).toBeGreaterThan(0);
+
+    // The second tap clears.
+    await clear.click();
+    await page.getByTestId("note-history-confirm").click();
+    await expect(page.getByTestId("note-history-cleared")).toHaveText("ئىلگىرىكى نۇسخىلار تازىلاندى.");
+    await expect(page.getByTestId("note-history-size")).toContainText("0 B");
+    await expect(clear).toBeDisabled();
+    expect(await storedVersions(page)).toEqual([]);
+  } finally {
+    await dropNote(path);
+  }
+});

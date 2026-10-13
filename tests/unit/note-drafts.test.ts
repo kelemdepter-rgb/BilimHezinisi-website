@@ -162,7 +162,8 @@ describe("device copies", () => {
       rememberPendingDeletion(USER);
       expect(session.getItem("bh-account-deletion")).toBe(USER);
 
-      finishPendingDeletion();
+      // True: the page also clears the earlier versions kept on this device.
+      expect(finishPendingDeletion()).toBe(true);
       expect(readDraft(local, USER, 7)).toBeNull();
       expect(readDraft(local, OTHER, 7)).not.toBeNull();
       expect(session.getItem("bh-account-deletion")).toBeNull();
@@ -171,7 +172,7 @@ describe("device copies", () => {
     it("without a noted deletion nothing is touched (sign-out never clears)", () => {
       const { local } = browser();
       writeDraft(local, draft());
-      finishPendingDeletion();
+      expect(finishPendingDeletion()).toBe(false);
       expect(readDraft(local, USER, 7)).not.toBeNull();
     });
   });

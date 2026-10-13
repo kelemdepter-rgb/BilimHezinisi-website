@@ -154,7 +154,8 @@ reaches a browser), copied into the database's `auth_disposable_domains` by
 Build- and test-time only (never served to a visitor): @electric-sql/pglite
 (Apache-2.0), @playwright/test (Apache-2.0), @tailwindcss/postcss and
 tailwindcss (MIT), cross-env (MIT), eslint and eslint-config-next (MIT),
-typescript (Apache-2.0), vitest (MIT), wawoff2 (MIT — the WOFF2 encoder used
+fake-indexeddb (Apache-2.0 — the unit tests' stand-in for the browser's
+IndexedDB), typescript (Apache-2.0), vitest (MIT), wawoff2 (MIT — the WOFF2 encoder used
 by `scripts/build-fonts.mjs`), and the `@types/*` packages (MIT).
 
 ---

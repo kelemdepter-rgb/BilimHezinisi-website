@@ -40,6 +40,7 @@ export function FindBar({
   onClose,
   batch,
   onRestore,
+  onReplacedAll,
 }: {
   open: boolean;
   editorRef: React.RefObject<HTMLDivElement | null>;
@@ -51,6 +52,8 @@ export function FindBar({
   batch: (work: () => void) => void;
   /** Put a whole earlier version of the note back on screen. */
   onRestore: (html: string) => void;
+  /** A replace-all changed the note: here is the note as it was, to keep on this device. */
+  onReplacedAll: (snapshot: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
@@ -253,6 +256,9 @@ export function FindBar({
       }
     });
     if (written === 0) return;
+    // «ھەممىنى يېنىۋېلىش» lasts until the next change; the version kept on
+    // this device (PROMPT-46) lasts beyond it.
+    onReplacedAll(snapshot);
     setUndoable({ count: written, snapshot });
     setNotice(`${written} ئورۇن ئالماشتۇرۇلدى.`);
     indexRef.current = 0;

@@ -108,6 +108,8 @@ export function NotesAiPanel({
   onInsert,
   onReplaceSelection,
   onDocumentChanged,
+  onBeforeApply,
+  onRestore,
 }: {
   open: boolean;
   /** Bumped on every open, so the panel resets without an effect. */
@@ -124,8 +126,12 @@ export function NotesAiPanel({
   onInsert: (text: string) => void;
   /** Replace what is selected, as one undoable step. */
   onReplaceSelection: (text: string) => void;
-  /** The panel changed the document itself (proofread apply / undo). */
+  /** The panel changed the document itself (a correction applied). */
   onDocumentChanged: () => void;
+  /** A correction is about to be written: the note as it is goes into this device's history. */
+  onBeforeApply: () => void;
+  /** Put the note back as it was before the correction — the editor's whole-document write. */
+  onRestore: (html: string) => void;
 }) {
   const docked = useDockedLayout();
 
@@ -479,6 +485,8 @@ export function NotesAiPanel({
   function applyProofread() {
     const editor = editorRef.current;
     if (!editor || !pending || !changes?.length) return;
+    // Kept beyond the undo below, which lasts only while the panel is open.
+    onBeforeApply();
     // One snapshot, one undo. A programmatic rewrite of several blocks cannot
     // be undone reliably through the browser's own stack, so the panel keeps
     // the document as it was and offers to put it back in a single tap.
@@ -509,14 +517,12 @@ export function NotesAiPanel({
   }
 
   function undoProofread() {
-    const editor = editorRef.current;
-    if (!editor || snapshot === null) return;
-    editor.innerHTML = snapshot;
+    if (snapshot === null) return;
+    onRestore(snapshot);
     setSnapshot(null);
     setApplied(false);
     setChanges(null);
     setPending(null);
-    onDocumentChanged();
   }
 
   const target = scope();

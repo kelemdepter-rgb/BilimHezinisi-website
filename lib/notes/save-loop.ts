@@ -16,8 +16,9 @@ import {
  * it changes and page events; the clock, the request and the device copy are
  * handed in, so a unit test can run a whole afternoon of writing on fake
  * timers. The quota and the server's rate limit (PROMPT-44) are result codes
- * in lib/notes/save-protocol.ts; stage 5 (local history) calls `adopt`
- * through the editor's one replace-the-document helper.
+ * in lib/notes/save-protocol.ts. Stage 5 (local history) hears about every
+ * confirmed save through `onConfirmed`, and puts an earlier version back
+ * through the editor's one replace-the-document helper and `change`.
  *
  * The rules, each with the bug it closes:
  *  - The title and body are read at the moment of sending, never captured
@@ -83,6 +84,11 @@ export type SaveLoopDeps = {
   isVisible(): boolean;
   /** The server's current version, or null when it could not be asked. */
   checkVersion?(): Promise<string | null>;
+  /**
+   * The server now holds `content` (stage 5 keeps it in this device's
+   * history). Told, never waited on: whatever it does, saving carries on.
+   */
+  onConfirmed?(content: NoteContent): void;
 };
 
 export type SaveSnapshot = Readonly<{
@@ -272,10 +278,15 @@ export class SaveLoop {
     this.enterConflict(serverUpdatedAt);
   }
 
-  /** «مېنىڭ نۇسخامنى بۇنىڭ ئورنىغا قويۇش»: the writer chose this version. */
-  keepMine(): void {
+  /**
+   * «مېنىڭ نۇسخامنى بۇنىڭ ئورنىغا قويۇش»: the writer chose this version. `over`
+   * is the server version it may replace — the one the editor has just kept
+   * in this device's history; if the server has moved on since, the save is
+   * refused as a conflict rather than writing over something nobody kept.
+   */
+  keepMine(over?: string): void {
     if (this.state !== "conflict" || this.serverUpdatedAt === null) return;
-    this.base = this.serverUpdatedAt;
+    this.base = over ?? this.serverUpdatedAt;
     this.serverUpdatedAt = null;
     this.code = null;
     this.setState("dirty");
@@ -292,8 +303,9 @@ export class SaveLoop {
 
   /**
    * The document on screen was replaced by a version the server already
-   * holds — the other version, after a conflict, or (stage 5) one from this
-   * device's history once it has been saved. Clean from here.
+   * holds — the other version, after a conflict, or one changed elsewhere.
+   * Clean from here. (A version from this device's history is NOT one: it
+   * goes back through `change`, and is saved like an edit.)
    */
   adopt(updatedAt: string): void {
     this.generation++;
@@ -386,6 +398,11 @@ export class SaveLoop {
     }
 
     if (result.ok) {
+      try {
+        this.deps.onConfirmed?.(content);
+      } catch {
+        // A history that failed is not a save that failed.
+      }
       this.base = result.updatedAt;
       this.confirmed = Math.max(this.confirmed, revision);
       this.retryCount = 0;

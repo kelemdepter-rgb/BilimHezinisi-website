@@ -46,7 +46,7 @@ type Request = {
   reject(error: unknown): void;
 };
 
-function setup(options: { base?: string | null } = {}) {
+function setup(options: { base?: string | null; onConfirmed?: (content: NoteContent) => void } = {}) {
   const requests: Request[] = [];
   const env = {
     content: { title: "خاتىرە", html: "<p>بىرىنچى</p>" } as NoteContent,
@@ -78,6 +78,7 @@ function setup(options: { base?: string | null } = {}) {
       env.versionChecks++;
       return env.remote;
     },
+    onConfirmed: options.onConfirmed,
   });
   loop.attach({
     read: () => ({ ...env.content }),
@@ -204,6 +205,44 @@ describe("when a save is sent", () => {
     expect(t.requests).toHaveLength(0);
     expect(t.label()).toBe("ئۇلىنىش يوق — بۇ ئۈسكۈنىدە ساقلاندى");
     expect(t.env.draft?.html).toBe("<p>ئۇلىنىشسىز</p>");
+  });
+});
+
+describe("telling the history what the server holds (PROMPT-46)", () => {
+  it("each confirmed save reports the content it carried — and nothing else does", async () => {
+    const confirmed: NoteContent[] = [];
+    const t = setup({ onConfirmed: (content) => confirmed.push(content) });
+    t.write("<p>a</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    // Written while that save is on its way: not what the server confirmed.
+    t.write("<p>ab</p>");
+    await t.answer({ ok: true, updatedAt: V1 });
+    expect(confirmed).toEqual([{ title: "خاتىرە", html: "<p>a</p>" }]);
+
+    await t.wait(MIN_SAVE_GAP_MS);
+    await t.answer(saveFailure("failed"));
+    await t.wait(RETRY_DELAYS_MS[0]);
+    await t.answer({ ok: true, updatedAt: V2 });
+    expect(confirmed).toEqual([
+      { title: "خاتىرە", html: "<p>a</p>" },
+      { title: "خاتىرە", html: "<p>ab</p>" },
+    ]);
+  });
+
+  it("a history that throws never stops a save", async () => {
+    const t = setup({
+      onConfirmed: () => {
+        throw new Error("the history broke");
+      },
+    });
+    t.write("<p>a</p>");
+    await t.wait(SAVE_DEBOUNCE_MS);
+    await t.answer({ ok: true, updatedAt: V1 });
+    expect(t.label()).toBe("ساقلاندى");
+    expect(t.env.draft).toBeNull();
+    t.write("<p>ab</p>");
+    await t.wait(MIN_SAVE_GAP_MS);
+    expect(t.requests[0].input).toMatchObject({ html: "<p>ab</p>", baseUpdatedAt: V1 });
   });
 });
 
@@ -546,6 +585,13 @@ describe("two versions of one note (N5)", () => {
     expect(t.requests[0].input.baseUpdatedAt).toBe(V2);
     await t.answer({ ok: true, updatedAt: "2026-10-08T10:01:00.2+00:00" });
     expect(t.label()).toBe("ساقلاندى");
+  });
+
+  it("«مېنىڭ نۇسخام…» may replace exactly the version the editor kept, and no later one", async () => {
+    const t = await inConflict();
+    const fetched = "2026-10-08T10:00:30.7+00:00";
+    t.loop.keepMine(fetched);
+    expect(t.requests[0].input.baseUpdatedAt).toBe(fetched);
   });
 
   it("adopting the server's version leaves the editor clean and the copy gone", async () => {

@@ -182,14 +182,20 @@ export function rememberPendingDeletion(userId: string): void {
   }
 }
 
-/** On the "account deleted" page: drop that account's copies, once. */
-export function finishPendingDeletion(): void {
+/**
+ * On the "account deleted" page: drop that account's copies, once. True when
+ * a deletion this tab asked for was confirmed, so the caller can clear the
+ * rest of what the notebook kept here.
+ */
+export function finishPendingDeletion(): boolean {
   try {
     const userId = window.sessionStorage.getItem(PENDING_DELETION_KEY);
-    if (!userId) return;
+    if (!userId) return false;
     window.sessionStorage.removeItem(PENDING_DELETION_KEY);
     clearAccountDrafts(browserStorage(), userId);
+    return true;
   } catch {
     // Storage refused: nothing was written there either.
+    return false;
   }
 }

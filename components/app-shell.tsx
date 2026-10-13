@@ -10,6 +10,7 @@ import { SearchField } from "@/components/search/search-field";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LinkPending } from "@/components/nav-pending";
 import { signOutAction } from "@/app/(auth)/actions";
+import { forgetNoteHistory } from "@/lib/notes/history";
 import type { Category, SessionInfo } from "@/lib/types";
 import type { Theme } from "@/lib/theme";
 import brandMark from "@/public/brand.png";
@@ -499,12 +500,48 @@ function AccountControls({ sessionPromise }: { sessionPromise: Promise<SessionIn
       >
         {session.displayName}
       </span>
-      <form action={signOutAction}>
-        <button type="submit" className="ibtn" title="چىقىش" aria-label="ھېساباتتىن چىقىش">
-          <Icon name="log-out" className="ic-lg" />
-        </button>
-      </form>
+      <SignOutForm />
     </>
+  );
+}
+
+/** At most this long for the notebook's history to go before signing out goes ahead. */
+const FORGET_HISTORY_WITHIN_MS = 1000;
+
+/**
+ * «ھېساباتتىن چىقىش». The earlier versions of notes kept on this device
+ * (PROMPT-46) leave with the account: the store is emptied first, for up to
+ * a second, and the sign-out goes ahead whatever happened to it. The note
+ * copies that have not reached the server yet stay — they are writing that
+ * exists nowhere else.
+ *
+ * The Server Action stays the form's own action, so signing out works with
+ * no JavaScript at all; with it, the submit is held, the store emptied, and
+ * the same form submitted again.
+ */
+function SignOutForm() {
+  const ready = useRef(false);
+  const pending = useRef(false);
+  return (
+    <form
+      action={signOutAction}
+      onSubmit={(event) => {
+        if (ready.current) return;
+        event.preventDefault();
+        if (pending.current) return;
+        pending.current = true;
+        const form = event.currentTarget;
+        void forgetNoteHistory(FORGET_HISTORY_WITHIN_MS).then(() => {
+          ready.current = true;
+          if (typeof form.requestSubmit === "function") form.requestSubmit();
+          else form.submit();
+        });
+      }}
+    >
+      <button type="submit" className="ibtn" title="چىقىش" aria-label="ھېساباتتىن چىقىش">
+        <Icon name="log-out" className="ic-lg" />
+      </button>
+    </form>
   );
 }
 

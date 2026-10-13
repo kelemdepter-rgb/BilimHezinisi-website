@@ -14,7 +14,8 @@ import {
   STORAGE_FULL_MESSAGE,
   normalizeTitle,
 } from "@/lib/notes/save-protocol";
-import type { SaveLoop, SaveSnapshot } from "@/lib/notes/save-loop";
+import type { NoteContent, SaveLoop, SaveSnapshot } from "@/lib/notes/save-loop";
+import { noteHistory, type VersionReason } from "@/lib/notes/history";
 import {
   forgetNoteSession,
   holdNoteOpen,
@@ -221,6 +222,20 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   }, []);
 
   /**
+   * Keep a version of the note on this device (PROMPT-46) — the note as it
+   * is on screen, unless another `content` is named. Read now, written in the
+   * background: nothing here ever waits for it, and a browser that cannot
+   * keep it simply does not.
+   */
+  const keepVersion = useCallback(
+    (reason: VersionReason, content?: NoteContent) => {
+      const kept = content ?? { title: titleRef.current, html: nodeRef.current?.innerHTML ?? "" };
+      void noteHistory.keep({ userId: note.user_id, noteId: note.id, ...kept, reason });
+    },
+    [note.id, note.user_id],
+  );
+
+  /**
    * The editor is uncontrolled on purpose: React must never re-render the
    * contentEditable while someone is typing in it, or the caret jumps. So the
    * content is written once, by hand, the moment the node exists — a ref
@@ -265,6 +280,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       .then((restored) => {
         if (restored) setNotice(RESTORED_NOTICE);
         setStarted(true);
+        // What the note opened on — the server's version or this device's
+        // copy — unless it is the newest version kept already.
+        keepVersion("open");
       });
 
     const onOnline = () => current.online();
@@ -284,7 +302,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       // never fires (N2).
       current.detach();
     };
-  }, [session]);
+  }, [session, keepVersion]);
 
   /**
    * The one way a whole document goes on screen: this device's copy once the
@@ -354,6 +372,8 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     const current = loopRef.current;
     if (!current || choosing) return;
     setChoosing(true);
+    // This note is about to show the other version: this one is kept here too.
+    keepVersion("before-conflict");
     try {
       const server = await loadNoteAction(note.id);
       if (!server.ok) {
@@ -371,6 +391,34 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       }
       replaceDocument(server);
       setCopy({ id: created.id, title: copyTitle });
+      setNotice(null);
+    } catch {
+      setNotice(CHOICE_FAILED);
+    } finally {
+      setChoosing(false);
+    }
+  }
+
+  /**
+   * «مېنىڭ نۇسخامنى بۇنىڭ ئورنىغا قويۇش» — this version over the server's. The
+   * server's is fetched first (one request, the writer's own note only) and
+   * kept on this device, and the save may replace exactly that version and
+   * no later one: so choosing this destroys nothing either. Without an
+   * answer nothing is replaced, as with keeping both.
+   */
+  async function keepMine() {
+    const current = loopRef.current;
+    if (!current || choosing) return;
+    setChoosing(true);
+    try {
+      const server = await loadNoteAction(note.id);
+      if (!server.ok) {
+        if (server.code === "not_found" || server.code === "needs_account") current.block(server.code);
+        else setNotice(CHOICE_FAILED);
+        return;
+      }
+      keepVersion("before-conflict", { title: server.title, html: server.html });
+      current.keepMine(server.updatedAt);
       setNotice(null);
     } catch {
       setNotice(CHOICE_FAILED);
@@ -503,6 +551,15 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       loopRef.current?.change();
     },
     [putDocument],
+  );
+
+  /** The AI panel's «ئەسلىگە قايتۇرۇش»: what it would discard is kept first. */
+  const undoAiCorrection = useCallback(
+    (html: string) => {
+      keepVersion("before-restore");
+      restoreBody(html);
+    },
+    [keepVersion, restoreBody],
   );
 
   /** The note's current selection as plain text, for pre-filling a panel. */
@@ -989,6 +1046,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           onClose={() => setFindOpen(false)}
           batch={runBatch}
           onRestore={restoreBody}
+          onReplacedAll={(snapshot) =>
+            keepVersion("before-replace-all", { title: titleRef.current, html: snapshot })
+          }
         />
       </header>
 
@@ -1023,7 +1083,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 className="hbtn"
                 data-testid="conflict-keep-mine"
                 disabled={choosing}
-                onClick={() => loopRef.current?.keepMine()}
+                onClick={() => void keepMine()}
               >
                 مېنىڭ نۇسخامنى بۇنىڭ ئورنىغا قويۇش
               </button>
@@ -1210,10 +1270,12 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           onRescope={captureAiScope}
           onInsert={insertText}
           onReplaceSelection={replaceSelectionWith}
-          // The panel rewrites blocks itself (proofread apply, or its undo),
-          // with no input event: without this a correction would sit on
-          // screen and never reach the database.
+          // The panel rewrites blocks itself when a correction is applied,
+          // with no input event: without this it would sit on screen and
+          // never reach the database.
           onDocumentChanged={afterEdit}
+          onBeforeApply={() => keepVersion("before-ai")}
+          onRestore={undoAiCorrection}
         />
       )}
 

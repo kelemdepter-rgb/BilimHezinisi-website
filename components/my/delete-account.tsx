@@ -15,9 +15,10 @@ import { rememberPendingDeletion } from "@/lib/notes/drafts";
  * suggestion.
  *
  * The notebook keeps unsaved writing in this browser, under the account's id
- * (lib/notes/drafts.ts). Those copies go too — but only once the server has
- * confirmed the deletion: the id is noted for the confirmation page, which
- * clears them. A refused deletion leaves every copy where it was.
+ * (lib/notes/drafts.ts), and earlier versions of notes (lib/notes/history.ts).
+ * Those go too — but only once the server has confirmed the deletion: the id
+ * is noted for the confirmation page, which clears them. A refused deletion
+ * leaves everything where it was.
  */
 export function DeleteAccount({
   email,

@@ -8,6 +8,7 @@ import {
   removeLegacyDraft,
   writeDraft,
 } from "@/lib/notes/drafts";
+import { noteHistory } from "@/lib/notes/history";
 import { decideOpening } from "@/lib/notes/opening";
 import {
   SaveLoop,
@@ -135,6 +136,8 @@ export function openNoteSession(note: NoteDocument): NoteSession {
         const result = await noteVersionAction(noteId);
         return result.ok ? result.updatedAt : null;
       },
+      // Every few minutes of writing leaves a version on this device (PROMPT-46).
+      onConfirmed: (saved) => void noteHistory.keepAuto({ userId, noteId, ...saved }),
     });
   if (!live) keepSaveLoop(key, loop);
 

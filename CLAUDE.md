@@ -402,6 +402,42 @@ here. The table is left in place because an applied migration is never edited ·
   visible part of the page (below the toolbar, inside the visual viewport),
   on an outside tap, on Escape or on an edit.
 
+## Notebook history (PROMPT-46 — every destructive action can be undone)
+- **Earlier versions live in the writer's browser and nowhere else**:
+  IndexedDB `bh-notebook`, store `versions` (`lib/notes/history.ts`), index
+  `[userId, noteId, at]`. Never Supabase — a server-side history would
+  multiply every note inside the 500 MB database. Never sent, never logged;
+  shown only through `sanitizeNoteHtml`.
+- **When a version is taken**: `open` (what the note opened on), `auto`
+  (after a CONFIRMED save — the save loop's `onConfirmed` — at most every 5
+  minutes per note), `before-replace-all` (the find bar's snapshot),
+  `before-ai` (right before a proofread is applied), `before-restore`
+  (before a version or the AI undo is put back) and `before-conflict` (both
+  choices: «ئىككى خاتىرە…» keeps this version; «مېنىڭ نۇسخام…» fetches the
+  server's with `loadNoteAction`, keeps it, and saves over EXACTLY that
+  version — `keepMine(updatedAt)` — so a later one is a conflict again).
+  A version identical to the note's newest is never stored twice; a
+  `before-*` reason relabels an identical newest `open`/`auto` version
+  instead, so a note opened and at once replaced-all is found under
+  «ئالماشتۇرۇشتىن بۇرۇن».
+- **Limits**: 30 versions a note, 20 MB for the store (2 × the characters of
+  title + HTML, a running total in store `meta`). Evicted: the oldest `auto`
+  first, then the oldest of any reason — never a note's newest.
+- **Fails soft, never waited on**: no IndexedDB, a refused one, a full disk or
+  an open that never answers (3 s) → `unavailable`, never an exception. The
+  editor starts the write and moves on; saving never waits for it. Tests and
+  scripts must never CREATE `bh-notebook` (a database of that name without
+  the stores leaves the history unavailable) — abort the upgrade instead.
+- **Putting a version back** = `before-restore`, then the editor's
+  `putDocument`, then `change()`: saved like an edit, conflict check intact.
+  The AI panel's undo goes through the editor (`onRestore`) too — the panel
+  never writes `innerHTML` itself.
+- **Cleared on sign-out** (the sign-out form empties the store first, waiting
+  at most 1 s, and works without JavaScript), **on account deletion** (once
+  the server confirmed — `finishPendingDeletion()` returns true), and by
+  «تازىلاش» on /my/account (two taps, inline). Unsaved drafts
+  (`bh-note-draft-v2:`) are never touched by any of these.
+
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
 `npm run lint` + `npm run build` → Playwright smoke (mobile + desktop viewports) →

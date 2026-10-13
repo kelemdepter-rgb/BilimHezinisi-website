@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { hasStaffTestEnv, loadEnvLocal } from "./env";
 import { scrollPage, scrollToTop } from "./fixtures/scroll";
-import { newNote } from "./fixtures/notes";
+import { deleteNote, newNote } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -32,18 +32,6 @@ const admin = () =>
   createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-
-async function deleteNote(page: Page, path: string) {
-  const id = path.split("/").pop();
-  await page.goto("/notes");
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page
-    .locator(`[data-testid="note-list"] li`)
-    .filter({ has: page.locator(`a[href="/notes/${id}"]`) })
-    .getByTestId("delete-note")
-    .click();
-  await expect(page.locator(`a[href="/notes/${id}"]`)).toHaveCount(0, { timeout: 20_000 });
-}
 
 /** Abort every Server Action this page sends until `allow()`. */
 async function blockSaves(page: Page) {

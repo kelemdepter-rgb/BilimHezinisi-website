@@ -19,23 +19,39 @@ type Answer = () => Promise<unknown>;
 const state = vi.hoisted(() => ({
   getUser: null as null | (() => Promise<unknown>),
   read: null as null | (() => Promise<unknown>),
+  /** What a delete answers (openTrash's expiry). */
+  remove: null as null | (() => Promise<unknown>),
   filters: [] as [string, unknown][],
+  deletes: [] as [string, unknown][][],
 }));
 
 const never = (): Promise<never> => new Promise<never>(() => undefined);
 
 /** A PostgREST query: every builder step returns itself; awaiting it reads. */
 function query() {
+  let deleting = false;
+  const filters: [string, unknown][] = [];
+  const filter = (column: string, value: unknown) => {
+    filters.push([column, value]);
+    state.filters.push([column, value]);
+    return chain;
+  };
+  const answer = () => (deleting ? state.remove!() : state.read!());
   const chain = {
     select: () => chain,
     order: () => chain,
-    eq: (column: string, value: unknown) => {
-      state.filters.push([column, value]);
+    delete: () => {
+      deleting = true;
+      state.deletes.push(filters);
       return chain;
     },
-    maybeSingle: () => state.read!(),
+    eq: filter,
+    not: (column: string, operator: string, value: unknown) => filter(column, `not.${operator}.${String(value)}`),
+    lt: (column: string, value: unknown) => filter(column, `lt.${String(value)}`),
+    gte: (column: string, value: unknown) => filter(column, `gte.${String(value)}`),
+    maybeSingle: () => answer(),
     then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) =>
-      state.read!().then(resolve, reject),
+      answer().then(resolve, reject),
   };
   return chain;
 }
@@ -47,7 +63,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
-import { getNote, listNotes } from "@/lib/notes/data";
+import { getNote, loadNotebook, openTrash } from "@/lib/notes/data";
 import { LibraryUnavailableError } from "@/lib/cache";
 import { SESSION_DEADLINE_MS } from "@/lib/supabase/timeouts";
 
@@ -65,7 +81,9 @@ const authSays = (error: unknown): Answer => async () => ({ data: { user: null }
 beforeEach(() => {
   state.getUser = async () => ({ data: { user: WRITER }, error: null });
   state.read = async () => ({ data: [], error: null });
+  state.remove = async () => ({ data: null, error: null });
   state.filters = [];
+  state.deletes = [];
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
@@ -77,13 +95,13 @@ afterEach(() => {
 describe("who is writing", () => {
   it("a visitor with no session is null — the pages send them to sign in", async () => {
     state.getUser = authSays(new AuthSessionMissingError());
-    expect(await listNotes()).toBeNull();
+    expect(await loadNotebook()).toBeNull();
     expect(await getNote(NOTE.id)).toBeNull();
   });
 
   it("a token Auth refused is null too", async () => {
     state.getUser = authSays(new AuthApiError("invalid JWT", 403, "bad_jwt"));
-    expect(await listNotes()).toBeNull();
+    expect(await loadNotebook()).toBeNull();
     expect(await getNote(NOTE.id)).toBeNull();
   });
 
@@ -93,14 +111,14 @@ describe("who is writing", () => {
     ["a 429", new AuthApiError("Too many requests", 429, "over_request_rate_limit")],
   ])("an Auth that could not be asked (%s) throws — never «not signed in», never a 404", async (_, error) => {
     state.getUser = authSays(error);
-    await expect(listNotes()).rejects.toThrow(LibraryUnavailableError);
+    await expect(loadNotebook()).rejects.toThrow(LibraryUnavailableError);
     await expect(getNote(NOTE.id)).rejects.toThrow(LibraryUnavailableError);
   });
 
   it("an Auth that never answers throws once the session deadline passes", async () => {
     vi.useFakeTimers();
     state.getUser = never;
-    const list = expect(listNotes()).rejects.toThrow(LibraryUnavailableError);
+    const list = expect(loadNotebook()).rejects.toThrow(LibraryUnavailableError);
     const note = expect(getNote(NOTE.id)).rejects.toThrow(LibraryUnavailableError);
     await vi.advanceTimersByTimeAsync(SESSION_DEADLINE_MS);
     await list;
@@ -113,20 +131,60 @@ describe("the notes", () => {
 
   it("a list that did not load throws, and is never an empty notebook", async () => {
     state.read = failed;
-    await expect(listNotes()).rejects.toThrow(LibraryUnavailableError);
+    await expect(loadNotebook()).rejects.toThrow(LibraryUnavailableError);
   });
 
   it("no notes at all is an empty list — that one is true", async () => {
-    expect(await listNotes()).toEqual([]);
+    expect(await loadNotebook()).toEqual({ notes: [], trash: [] });
     expect(state.filters).toContainEqual(["user_id", WRITER.id]);
   });
 
-  it("the writer's notes come back, newest first as read", async () => {
-    state.read = async () => ({
-      data: [{ id: NOTE.id, title: NOTE.title, updated_at: NOTE.updated_at, content_length: 6 }],
-      error: null,
+  it("the writer's notes come back, newest first as read, the trash beside them", async () => {
+    const row = {
+      id: NOTE.id,
+      title: NOTE.title,
+      preview: "مەزمۇن",
+      created_at: "2026-10-01T09:00:00.000Z",
+      updated_at: NOTE.updated_at,
+      pinned_at: null,
+      deleted_at: null,
+      content_length: 6,
+      content_bytes: 40,
+    };
+    const trashed = { ...row, id: 4144, deleted_at: "2026-10-08T09:00:00.000Z" };
+    state.read = async () => ({ data: [row, trashed], error: null });
+    const summary = {
+      id: NOTE.id,
+      title: NOTE.title,
+      preview: "مەزمۇن",
+      created_at: row.created_at,
+      updated_at: NOTE.updated_at,
+      pinned_at: null,
+      length: 6,
+      bytes: 40,
+    };
+    expect(await loadNotebook()).toEqual({
+      notes: [summary],
+      trash: [{ ...summary, id: 4144, deleted_at: trashed.deleted_at }],
     });
-    expect(await listNotes()).toEqual([{ id: NOTE.id, title: NOTE.title, updated_at: NOTE.updated_at, length: 6 }]);
+  });
+
+  it("opening the trash first deletes this writer's own notes whose 30 days are over", async () => {
+    const now = Date.parse("2026-10-13T12:00:00.000Z");
+    await openTrash(now);
+    expect(state.deletes).toHaveLength(1);
+    expect(state.deletes[0]).toEqual([
+      ["user_id", WRITER.id],
+      ["deleted_at", "not.is.null"],
+      ["deleted_at", "lt.2026-09-13T12:00:00.000Z"],
+    ]);
+  });
+
+  it("an expiry that failed leaves the trash readable; a trash that did not load throws", async () => {
+    state.remove = async () => ({ data: null, error: { code: "57014", message: "timeout" } });
+    expect(await openTrash()).toEqual([]);
+    state.read = failed;
+    await expect(openTrash()).rejects.toThrow(LibraryUnavailableError);
   });
 
   it("a note that did not load throws, rather than becoming a 404", async () => {

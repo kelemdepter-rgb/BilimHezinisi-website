@@ -1,8 +1,12 @@
 import { NOTE_QUOTA_MAX_NOTES } from "@/lib/notes/limits";
 import { QUOTA_MEGABYTES, formatMegabytes, type NotebookUsage } from "@/lib/notes/usage";
 
-/** Said once the notebook is full, under either limit. */
-export const USAGE_FULL_HINT = "كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز، ئورۇن بوشايدۇ.";
+/**
+ * Said once the notebook is full, under either limit. Deleting only moves a
+ * note to the trash, which still counts (migration 0031): the room comes
+ * back when the trash is emptied.
+ */
+export const USAGE_FULL_HINT = "كېرەكسىز خاتىرىلەرنى ئۆچۈرۈپ، ئەخلەت ساندۇقىنى بوشاتسىڭىز، ئورۇن بوشايدۇ.";
 
 /** The line's id, for «يېڭى خاتىرە» to point at when no new note fits. */
 export const NOTES_USAGE_ID = "notes-usage";

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { NoteList } from "@/components/notes/note-list";
 import { NotesUsage } from "@/components/notes/notes-usage";
-import { listNotes } from "@/lib/notes/data";
+import { loadNotebook } from "@/lib/notes/data";
 import { NOTE_QUOTA_MAX_NOTES } from "@/lib/notes/limits";
 import { notebookUsage } from "@/lib/notes/usage";
 
@@ -13,13 +13,14 @@ export const metadata: Metadata = {
 };
 
 export default async function NotesPage() {
-  // listNotes returns null for a visitor with no session — notes are personal,
-  // so there is nothing to show them, only somewhere to sign in.
-  const notes = await listNotes();
-  if (notes === null) redirect("/login");
+  // loadNotebook returns null for a visitor with no session — notes are
+  // personal, so there is nothing to show them, only somewhere to sign in.
+  const notebook = await loadNotebook();
+  if (notebook === null) redirect("/login");
 
-  // From the list already loaded: the usage line costs no request of its own.
-  const usage = notebookUsage(notes);
+  // From the rows already loaded: the usage line costs no request of its
+  // own. The trash counts, as it does for the quota (migration 0031).
+  const usage = notebookUsage([...notebook.notes, ...notebook.trash]);
 
   return (
     <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
@@ -32,7 +33,11 @@ export default async function NotesPage() {
         شەخسىي خاتىرىلىرىڭىز — پەقەت سىز كۆرەلەيسىز. Word ھۆججىتى قىلىپ چىقىرالايسىز.
       </p>
 
-      <NoteList notes={notes} countFull={usage.count >= NOTE_QUOTA_MAX_NOTES} />
+      <NoteList
+        notes={notebook.notes}
+        trashCount={notebook.trash.length}
+        countFull={usage.count >= NOTE_QUOTA_MAX_NOTES}
+      />
     </div>
   );
 }

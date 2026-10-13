@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createClient } from "@supabase/supabase-js";
 import { READER_STATE_PATH, freshPassword, hasStaffTestEnv, loadEnvLocal, testEmail } from "./env";
 import { scrollPage } from "./fixtures/scroll";
-import { chooseBlock, newNote } from "./fixtures/notes";
+import { chooseBlock, deleteNote, newNote } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -11,16 +11,6 @@ test.skip(!hasStaffTestEnv(), "Supabase env not configured");
 /** A word the shipped dictionary does not contain, for the spellcheck panel. */
 const MISSPELLING = "ئۇيغور";
 const BODY_TEXT = "بۇ مېنىڭ سىناق خاتىرەم.";
-
-async function deleteNote(page: Page, path: string) {
-  const id = path.split("/").pop();
-  await page.goto("/notes");
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page.locator(`[data-testid="note-list"] li`).filter({
-    has: page.locator(`a[href="/notes/${id}"]`),
-  }).getByTestId("delete-note").click();
-  await expect(page.locator(`a[href="/notes/${id}"]`)).toHaveCount(0, { timeout: 20_000 });
-}
 
 /**
  * Where the misspelled word is on screen.

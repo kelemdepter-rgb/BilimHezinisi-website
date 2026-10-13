@@ -80,6 +80,41 @@ export async function dropNote(path: string): Promise<void> {
   if (error) throw new Error(`could not delete scratch note ${id}: ${error.message}`);
 }
 
+/** Where a note is, as the database has it. */
+async function noteState(id: number): Promise<"live" | "trash" | "gone"> {
+  const { data, error } = await adminClient().from("note_documents").select("deleted_at").eq("id", id).maybeSingle();
+  if (error) throw new Error(`could not read scratch note ${id}: ${error.message}`);
+  if (!data) return "gone";
+  return (data as { deleted_at: string | null }).deleted_at ? "trash" : "live";
+}
+
+/**
+ * Delete a scratch note the way a writer does since PROMPT-47: «ئۆچۈرۈش» on
+ * the list moves it to the trash at once, no question asked — then it is
+ * deleted for good, so no run leaves notes behind in the staff account's
+ * trash (which still counts against its 200). That second step goes straight
+ * to the database; the trash's own two-step delete is the subject of
+ * tests/notes-list.spec.ts, not of every spec.
+ *
+ * A note nobody wrote in may already be gone by the time the list renders:
+ * leaving it discards it (discard_note_if_empty). That is fine — a note the
+ * database still holds and the list does not show is not.
+ */
+export async function deleteNote(page: Page, path: string): Promise<void> {
+  const id = Number(path.split("/").pop());
+  await page.goto("/notes");
+  await expect(page.getByTestId("new-note")).toBeVisible();
+  const row = page.locator('[data-testid="note-row"]').filter({ has: page.locator(`a[href="/notes/${id}"]`) });
+  if ((await row.count()) === 0) {
+    expect(await noteState(id), `note ${id} is in the database but not in the list`).toBe("gone");
+    return;
+  }
+  await row.getByTestId("delete-note").click();
+  await expect(row).toHaveCount(0, { timeout: 20_000 });
+  await expect.poll(() => noteState(id), { timeout: 20_000 }).not.toBe("live");
+  await dropNote(path);
+}
+
 /**
  * Open the find bar wherever its button is: in the tool row where there is
  * room, under «باشقا ئىقتىدارلار» on a phone (PROMPT-45).

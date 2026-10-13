@@ -1,15 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * The notebook's Server Actions (PROMPT-43): a save is written only over the
- * version it was made on, every refusal has its own code, and every query is
- * filtered by the caller's id on top of RLS. The database is a small fake that
- * records each query's filters and moves `updated_at` on every write, the way
- * the trigger note_documents_set_updated_at does. The real PostgREST round
- * trip of the timestamp is tests/notes-save.spec.ts.
+ * The notebook's Server Actions (PROMPT-43, PROMPT-47): a save is written only
+ * over the version it was made on and never into the trash, every refusal has
+ * its own code, and every query is filtered by the caller's id on top of RLS.
+ * The database is a small fake that records each query's filters and moves
+ * `updated_at` when the title or the text is written, the way the trigger
+ * note_documents_set_updated_at does since 0031. The real PostgREST round trip
+ * of the timestamp is tests/notes-save.spec.ts.
  */
 
-type Row = { id: number; user_id: string; title: string; content_html: string; content_text: string; updated_at: string };
+type Row = {
+  id: number;
+  user_id: string;
+  title: string;
+  content_html: string;
+  content_text: string;
+  updated_at: string;
+  pinned_at?: string | null;
+  deleted_at?: string | null;
+};
 type Call = {
   table: string;
   op: "select" | "update" | "insert" | "delete";
@@ -17,6 +27,9 @@ type Call = {
   values?: Record<string, unknown>;
   columns?: string;
 };
+
+/** `.not(column, "is", null)` — recorded as this in a call's filters. */
+const NOT_NULL = "not null";
 
 const state = vi.hoisted(() => ({
   owner: null as { userId: string } | null,
@@ -27,8 +40,12 @@ const state = vi.hoisted(() => ({
   /** What the database answers to the next insert or update (migration 0030's trigger). */
   writeError: null as { code: string; message: string } | null,
   reported: [] as string[],
+  /** Everything handed to the log, to prove what is never in it. */
+  logged: [] as unknown[],
   clock: 0,
   revalidated: [] as string[],
+  rpcs: [] as { name: string; args: Record<string, unknown> }[],
+  rpcAnswer: null as null | ((name: string, args: Record<string, unknown>) => { data: unknown; error: unknown }),
 }));
 
 const ME = "aaaaaaaa-0000-0000-0000-000000000001";
@@ -45,7 +62,10 @@ function run(call: Call) {
     return { data: null, error: state.writeError };
   }
   const matches = (row: Row) =>
-    call.filters.every(([column, value]) => row[column as keyof Row] === value);
+    call.filters.every(([column, value]) => {
+      const cell = row[column as keyof Row] ?? null;
+      return value === NOT_NULL ? cell !== null : cell === value;
+    });
   if (call.op === "insert") {
     const row: Row = {
       id: state.rows.length + 100,
@@ -61,12 +81,14 @@ function run(call: Call) {
   const row = state.rows.find(matches);
   if (call.op === "update") {
     if (!row) return { data: null, error: null };
-    Object.assign(row, call.values, { updated_at: version() });
-    return { data: { updated_at: row.updated_at }, error: null };
+    const edit = ["title", "content_html", "content_text"].some((column) => column in call.values!);
+    Object.assign(row, call.values, edit ? { updated_at: version() } : {});
+    return { data: { id: row.id, updated_at: row.updated_at }, error: null };
   }
   if (call.op === "delete") {
+    const removed = state.rows.filter(matches);
     state.rows = state.rows.filter((candidate) => !matches(candidate));
-    return { data: null, error: null };
+    return { data: removed.map((gone) => ({ id: gone.id })), error: null };
   }
   return { data: row ? { ...row } : null, error: null };
 }
@@ -97,6 +119,15 @@ function from(table: string) {
       call.filters.push([column, value]);
       return builder;
     },
+    is(column: string, value: null) {
+      call.filters.push([column, value]);
+      return builder;
+    },
+    not(column: string, operator: string, value: null) {
+      if (operator !== "is" || value !== null) throw new Error("the fake knows only not.is.null");
+      call.filters.push([column, NOT_NULL]);
+      return builder;
+    },
     maybeSingle: async () => run(call),
     single: async () => run(call),
     then(resolve: (value: unknown) => void) {
@@ -106,19 +137,43 @@ function from(table: string) {
   return builder;
 }
 
+async function rpc(name: string, args: Record<string, unknown>) {
+  state.rpcs.push({ name, args });
+  if (state.failQueries) return { data: null, error: { code: "57014", message: "timeout" } };
+  return state.rpcAnswer ? state.rpcAnswer(name, args) : { data: null, error: null };
+}
+
 vi.mock("next/cache", () => ({ revalidatePath: (path: string) => void state.revalidated.push(path) }));
-vi.mock("@/lib/server-log", () => ({ reportServerError: (where: string) => void state.reported.push(where) }));
-vi.mock("@/lib/notes/data", () => ({
+vi.mock("@/lib/server-log", () => ({
+  reportServerError: (where: string, error: unknown) => {
+    state.reported.push(where);
+    state.logged.push(where, error);
+  },
+}));
+vi.mock("@/lib/notes/data", async (original) => ({
+  ...(await original<typeof import("@/lib/notes/data")>()),
   ownerClient: async () => {
     if (state.ownerThrows) throw new Error("auth did not answer");
-    return state.owner ? { supabase: { from }, userId: state.owner.userId } : null;
+    return state.owner ? { supabase: { from, rpc }, userId: state.owner.userId } : null;
   },
 }));
 
-const { createNoteAction, loadNoteAction, noteVersionAction, saveNoteAction, deleteNoteAction } =
-  await import("@/app/notes/actions");
+const {
+  createNoteAction,
+  loadNoteAction,
+  noteVersionAction,
+  saveNoteAction,
+  pinNoteAction,
+  trashNoteAction,
+  restoreNoteAction,
+  deleteNoteForeverAction,
+  emptyTrashAction,
+  searchMyNotesAction,
+  discardIfEmptyAction,
+} = await import("@/app/notes/actions");
 const { CREATE_RATE_MESSAGE, MAX_SAVE_BYTES, SAVE_MESSAGES } = await import("@/lib/notes/save-protocol");
-const { NOTE_CREATE_RULE, NOTE_SAVE_RULE, resetRateLimits } = await import("@/lib/rate-limit");
+const { LIST_MESSAGES } = await import("@/lib/notes/list-protocol");
+const { NOTE_CREATE_RULE, NOTE_SAVE_RULE, NOTE_SEARCH_RULE, resetRateLimits } = await import("@/lib/rate-limit");
 const { MAX_NOTE_CHARS } = await import("@/lib/notes/limits");
 
 function seed(overrides: Partial<Row> = {}): Row {
@@ -145,6 +200,9 @@ beforeEach(() => {
   state.revalidated = [];
   state.writeError = null;
   state.reported = [];
+  state.logged = [];
+  state.rpcs = [];
+  state.rpcAnswer = null;
   resetRateLimits();
 });
 
@@ -169,8 +227,18 @@ describe("saveNoteAction", () => {
       ["id", 7],
       ["user_id", ME],
       ["updated_at", base],
+      ["deleted_at", null],
     ]);
     expect(state.revalidated).toEqual(["/notes"]);
+  });
+
+  it("never writes into the trash: a trashed note answers in_trash, and keeps its text", async () => {
+    const row = seed({ deleted_at: "2026-10-13T08:00:00+00:00" });
+    const result = await saveNoteAction({ id: 7, title: "x", html: "<p>يېڭى</p>", baseUpdatedAt: row.updated_at });
+    expect(result).toEqual({ ok: false, code: "in_trash", error: SAVE_MESSAGES.in_trash });
+    expect(SAVE_MESSAGES.in_trash).toBe("بۇ خاتىرە ئەخلەت ساندۇقىدا.");
+    expect(row.content_html).toBe("<p>بىر</p>");
+    expect(state.revalidated).toEqual([]);
   });
 
   it("a stale version is a conflict, carrying the server's version — nothing is written", async () => {
@@ -319,19 +387,166 @@ describe("noteVersionAction and loadNoteAction", () => {
     expect(await loadNoteAction(Number.NaN)).toMatchObject({ code: "not_found" });
     expect(state.calls).toEqual([]);
   });
+
+  it("loadNoteAction will not hand a conflict choice a note in the trash", async () => {
+    seed({ deleted_at: "2026-10-13T08:00:00+00:00" });
+    expect(await loadNoteAction(7)).toEqual({ ok: false, code: "in_trash", error: SAVE_MESSAGES.in_trash });
+  });
 });
 
-describe("deleteNoteAction", () => {
-  it("still deletes only the caller's own note", async () => {
-    seed();
-    seed({ id: 8, user_id: SOMEONE });
-    const form = new FormData();
-    form.set("id", "8");
-    await deleteNoteAction(form);
+describe("pin, trash and restore", () => {
+  it("pin and unpin the caller's own note, without making it an edit", async () => {
+    const row = seed();
+    const version = row.updated_at;
+    expect(await pinNoteAction(7, true)).toEqual({ ok: true });
+    expect(row.pinned_at).toEqual(expect.any(String));
+    expect(await pinNoteAction(7, false)).toEqual({ ok: true });
+    expect(row.pinned_at).toBeNull();
+    expect(row.updated_at).toBe(version);
+    expect(state.revalidated).toEqual(["/notes", "/notes"]);
+    for (const call of state.calls) expect(call.filters).toContainEqual(["user_id", ME]);
+  });
+
+  it("move a note to the trash and back — the same note, the same text, the same version", async () => {
+    const row = seed();
+    const version = row.updated_at;
+    expect(await trashNoteAction(7)).toEqual({ ok: true });
+    expect(row.deleted_at).toEqual(expect.any(String));
+    // Twice is not an error: a second tap, or another tab first.
+    expect(await trashNoteAction(7)).toEqual({ ok: true });
+    expect(await restoreNoteAction(7)).toEqual({ ok: true });
+    expect(row.deleted_at).toBeNull();
+    expect(await restoreNoteAction(7)).toEqual({ ok: true });
+    expect(row).toMatchObject({ content_html: "<p>بىر</p>", updated_at: version });
+  });
+
+  it("a note in the trash cannot be pinned, and nobody else's note can be touched at all", async () => {
+    seed({ deleted_at: "2026-10-13T08:00:00+00:00" });
+    const theirs = seed({ id: 8, user_id: SOMEONE });
+    expect(await pinNoteAction(7, true)).toEqual({ ok: false, code: "not_found", error: LIST_MESSAGES.not_found });
+    for (const attempt of [pinNoteAction(8, true), trashNoteAction(8), restoreNoteAction(8), deleteNoteForeverAction(8)]) {
+      expect(await attempt).toMatchObject({ ok: false, code: "not_found" });
+    }
+    expect(theirs.pinned_at ?? null).toBeNull();
+    expect(theirs.deleted_at ?? null).toBeNull();
     expect(state.rows.map((row) => row.id)).toEqual([7, 8]);
-    form.set("id", "7");
-    expect(await deleteNoteAction(form)).toMatchObject({ ok: true });
-    expect(state.rows.map((row) => row.id)).toEqual([8]);
+  });
+
+  it("signed out, a strange id, or a database that does not answer: refused, said in Uyghur", async () => {
+    seed();
+    expect(await trashNoteAction("7" as never)).toMatchObject({ code: "not_found" });
+    state.failQueries = true;
+    expect(await trashNoteAction(7)).toEqual({ ok: false, code: "failed", error: LIST_MESSAGES.failed });
+    state.owner = null;
+    expect(await pinNoteAction(7, true)).toEqual({
+      ok: false,
+      code: "needs_account",
+      error: LIST_MESSAGES.needs_account,
+    });
+  });
+});
+
+describe("deleting for good", () => {
+  it("only a note already in the trash", async () => {
+    seed();
+    expect(await deleteNoteForeverAction(7)).toMatchObject({ ok: false, code: "not_found" });
+    expect(state.rows).toHaveLength(1);
+    await trashNoteAction(7);
+    expect(await deleteNoteForeverAction(7)).toEqual({ ok: true });
+    expect(state.rows).toEqual([]);
+  });
+
+  it("emptying the trash takes this writer's trash and nothing else", async () => {
+    seed({ id: 7, deleted_at: "2026-10-01T08:00:00+00:00" });
+    seed({ id: 8, deleted_at: "2026-10-02T08:00:00+00:00" });
+    seed({ id: 9 });
+    seed({ id: 10, user_id: SOMEONE, deleted_at: "2026-10-02T08:00:00+00:00" });
+    expect(await emptyTrashAction()).toEqual({ ok: true, deleted: 2 });
+    expect(state.rows.map((row) => row.id)).toEqual([9, 10]);
+  });
+});
+
+describe("searchMyNotesAction", () => {
+  const found = {
+    id: 7,
+    title: "سەپەر",
+    preview: "بۈگۈن",
+    created_at: "2026-10-01T08:00:00+00:00",
+    updated_at: "2026-10-02T08:00:00+00:00",
+    pinned_at: null,
+    content_length: 5,
+    content_bytes: 30,
+  };
+
+  it("asks search_my_notes with the trimmed words, and answers the list's rows", async () => {
+    state.rpcAnswer = () => ({ data: [found], error: null });
+    expect(await searchMyNotesAction("  سەپەر ")).toEqual({
+      ok: true,
+      notes: [
+        {
+          id: 7,
+          title: "سەپەر",
+          preview: "بۈگۈن",
+          created_at: found.created_at,
+          updated_at: found.updated_at,
+          pinned_at: null,
+          length: 5,
+          bytes: 30,
+        },
+      ],
+    });
+    expect(state.rpcs).toEqual([{ name: "search_my_notes", args: { p_query: "سەپەر", p_limit: 50 } }]);
+  });
+
+  it("does not ask for fewer than 2 or more than 100 characters", async () => {
+    for (const words of ["", " س ", "س".repeat(101)]) {
+      expect(await searchMyNotesAction(words)).toEqual({ ok: true, notes: [] });
+    }
+    expect(state.rpcs).toEqual([]);
+  });
+
+  it("never puts the words into the log", async () => {
+    state.failQueries = true;
+    expect(await searchMyNotesAction("مەخپىي سۆز")).toEqual({ ok: false, code: "failed", error: LIST_MESSAGES.failed });
+    expect(state.reported).toEqual(["searchMyNotesAction:rpc"]);
+    expect(JSON.stringify(state.logged)).not.toContain("مەخپىي");
+  });
+
+  it("NOTE_SEARCH_RULE's allowance, then `rate` before the database is asked — for that writer only", async () => {
+    state.rpcAnswer = () => ({ data: [], error: null });
+    for (let search = 0; search < NOTE_SEARCH_RULE.limit; search += 1) {
+      expect((await searchMyNotesAction("سۆز")).ok).toBe(true);
+    }
+    state.rpcs = [];
+    expect(await searchMyNotesAction("سۆز")).toEqual({ ok: false, code: "rate", error: LIST_MESSAGES.rate });
+    expect(state.rpcs).toEqual([]);
+    state.owner = { userId: SOMEONE };
+    expect((await searchMyNotesAction("سۆز")).ok).toBe(true);
+  });
+
+  it("signed out: refused", async () => {
+    state.owner = null;
+    expect(await searchMyNotesAction("سۆز")).toMatchObject({ ok: false, code: "needs_account" });
+  });
+});
+
+describe("discardIfEmptyAction", () => {
+  it("leaves the decision to discard_note_if_empty, and redraws nothing", async () => {
+    state.rpcAnswer = (_name, args) => ({ data: args.p_id === 7, error: null });
+    expect(await discardIfEmptyAction(7)).toEqual({ ok: true, discarded: true });
+    expect(await discardIfEmptyAction(8)).toEqual({ ok: true, discarded: false });
+    expect(state.rpcs).toEqual([
+      { name: "discard_note_if_empty", args: { p_id: 7 } },
+      { name: "discard_note_if_empty", args: { p_id: 8 } },
+    ]);
+    expect(state.revalidated).toEqual([]);
+  });
+
+  it("a strange id or a signed-out caller never reaches the database", async () => {
+    expect(await discardIfEmptyAction(0)).toMatchObject({ ok: false, code: "not_found" });
+    state.owner = null;
+    expect(await discardIfEmptyAction(7)).toMatchObject({ ok: false, code: "needs_account" });
+    expect(state.rpcs).toEqual([]);
   });
 });
 

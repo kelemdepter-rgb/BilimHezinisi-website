@@ -24,6 +24,9 @@ export const SAVE_CODES = [
   "quota_bytes",
   // Saving faster than any writer types (lib/rate-limit.ts NOTE_SAVE_RULE).
   "rate",
+  // The note was moved to the trash — in another tab, on another device
+  // (PROMPT-47). Put back with «قايتۇرۇش», then saved.
+  "in_trash",
 ] as const;
 
 export type SaveCode = (typeof SAVE_CODES)[number];
@@ -70,6 +73,9 @@ export const CODE_STATE: Record<SaveCode, "blocked" | "retrying" | "conflict"> =
   quota_bytes: "blocked",
   // Waits RATE_RETRY_MS (lib/notes/save-loop.ts), then tries by itself.
   rate: "retrying",
+  // Nothing is sent again until the writer puts the note back (`resume`);
+  // the editor holds still meanwhile, so there is no next edit to send.
+  in_trash: "blocked",
 };
 
 /** The exact text of `data-testid="save-state"` in each state. */
@@ -96,10 +102,12 @@ export const SAVE_MESSAGES: Record<SaveCode, string> = {
   conflict:
     "بۇ خاتىرە باشقا يەردە (باشقا بەتكۈچ ياكى ئۈسكۈنىدە) ئۆزگەرتىلدى. يازغانلىرىڭىز يوقالمىدى.",
   failed: "مەشغۇلات مەغلۇپ بولدى. سەل تۇرۇپ قايتا سىناڭ.",
-  quota_count: `خاتىرە دەپتىرىڭىز تولدى: ئەڭ كۆپ ${NOTE_QUOTA_MAX_NOTES} خاتىرە ساقلىغىلى بولىدۇ. كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز، يېڭىسىنى قوشالايسىز.`,
-  quota_bytes: `خاتىرە دەپتىرىڭىزنىڭ ھەجمى تولدى (${QUOTA_MEGABYTES} MB). كېرەكسىز خاتىرىلەرنى ئۆچۈرسىڭىز ياكى قىسقارتسىڭىز، ساقلاش داۋاملىشىدۇ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.`,
+  // The trash still counts (migration 0031), so both say so.
+  quota_count: `خاتىرە دەپتىرىڭىز تولدى: ئەڭ كۆپ ${NOTE_QUOTA_MAX_NOTES} خاتىرە ساقلىغىلى بولىدۇ (ئەخلەت ساندۇقىدىكىلەرمۇ ھېسابلىنىدۇ). كېرەكسىز خاتىرىلەرنى ئۆچۈرۈپ، ئەخلەت ساندۇقىنى بوشاتسىڭىز، يېڭىسىنى قوشالايسىز.`,
+  quota_bytes: `خاتىرە دەپتىرىڭىزنىڭ ھەجمى تولدى (${QUOTA_MEGABYTES} MB، ئەخلەت ساندۇقى بىلەن). ئەخلەت ساندۇقىنى بوشاتسىڭىز ياكى خاتىرىلەرنى قىسقارتسىڭىز، ساقلاش داۋاملىشىدۇ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.`,
   // «بىر مىنۇت» is RATE_RETRY_MS (lib/notes/save-loop.ts); a unit test ties the two.
   rate: "بەك تېز ساقلىنىۋاتىدۇ — بىر مىنۇتتىن كېيىن ئۆزى قايتا سىنايدۇ. يازغانلىرىڭىز بۇ ئۈسكۈنىدە ساقلاندى.",
+  in_trash: "بۇ خاتىرە ئەخلەت ساندۇقىدا.",
 };
 
 /**

@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import JSZip from "jszip";
 import { SEED_NEEDLE, hasStaffTestEnv, loadEnvLocal } from "./env";
 import { scrollPage, scrollToTop, wheelWorks } from "./fixtures/scroll";
-import { newNote, openFind } from "./fixtures/notes";
+import { deleteNote, newNote, openFind } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -18,18 +18,6 @@ test.skip(!hasStaffTestEnv(), "Supabase env not configured");
 const BODY_TEXT = "بۇ مېنىڭ سىناق خاتىرەم.";
 /** The verse the aya tests insert. Al-Fatiha, second verse. */
 const AYA = { sura: 1, aya: 2 };
-
-async function deleteNote(page: Page, path: string) {
-  const id = path.split("/").pop();
-  await page.goto("/notes");
-  page.once("dialog", (dialog) => void dialog.accept());
-  await page
-    .locator(`[data-testid="note-list"] li`)
-    .filter({ has: page.locator(`a[href="/notes/${id}"]`) })
-    .getByTestId("delete-note")
-    .click();
-  await expect(page.locator(`a[href="/notes/${id}"]`)).toHaveCount(0, { timeout: 20_000 });
-}
 
 /** Put the caret in the note and type, so an insert has somewhere to land. */
 async function startWriting(page: Page, text = BODY_TEXT) {

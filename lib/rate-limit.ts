@@ -119,6 +119,14 @@ export const NOTE_CREATE_RULE: RateLimitRule = { limit: 30, windowMs: 60 * 60_00
 export const NOTE_SAVE_RULE: RateLimitRule = { limit: 600, windowMs: 10 * 60_000 };
 
 /**
+ * Searching one's own notes from /notes (PROMPT-47). Keyed on the user, like
+ * NOTE_SOURCE_RULE. The box waits 300 ms after the last keystroke, so typing
+ * makes a few searches a word; sixty a minute is more than any hand, and
+ * stops a script running search_my_notes over a full notebook in a loop.
+ */
+export const NOTE_SEARCH_RULE: RateLimitRule = { limit: 60, windowMs: 60_000 };
+
+/**
  * Searching the library: /search with a word, and the «show every place in
  * this book» expander beneath its results (one shared bucket per address).
  *

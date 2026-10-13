@@ -98,7 +98,8 @@ chars, split on paragraph boundaries) for lazy loading and search snippets ·
 text_ar, text_ar_simple, text_ug) + FTS ·
 `bookmarks`, `book_notes`, `reading_progress`, `recent_reads` (all per-user:
 user_id + book_id + position) ·
-`note_documents` (user_id, title, content_html sanitized, content_text) — Notebook ·
+`note_documents` (user_id, title, content_html sanitized, content_text, pinned_at,
+deleted_at = in the trash, generated preview / content_length / content_bytes) — Notebook ·
 `ai_usage` (user_id, day, model, requests, tokens_in, tokens_out) — **UNUSED, and
 must stay that way**: AI runs entirely in the reader's browser, so nothing writes
 here. The table is left in place because an applied migration is never edited ·
@@ -437,6 +438,50 @@ here. The table is left in place because an applied migration is never edited ·
   the server confirmed — `finishPendingDeletion()` returns true), and by
   «تازىلاش» on /my/account (two taps, inline). Unsaved drafts
   (`bh-note-draft-v2:`) are never touched by any of these.
+
+## Notebook list and trash (PROMPT-47)
+- **Deleting is moving to the trash** (`deleted_at`, migration 0031): at
+  once, no question, with «قايتۇرۇش» in the row's own place for 10 s. A note
+  is deleted for good only from /notes/trash, always in two steps in an
+  inline box — never a native dialog — or after `note_trash_days()` = 30
+  days (`NOTE_TRASH_DAYS`), by `purge_note_trash` from /api/health
+  (production only, 500 a day, last and only while the run has time, the
+  count alone logged) or when the writer opens the trash. **The trash still
+  counts against the quota**, and the quota messages say so.
+- **Pinning and the trash are not edits.** `note_documents_set_updated_at`
+  fires only on `title, content_html, content_text`; `updated_at = created_at`
+  means "never saved". Never move `updated_at` for anything else — open
+  editors would see a conflict.
+- **A save never writes into the trash** (`deleted_at is null` in its
+  filter) → `in_trash`: the editor holds still, keeps the device copy, and
+  «قايتۇرۇش» → `SaveLoop.resume()`. A trashed note's URL opens read-only
+  (`TrashedNoteView`), with no save loop at all.
+- **The list never downloads a body**: the stored `preview` (160
+  characters), `content_length`, `content_bytes`. One read gives the notes
+  and the trash (`loadNotebook`); the usage line counts both.
+- **`search_my_notes`** is SECURITY INVOKER, one literal phrase, 2–100
+  characters, 50 rows, pinned first. It never normalizes the notes: the
+  normalized query becomes a pattern accepting exactly what `ug_normalize`
+  folds (alif forms, marks between letters, whitespace runs, case), every
+  other character escaped. tests/unit/note-list-sql.test.ts compares it with
+  strpos over ug_normalize on generated texts; **if ug_normalize ever
+  changes, change the pattern with it.** 0.1 s at 200 × 60,000 characters
+  on the local stack (docs/notes-search.md; plain strpos took 2 s). What is
+  typed is never stored or logged; `NOTE_SEARCH_RULE` 60/min per writer.
+- **Title order**: `Intl.Collator("ug")` where the engine has it (Firefox,
+  Safari); Chromium has none and gets the same CLDR order from
+  `uyghurSortKey` (ئ first, then the alphabet) — never code-point order.
+- **Untouched new notes go**: leaving inside the app asks
+  `discard_note_if_empty` (default title, no text, `updated_at =
+  created_at`; the server decides) — the back arrow waits for it, any other
+  exit asks once React has really unmounted (never from an effect cleanup
+  directly: development runs every cleanup once after mounting), never while
+  another tab holds the note's Web Lock, and **never on pagehide** (it fires
+  on a reload). The list tidies notes still untouched a day after they were
+  made.
+- Dates in the list are the reader's local time (`LocalTime`, filled in the
+  browser), never a UTC slice. /my/notes is «كىتابتىكى خاتىرىلىرىم» — a
+  different name and icon from «خاتىرە دەپتىرىم».
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +

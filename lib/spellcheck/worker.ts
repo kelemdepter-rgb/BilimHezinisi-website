@@ -7,8 +7,14 @@
  * anything real. On the main thread that would show up as dropped keystrokes,
  * which is the one thing a writing surface may never do.
  */
-import { unpackDictionary, UYGHUR_LETTERS, type PackedDictionary } from "@/lib/spellcheck/dictionary";
+import {
+  normalizeForLookup,
+  unpackDictionary,
+  UYGHUR_LETTERS,
+  type PackedDictionary,
+} from "@/lib/spellcheck/dictionary";
 import { isCorrect, suggest } from "@/lib/spellcheck/check";
+import { looksGlued } from "@/lib/spellcheck/glued";
 import { fetchCached, fetchCachedBytes } from "@/lib/spellcheck/fetch-cached";
 import { CACHE_NAME, type FromWorker, type ToWorker } from "@/lib/spellcheck/protocol";
 
@@ -54,7 +60,8 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
   }
 
   if (message.type === "personal") {
-    personal = new Set(message.words);
+    // Looked up the way a token is: without tatweel, lower-cased.
+    personal = new Set(message.words.map(normalizeForLookup));
     return;
   }
 
@@ -63,6 +70,13 @@ self.onmessage = (event: MessageEvent<ToWorker>) => {
     if (message.type === "suggest") {
       post({ type: "suggestions", id: message.id, word: message.word, list: [] });
     }
+    if (message.type === "glued") post({ type: "glued", id: message.id, words: [] });
+    return;
+  }
+
+  if (message.type === "glued") {
+    const loaded = dictionary;
+    post({ type: "glued", id: message.id, words: message.words.filter((word) => looksGlued(loaded, word)) });
     return;
   }
 

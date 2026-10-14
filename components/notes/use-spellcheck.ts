@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SpellChecker, type SpellStatus } from "@/lib/spellcheck/client";
-import { isSingleToken, tokenize } from "@/lib/spellcheck/dictionary";
+import { normalizeForLookup, tokenize } from "@/lib/spellcheck/dictionary";
 import { ignoreKey, readIgnored, withIgnored, writeIgnored } from "@/lib/spellcheck/ignore";
+import { MAX_PERSONAL_WORDS, isPersonalWord } from "@/lib/spellcheck/personal";
+import { getPersonalSnapshot, setPersonalWords, subscribePersonal } from "@/lib/spellcheck/personal-store";
 import { browserStorage } from "@/lib/notes/drafts";
 import {
   canHighlight,
@@ -17,39 +19,12 @@ import {
   type TextMap,
 } from "@/lib/spellcheck/marks";
 
-const PERSONAL_KEY = "bh-personal-dictionary";
 /**
  * Long enough that a normal typing burst produces one check rather than thirty,
  * short enough that the underline appears while the writer is still looking at
  * the word.
  */
 const RECHECK_MS = 450;
-
-/**
- * The personal dictionary lives in this browser, not in Postgres.
- *
- * It is a list of words one person considers correct — a few dozen at most,
- * worth a few hundred bytes. A table for it would add a migration, a row per
- * word, an RLS policy and a round trip on every note open, to store less than a
- * single page of a book.
- */
-export function readPersonal(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(PERSONAL_KEY);
-    return raw ? (JSON.parse(raw) as string[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function writePersonal(words: string[]) {
-  try {
-    window.localStorage.setItem(PERSONAL_KEY, JSON.stringify(words));
-  } catch {
-    // Private mode: the additions last for this session only.
-  }
-}
 
 export type SpellPopupState = {
   mark: MarkedWord;
@@ -105,7 +80,6 @@ export function useSpellcheck(
   const [status, setStatus] = useState<SpellStatus>("off");
   const [marks, setMarks] = useState<MarkedWord[]>([]);
   const [popup, setPopup] = useState<SpellPopupState | null>(null);
-  const [personal, setPersonal] = useState<string[]>(readPersonal);
 
   const mapRef = useRef<TextMap | null>(null);
   const marksRef = useRef<MarkedWord[]>([]);
@@ -113,10 +87,12 @@ export function useSpellcheck(
   /**
    * Which words have already been judged. A note repeats its vocabulary
    * constantly, and re-asking the worker about «ۋە» on every keystroke is work
-   * with a known answer. Cleared whenever the personal dictionary changes,
-   * because that changes the answers.
+   * with a known answer. When the personal dictionary changes, the answers
+   * that change with it are dropped (see the effect that follows it).
    */
   const verdicts = useRef<Map<string, boolean>>(new Map());
+  /** The personal dictionary as the worker last heard it. */
+  const personalSent = useRef<readonly string[]>([]);
   /**
    * Words accepted in this note only (lib/spellcheck/ignore.ts). Applied
    * after the verdicts, which stay about the dictionary alone: the same word
@@ -336,7 +312,8 @@ export function useSpellcheck(
     const cache = verdicts.current;
     checker.current = instance;
     instance.start();
-    instance.setPersonal(readPersonal());
+    personalSent.current = getPersonalSnapshot();
+    instance.setPersonal([...personalSent.current]);
     return () => {
       instance.stop();
       checker.current = null;
@@ -351,6 +328,35 @@ export function useSpellcheck(
       closeNav();
     };
   }, [closeNav, commitMarks, enabled]);
+
+  /**
+   * The personal dictionary changed — from the popup, the panel, an import,
+   * or another tab — and takes effect at once: the worker gets the new list,
+   * the cached answers it changes are dropped, and the note is checked again.
+   * A word's answer changes when the word itself was added or removed, and a
+   * hyphenated word's when one of its halves was; those, and only those, go.
+   */
+  useEffect(() => {
+    if (!enabled) return;
+    return subscribePersonal(() => {
+      const next = getPersonalSnapshot();
+      const before = new Set(personalSent.current.map(normalizeForLookup));
+      const after = new Set(next.map(normalizeForLookup));
+      personalSent.current = next;
+      checker.current?.setPersonal([...next]);
+
+      const changed = new Set([...before].filter((word) => !after.has(word)));
+      for (const word of after) if (!before.has(word)) changed.add(word);
+      if (changed.size === 0) return;
+      for (const word of [...verdicts.current.keys()]) {
+        const key = normalizeForLookup(word);
+        if (changed.has(key) || (key.includes("-") && key.split("-").some((part) => changed.has(part)))) {
+          verdicts.current.delete(word);
+        }
+      }
+      void runCheck();
+    });
+  }, [enabled, runCheck]);
 
   // This note's accepted words: read when the checker starts, and again
   // whenever another tab with the same note open accepts one.
@@ -671,23 +677,52 @@ export function useSpellcheck(
     [commitMarks, finishNav, paint, syncNav],
   );
 
-  /** «لۇغەتكە قوش» — this word is right; stop telling me it is not. */
+  /**
+   * «لۇغەتكە قوش» — this word is right; stop telling me it is not. Through
+   * the store, whose change reaches the worker (the effect above); the marks
+   * go at once rather than after the check that follows.
+   */
   const addToPersonal = useCallback(
-    (word: string) => {
+    (word: string): "added" | "full" | "refused" => {
       setPopup(null);
       // One word or nothing. A mark is always one word now that line ends
       // separate words, and this keeps it so whatever reaches here.
-      if (!isSingleToken(word)) return;
-      const next = [...new Set([...personal, word])];
-      setPersonal(next);
-      writePersonal(next);
-      checker.current?.setPersonal(next);
-      // The cached verdict for this word is now wrong, and only for this word.
-      verdicts.current.delete(word);
+      if (!isPersonalWord(word)) return "refused";
+      const current = getPersonalSnapshot();
+      if (!current.includes(word)) {
+        if (current.length >= MAX_PERSONAL_WORDS) return "full";
+        setPersonalWords([...current, word]);
+      }
       dropMarks((mark) => mark.word !== word);
+      return "added";
     },
-    [dropMarks, personal],
+    [dropMarks],
   );
+
+  /**
+   * Which personal-dictionary entries look like two words stuck together,
+   * for the panel — or null when the dictionary cannot be loaded. Asked of
+   * the running checker; with spellcheck off, of one started for the
+   * question and stopped once it is answered.
+   */
+  const findGlued = useCallback(async (words: readonly string[]): Promise<string[] | null> => {
+    const running = checker.current;
+    if (running?.status === "ready") return running.glued([...words]);
+    return new Promise((resolve) => {
+      const temporary: SpellChecker = new SpellChecker((state) => {
+        if (state === "ready") {
+          void temporary.glued([...words]).then((list) => {
+            temporary.stop();
+            resolve(list);
+          });
+        } else if (state === "failed") {
+          temporary.stop();
+          resolve(null);
+        }
+      });
+      temporary.start();
+    });
+  }, []);
 
   /**
    * «بۇ خاتىرىدە سەل قارا» — right in this note, and only here: the word's
@@ -719,6 +754,7 @@ export function useSpellcheck(
     runCheck,
     applySuggestion,
     addToPersonal,
+    findGlued,
     nav,
     openNav,
     closeNav,

@@ -4,14 +4,17 @@ export type ToWorker =
   | { type: "init"; dictUrl: string; correctionsUrl: string }
   | { type: "personal"; words: string[] }
   | { type: "check"; id: number; words: string[] }
-  | { type: "suggest"; id: number; word: string };
+  | { type: "suggest"; id: number; word: string }
+  /** Which of these personal-dictionary entries look like two words stuck together. */
+  | { type: "glued"; id: number; words: string[] };
 
 export type FromWorker =
   | { type: "ready"; words: number; loadMs: number; fromCache: boolean }
   /** The dictionary could not be fetched. Writing continues without it. */
   | { type: "failed"; reason: string }
   | { type: "checked"; id: number; wrong: string[] }
-  | { type: "suggestions"; id: number; word: string; list: string[] };
+  | { type: "suggestions"; id: number; word: string; list: string[] }
+  | { type: "glued"; id: number; words: string[] };
 
 /** Where the built artifact is served from — Vercel's CDN, not Supabase. */
 export const DICT_URL = "/spellcheck/uyghur-dict.bin";

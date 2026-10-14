@@ -59,6 +59,11 @@ export class SpellChecker {
     return this.ask<string[]>((id) => ({ type: "check", id, words }));
   }
 
+  /** Which personal-dictionary entries look like two words stuck together. */
+  glued(words: string[]): Promise<string[]> {
+    return this.ask<string[]>((id) => ({ type: "glued", id, words }));
+  }
+
   /** Ranked corrections for one word. */
   suggest(word: string): Promise<string[]> {
     return this.ask<string[]>((id) => ({ type: "suggest", id, word }));
@@ -94,7 +99,7 @@ export class SpellChecker {
     if (!resolve) return;
     this.pending.delete(message.id);
     (resolve as unknown as (value: string[]) => void)(
-      message.type === "checked" ? message.wrong : message.list,
+      message.type === "checked" ? message.wrong : message.type === "glued" ? message.words : message.list,
     );
   }
 

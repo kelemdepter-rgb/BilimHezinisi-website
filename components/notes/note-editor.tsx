@@ -51,8 +51,10 @@ import {
 import type { NoteDocument } from "@/lib/notes/data";
 import { SpellPopup } from "@/components/notes/spell-popup";
 import { SpellNavBar } from "@/components/notes/spell-nav";
+import { DICTIONARY_TITLE, DictionaryPanel } from "@/components/notes/dictionary-panel";
 import { useSpellcheck } from "@/components/notes/use-spellcheck";
 import { MAX_IGNORED_PER_NOTE } from "@/lib/spellcheck/ignore";
+import { MAX_PERSONAL_WORDS } from "@/lib/spellcheck/personal";
 import { SourcePanel } from "@/components/notes/source-panel";
 import { NotesAiPanel } from "@/components/notes/ai-panel";
 import { FindBar } from "@/components/notes/find-bar";
@@ -89,6 +91,7 @@ const NOTICE = "mt-3 rounded-[var(--radius)] px-3.5 py-2.5 text-[13px] leading-6
 const BLOCKING_CODES: ReadonlySet<SaveCode> = new Set(["not_found", "needs_account", "in_trash"]);
 /** The back arrow waits at most this long for an untouched note to be discarded. */
 const DISCARD_WAIT_MS = 3000;
+const PERSONAL_FULL = `شەخسىي لۇغەتتە ${MAX_PERSONAL_WORDS.toLocaleString("en-US")} سۆز بار — ئارتۇقىنى قوشقىلى بولمايدۇ. «باشقا ئىقتىدارلار» → «شەخسىي لۇغەت» تىن كېرەكسىزلىرىنى ئۆچۈرۈڭ.`;
 const IGNORE_FULL = `بۇ خاتىرىدە ${MAX_IGNORED_PER_NOTE} سۆزگە سەل قارالدى — ئارتۇقىنى قوشقىلى بولمايدۇ. بۇ سۆزنى «لۇغەتكە قوش» ئارقىلىق قوبۇل قىلسىڭىز بولىدۇ.`;
 
 const BLOCK_ICON: Record<BlockStyle, IconName> = { normal: "type", heading: "heading", quote: "quote" };
@@ -115,6 +118,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [sourceOpen, setSourceOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [dictionaryOpen, setDictionaryOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   /** Bumped on every open so the panel resets itself during render. */
   const [aiToken, setAiToken] = useState(0);
@@ -685,6 +689,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   );
 
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
+  const closeDictionary = useCallback(() => setDictionaryOpen(false), []);
 
   /** The AI panel's «ئەسلىگە قايتۇرۇش»: what it would discard is kept first. */
   const undoAiCorrection = useCallback(
@@ -1147,6 +1152,18 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 <Icon name="check" />
                 خاتالىقلارنى بىر-بىرلەپ كۆرۈش
               </button>
+              <button
+                type="button"
+                className="hbtn"
+                data-testid="dictionary-open"
+                onClick={() => {
+                  setOverflowOpen(false);
+                  setDictionaryOpen(true);
+                }}
+              >
+                <Icon name="book-marked" />
+                {DICTIONARY_TITLE}
+              </button>
             </div>
 
             {/* Typography for the page, not for the selection — see
@@ -1481,6 +1498,8 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         onClose={closeHistory}
       />
 
+      <DictionaryPanel open={dictionaryOpen} onClose={closeDictionary} findGlued={spell.findGlued} />
+
       {aiAvailable && (
         <NotesAiPanel
           open={aiOpen}
@@ -1508,7 +1527,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           onIgnore={() => {
             if (!spell.ignoreInNote(spell.popup!.mark.word)) setNotice(IGNORE_FULL);
           }}
-          onAdd={() => spell.addToPersonal(spell.popup!.mark.word)}
+          onAdd={() => {
+            if (spell.addToPersonal(spell.popup!.mark.word) === "full") setNotice(PERSONAL_FULL);
+          }}
           onClose={spell.closePopup}
         />
       )}

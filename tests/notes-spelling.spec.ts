@@ -269,3 +269,200 @@ test.describe("ignoring a word in one note", () => {
     }
   });
 });
+
+test.describe("the personal dictionary", () => {
+  async function openDictionary(page: Page) {
+    await page.getByTestId("toolbar-more").click();
+    await page.getByTestId("dictionary-open").click();
+    await expect(page.getByTestId("dictionary-panel")).toBeVisible();
+    await expect(page.getByTestId("toolbar-overflow")).toHaveCount(0);
+  }
+
+  const listed = (page: Page) => page.getByTestId("dictionary-word").allTextContents();
+
+  /** Choose a file for «كىرگۈزۈش», as the writer's file picker would hand it over. */
+  async function importFile(page: Page, content: unknown) {
+    await page.getByTestId("dictionary-file").setInputFiles({
+      name: "words.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(content)),
+    });
+  }
+
+  test("lists a word added from the popup, and deleting it brings its mark back", async ({ page }) => {
+    const path = await newNote(page, {
+      html: `<div>بۇ ${WRONG[1]} دېگەن سۆز.</div><div>بۇ ${WRONG[0]} دېگەن سۆز.</div>`,
+    });
+    try {
+      await spellcheckOn(page);
+      await tapMarked(page, WRONG[1]);
+      await page.getByTestId("spell-popup-add").click();
+      await expect.poll(() => markedWords(page)).toEqual([WRONG[0]]);
+
+      await openDictionary(page);
+      await expect(page.getByTestId("dictionary-device-only")).toHaveText(
+        "بۇ لۇغەت پەقەت مۇشۇ تور كۆرگۈچتە ساقلىنىدۇ. باشقا ئۈسكۈنىگە يۆتكىمەكچى بولسىڭىز، بۇ يەردىن چىقىرىپ، ئۇ يەردە كىرگۈزۈڭ.",
+      );
+      expect(await listed(page)).toContain(WRONG[1]);
+      const before = (await listed(page)).length;
+      await expect(page.getByTestId("dictionary-count")).toHaveText(`${before} سۆز`);
+
+      // Deleted here, marked again in the note behind — at once.
+      await page.getByRole("button", { name: `«${WRONG[1]}» نى ئۆچۈرۈش` }).click();
+      expect(await listed(page)).not.toContain(WRONG[1]);
+      await expect(page.getByTestId("dictionary-count")).toHaveText(`${before - 1} سۆز`);
+      await expect.poll(() => markedWords(page), { timeout: 30_000 }).toEqual([WRONG[1], WRONG[0]]);
+      expect(await stored(page, "bh-personal-dictionary")).not.toContain(WRONG[1]);
+    } finally {
+      await dropNote(path);
+    }
+  });
+
+  test("imports a file word by word, points out glued entries, exports, and clears in two steps", async ({
+    page,
+  }) => {
+    const path = await newNote(page, { html: `<div>بۇ ${WRONG[0]} دېگەن سۆز.</div>` });
+    try {
+      await spellcheckOn(page);
+      await openDictionary(page);
+
+      await importFile(page, [
+        "تەستسۆز",
+        "ئالمائۆرۈك", // two words stuck together
+        "ئابدۇلباقى", // a compound the dictionary itself lists
+        "تەستسۆز", // twice
+        "ئىككى سۆز",
+        "<b>سۆز</b>",
+        7,
+        "ا",
+        "ب".repeat(65),
+        WRONG[0],
+      ]);
+      await expect(page.getByTestId("dictionary-report")).toHaveText("4 سۆز قوشۇلدى، 5 سۆز رەت قىلىندى.");
+      for (const word of ["تەستسۆز", "ئالمائۆرۈك", "ئابدۇلباقى", WRONG[0]]) expect(await listed(page)).toContain(word);
+      // Nothing from the file reached the page as markup.
+      await expect(page.locator('[data-testid="dictionary-panel"] b')).toHaveCount(0);
+      // An imported word counts at once in the note.
+      await expect.poll(() => markedWords(page), { timeout: 30_000 }).toEqual([]);
+
+      // The hint, on the glued entry only — and nothing is removed for it.
+      const row = (word: string) =>
+        page
+          .getByTestId("dictionary-row")
+          .filter({ has: page.getByTestId("dictionary-word").getByText(word, { exact: true }) });
+      await expect(row("ئالمائۆرۈك").getByTestId("dictionary-glued")).toHaveText(
+        "بەلكىم ئىككى سۆز چاپلىشىپ قالغان — تەكشۈرۈپ بېقىڭ",
+        { timeout: 30_000 },
+      );
+      await expect(row("ئابدۇلباقى").getByTestId("dictionary-glued")).toHaveCount(0);
+      await expect(row("تەستسۆز").getByTestId("dictionary-glued")).toHaveCount(0);
+
+      // The filter.
+      await page.getByTestId("dictionary-filter").fill("تەست");
+      expect(await listed(page)).toEqual(["تەستسۆز"]);
+      await page.getByTestId("dictionary-filter").fill("");
+
+      // «چىقىرىش»: a JSON array of the words, in the order shown.
+      const shown = await listed(page);
+      const download = page.waitForEvent("download", { timeout: 30_000 });
+      await page.getByTestId("dictionary-export").click();
+      const file = await download;
+      expect(file.suggestedFilename()).toBe("bilim-hezinisi-lughet.json");
+      const chunks: Buffer[] = [];
+      for await (const chunk of await file.createReadStream()) chunks.push(chunk as Buffer);
+      expect(JSON.parse(Buffer.concat(chunks).toString("utf8"))).toEqual(shown);
+
+      // «ھەممىنى ئۆچۈرۈش» asks first, inline, and «بىكار قىلىش» keeps everything.
+      await page.getByTestId("dictionary-clear").click();
+      await expect(page.getByTestId("dictionary-clear-box")).toBeVisible();
+      await page.getByTestId("dictionary-clear-cancel").click();
+      expect(await listed(page)).toEqual(shown);
+      await page.getByTestId("dictionary-clear").click();
+      await page.getByTestId("dictionary-clear-confirm").click();
+      await expect(page.getByTestId("dictionary-empty")).toBeVisible();
+      await expect(page.getByTestId("dictionary-count")).toHaveText("0 سۆز");
+      expect(await stored(page, "bh-personal-dictionary")).toEqual([]);
+      // The note's misspelling is a misspelling again.
+      await expect.poll(() => markedWords(page), { timeout: 30_000 }).toEqual([WRONG[0]]);
+
+      // A file that is not a list of words changes nothing.
+      await importFile(page, { words: ["سۆز"] });
+      await expect(page.getByTestId("dictionary-report")).toContainText("كىرگۈزگىلى بولمىدى");
+      await expect(page.getByTestId("dictionary-count")).toHaveText("0 سۆز");
+    } finally {
+      await dropNote(path);
+    }
+  });
+
+  test("the panel fits a phone, and its list scrolls inside it", async ({ page }, testInfo) => {
+    const own = testInfo.project.use.viewport!;
+    const path = await newNote(page, { html: longNoteWith(WRONG) });
+    try {
+      await openDictionary(page);
+      // Enough words to scroll, and a long one that must wrap, not widen the page.
+      const many = Array.from(
+        { length: 120 },
+        (_, index) => `سىناقسۆز${"ا".repeat(index % 7)}${"ب".repeat(Math.floor(index / 7))}`,
+      );
+      expect(new Set(many).size).toBe(120);
+      await importFile(page, [...many, "ق".repeat(64)]);
+      await expect(page.getByTestId("dictionary-report")).toHaveText("121 سۆز قوشۇلدى، 0 سۆز رەت قىلىندى.");
+
+      for (const width of own.width < 640 ? [own.width, 360] : [own.width]) {
+        await page.setViewportSize({ width, height: own.height });
+        expect(await horizontalOverflow(page), `no sideways scroll at ${width} px`).toBeLessThanOrEqual(1);
+
+        const scroller = page.getByTestId("dictionary-scroll");
+        const sizes = await scroller.evaluate((element) => ({
+          scroll: element.scrollHeight,
+          client: element.clientHeight,
+        }));
+        expect(sizes.scroll, "the list is longer than its box").toBeGreaterThan(sizes.client);
+        // It scrolls inside itself, and the page behind it does not move.
+        const pageBefore = await page.evaluate(() => window.scrollY);
+        await scroller.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+        await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+        expect(await page.evaluate(() => window.scrollY)).toBe(pageBefore);
+        await scroller.evaluate((element) => element.scrollTo(0, 0));
+
+        for (const id of [
+          "dictionary-close",
+          "dictionary-export",
+          "dictionary-import",
+          "dictionary-clear",
+          "dictionary-filter",
+        ]) {
+          await expectTappable(page.getByTestId(id), `${id} at ${width} px`);
+        }
+        await expectTappable(page.getByTestId("dictionary-delete").first(), `a delete button at ${width} px`);
+      }
+
+      // Escape closes it, and the page scrolls again.
+      await page.keyboard.press("Escape");
+      await expect(page.getByTestId("dictionary-panel")).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe("");
+    } finally {
+      await dropNote(path);
+    }
+  });
+});
+
+test.describe("the header on a phone", () => {
+  test("keeps its two rows with the checker on, until the step row is asked for", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.use.viewport!.width >= 640, "phones only");
+    const path = await newNote(page, { html: longNoteWith(WRONG) });
+    try {
+      await spellcheckOn(page);
+      for (const width of [360, 375, 390]) {
+        await page.setViewportSize({ width, height: 740 });
+        await scrollToTop(page);
+        const height = await page
+          .getByTestId("note-toolbar")
+          .evaluate((header) => header.getBoundingClientRect().height);
+        expect(height, `header at ${width} px with the checker on`).toBeLessThanOrEqual(112);
+      }
+    } finally {
+      await dropNote(path);
+    }
+  });
+});

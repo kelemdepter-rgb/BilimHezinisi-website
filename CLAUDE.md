@@ -390,8 +390,8 @@ here. The table is left in place because an applied migration is never edited ·
   26.5). One native undo step each. Known leftover: WebKit's `outdent` on a
   quote of mixed text and blocks — a shape none of the three engines makes
   by typing; it arrives by pasting — leaves an empty `<blockquote>`.
-- **The phone header is two rows, ≤ 112 px** (below 640 px, menus and find
-  bar closed): back · title · save state · spellcheck · AI, then undo ·
+- **The phone header is two rows, ≤ 112 px** (below 640 px, menus, find
+  bar and spell step row closed): back · title · save state · spellcheck · AI, then undo ·
   redo · bold · block style · list · «مەنبە قىستۇرۇش» · «باشقا
   ئىقتىدارلار». Italic, underline and find join the tool row from 640 px up
   and sit under «باشقا ئىقتىدارلار» below it (`useWideToolbar`) — one button
@@ -489,6 +489,49 @@ here. The table is left in place because an applied migration is never edited ·
 - `logging.serverFunctions` stays `false` in next.config.ts: in development
   Next otherwise prints every Server Action's arguments — note HTML, search
   words — to the terminal.
+
+## Notebook spelling (PROMPT-48 — nothing of it on the server)
+- **Everything the spellchecker remembers lives in this browser**: the
+  switch `bh-spell-on` ("1"/"0", `lib/spellcheck/toggle-store.ts`), the
+  personal dictionary `bh-personal-dictionary` (browser-wide, not per
+  account), and the words ignored in one note
+  `bh-spell-ignore:<userId>:<noteId>` (≤ 500 a note,
+  `lib/spellcheck/ignore.ts`). No table, no Server Action. A device change
+  is what export/import is for. The ignore lists go with the account in
+  `finishPendingDeletion`; the personal dictionary and the switch stay.
+- **Stepping** is a row in the sticky header, like the find bar, **never
+  open by default** (the phone header stays ≤ 112 px): from
+  «بىر-بىرلەپ كۆرۈش» beside the summary and from «باشقا ئىقتىدارلار»
+  (which switches the checker on). «كېيىنكى» = first mark after the cursor,
+  wrapping; the cursor is a collapsed LIVE Range (edits before it move it),
+  set at each word stepped to and at the caret on open or tap. The word is
+  scrolled INSTANTLY to the middle of the visual viewport below the header
+  (a smooth scroll would close the popup it opens). None left →
+  «ئىملا خاتالىقى قالمىدى.», closed after 2 s. No F7: Chrome and Firefox
+  use it for caret browsing.
+- **«بۇ خاتىرىدە سەل قارا»** is applied after the verdict cache, which stays
+  about the dictionary alone — the same word in another note is still
+  asked about and still marked.
+- **The personal dictionary is one external store**
+  (`lib/spellcheck/personal-store.ts`) for the popup, the panel, the running
+  checker and other tabs (storage event). A change reaches the worker at
+  once and drops exactly the cached verdicts it changes: the word itself,
+  and hyphenated words with it as a half. The panel («شەخسىي لۇغەت», the
+  history panel's sheet/side shape) imports a chosen file as untrusted
+  input (`mergeImport`): JSON array only; each entry exactly one
+  `WORD_PATTERN` token of 2–64 characters; ≤ 5,000 words after merging;
+  repeats dropped, everything else counted as rejected; never run, never
+  rendered as HTML. Export is `bilim-hezinisi-lughet.json`, a JSON array.
+- **Glued entries are a hint, never a removal**: 8+ letters, not accepted
+  by the checker, splittable into two dictionary words of 3+ letters
+  (`lib/spellcheck/glued.ts`, in the worker only — it pulls in the checker,
+  so the page must never import it).
+- **Quoted material is one definition**, `QUOTED_SELECTOR` in
+  `lib/notes/quoted.ts` (`a[href]` and the Uthmani face): the AI proofreader
+  never sends a unit holding it, and the spellchecker neither asks about
+  nor marks a token touching it (`quotedSpans`). A citation's passage — the
+  `<blockquote>` before its link — is NOT quoted by this definition, so both
+  still look at it.
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +

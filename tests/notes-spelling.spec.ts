@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { hasStaffTestEnv, loadEnvLocal } from "./env";
+import { SEED_NEEDLE, hasStaffTestEnv, loadEnvLocal } from "./env";
 import { dropNote, newNote, signedInUserId } from "./fixtures/notes";
 import { scrollPage, scrollToTop } from "./fixtures/scroll";
 
@@ -461,6 +461,117 @@ test.describe("the header on a phone", () => {
           .evaluate((header) => header.getBoundingClientRect().height);
         expect(height, `header at ${width} px with the checker on`).toBeLessThanOrEqual(112);
       }
+    } finally {
+      await dropNote(path);
+    }
+  });
+});
+
+test.describe("the spellcheck switch", () => {
+  test("is remembered across a reload, on and off", async ({ page }) => {
+    const path = await newNote(page, { html: `<div>بۇ ${WRONG[0]} دېگەن سۆز.</div>` });
+    try {
+      const toggle = page.getByTestId("spell-toggle");
+      // Off until the writer turns it on.
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await toggle.click();
+      await expect(page.getByTestId("spell-summary")).toBeVisible({ timeout: 90_000 });
+      expect(await page.evaluate(() => localStorage.getItem("bh-spell-on"))).toBe("1");
+
+      await page.reload();
+      await expect(page.getByTestId("note-body")).toHaveAttribute("contenteditable", "true");
+      await expect(toggle).toHaveAttribute("aria-pressed", "true");
+      // The dictionary loads by itself, and the marks come back with it.
+      await expect(page.getByTestId("spell-summary")).toContainText("ئىملا: 1 خاتالىق", { timeout: 90_000 });
+      await expect.poll(() => markedWords(page)).toEqual([WRONG[0]]);
+
+      // Off is remembered too.
+      await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(page.getByTestId("spell-summary")).toHaveCount(0);
+      expect(await page.evaluate(() => localStorage.getItem("bh-spell-on"))).toBe("0");
+      await page.reload();
+      await expect(page.getByTestId("note-body")).toHaveAttribute("contenteditable", "true");
+      await expect(toggle).toHaveAttribute("aria-pressed", "false");
+      await expect(page.getByTestId("spell-status")).toHaveCount(0);
+    } finally {
+      await dropNote(path);
+    }
+  });
+});
+
+test.describe("quoted material", () => {
+  /** Underlined words that lie inside a citation's link or a verse. */
+  function marksInQuotes(page: Page): Promise<string[]> {
+    return page.evaluate(() => {
+      const highlight = CSS.highlights?.get("bh-spell-error");
+      if (!highlight) return [];
+      const holder = (node: Node) =>
+        (node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element))?.closest(
+          'a[href], [style*="Uthmanic Hafs"]',
+        ) ?? null;
+      return [...highlight]
+        .map((abstract) => abstract as Range)
+        .filter((range) => holder(range.startContainer) !== null || holder(range.endContainer) !== null)
+        .map((range) => range.toString());
+    });
+  }
+
+  /** Put the caret at the very end of the note, where an insertion lands. */
+  async function caretAtEnd(page: Page) {
+    await page.getByTestId("note-body").evaluate((editor) => {
+      (editor as HTMLElement).focus();
+      const end = document.createRange();
+      end.selectNodeContents(editor);
+      end.collapse(false);
+      const selection = getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(end);
+    });
+  }
+
+  test("a citation's link and a verse are never underlined; the writing around them is", async ({ page }) => {
+    // The same misspelling in the writer's own line and in a citation's link
+    // (a book title is not the writer's spelling), and one only in the link.
+    const html =
+      `<div>بۇ ${WRONG[1]} دېگەن سۆز.</div>` +
+      '<blockquote dir="rtl">بۇ بىر سىناق قۇرى.</blockquote>' +
+      `<p dir="rtl" style="font-size:13px;color:#8a8a8a"><a href="/books/1/read?page=2">«${WRONG[1]} ${WRONG[2]}» — 2-بەت</a></p>` +
+      "<p><br></p>";
+    const path = await newNote(page, { html });
+    try {
+      const body = page.getByTestId("note-body");
+
+      // A citation from the library and a verse, inserted the way a writer does.
+      await caretAtEnd(page);
+      await page.getByTestId("source-open").click();
+      await expect(page.getByTestId("source-panel")).toBeVisible();
+      await page.getByTestId("source-query").fill(SEED_NEEDLE);
+      await page.getByTestId("source-search").click();
+      await expect(page.getByTestId("source-result").first()).toBeVisible({ timeout: 30_000 });
+      await page.getByTestId("source-result").first().getByTestId("source-insert").click();
+      await expect(body.locator('a[href^="/books/"]')).toHaveCount(2);
+
+      await page.getByTestId("source-tab-quran").click();
+      await page.getByTestId("aya-sura").fill("1");
+      await page.getByTestId("aya-number-input").fill("2");
+      await page.getByTestId("aya-preview").click();
+      await expect(page.getByTestId("aya-preview-box")).toBeVisible({ timeout: 30_000 });
+      await page.getByTestId("aya-mode-ar").click();
+      await page.getByTestId("aya-insert").click();
+      await expect(body.locator('[style*="Uthmanic Hafs"]')).toHaveCount(1);
+      await page.getByTestId("source-close").click();
+      await expect(page.getByTestId("source-panel")).toBeHidden();
+
+      await spellcheckOn(page);
+      // The writer's own misspelling is underlined: the check has run.
+      await expect.poll(() => markedWords(page), { timeout: 30_000 }).toContain(WRONG[1]);
+      const marked = await markedWords(page);
+      // Once — the line's, not the link's — and the word only in the link, never.
+      expect(marked.filter((word) => word === WRONG[1])).toHaveLength(1);
+      expect(marked).not.toContain(WRONG[2]);
+      // And nothing at all inside the links or the verse.
+      expect(await marksInQuotes(page)).toEqual([]);
     } finally {
       await dropNote(path);
     }

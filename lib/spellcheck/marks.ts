@@ -269,6 +269,41 @@ export function offsetAtPoint(map: TextMap, node: Node, offset: number): number 
   return found < map.nodes.length ? map.starts[found] : map.text.length;
 }
 
+/**
+ * Where quoted material lies in the map's text: every text node inside an
+ * element under `root` that matches `selector`, as [start, end) runs in
+ * order, with neighbouring runs joined. A word touching one of these is not
+ * the writer's to spell (lib/notes/quoted.ts).
+ */
+export function quotedSpans(map: TextMap, root: Element, selector: string): [number, number][] {
+  const spans: [number, number][] = [];
+  map.nodes.forEach((node, index) => {
+    const holder = node.parentElement?.closest(selector);
+    if (!holder || holder === root || !root.contains(holder)) return;
+    const start = map.starts[index];
+    const end = start + node.data.length;
+    const last = spans[spans.length - 1];
+    // Touching, or only a line end apart: one run.
+    if (last && start - last[1] <= 1) last[1] = end;
+    else spans.push([start, end]);
+  });
+  return spans;
+}
+
+/** Does [start, end) overlap any of `spans` (sorted, as quotedSpans gives them)? */
+export function overlapsAny(spans: readonly (readonly [number, number])[], start: number, end: number): boolean {
+  let low = 0;
+  let high = spans.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const [from, to] = spans[mid];
+    if (to <= start) low = mid + 1;
+    else if (from >= end) high = mid - 1;
+    else return true;
+  }
+  return false;
+}
+
 /** The marked word covering an offset, if any. Marks never overlap. */
 export function wordAtOffset(marks: readonly MarkedWord[], offset: number): MarkedWord | null {
   for (const mark of marks) {

@@ -7,11 +7,14 @@ import { ignoreKey, readIgnored, withIgnored, writeIgnored } from "@/lib/spellch
 import { MAX_PERSONAL_WORDS, isPersonalWord } from "@/lib/spellcheck/personal";
 import { getPersonalSnapshot, setPersonalWords, subscribePersonal } from "@/lib/spellcheck/personal-store";
 import { browserStorage } from "@/lib/notes/drafts";
+import { QUOTED_SELECTOR } from "@/lib/notes/quoted";
 import {
   canHighlight,
   hitTest,
   HIGHLIGHT_NAME,
   offsetAtPoint,
+  overlapsAny,
+  quotedSpans,
   rangeFor,
   readTextMap,
   wordRange,
@@ -256,7 +259,10 @@ export function useSpellcheck(
     const pass = ++latestPass.current;
     const map = readTextMap(editor);
 
-    const tokens = tokenize(map.text);
+    // A citation's link and a verse are quoted, not the writer's spelling:
+    // their words are neither asked about nor marked. The text around them is.
+    const quoted = quotedSpans(map, editor, QUOTED_SELECTOR);
+    const tokens = tokenize(map.text).filter((token) => !overlapsAny(quoted, token.start, token.end));
     const unknown = [...new Set(tokens.map((t) => t.word))].filter(
       (word) => !verdicts.current.has(word),
     );

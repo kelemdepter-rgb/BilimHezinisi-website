@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { isSingleToken, tokenize } from "@/lib/spellcheck/dictionary";
+import { QUOTED_SELECTOR } from "@/lib/notes/quoted";
 import {
   LINE_SEPARATOR,
   offsetAtPoint,
   offsetOf,
+  overlapsAny,
+  quotedSpans,
   rangeFor,
   readTextMap,
   wordAtOffset,
@@ -208,6 +211,55 @@ describe("taking a suggestion", () => {
     for (const token of tokenize(map.text)) {
       expect(wordRange(map, token)?.toString(), token.word).toBe(token.word);
     }
+  });
+});
+
+describe("quoted material is not the writer's to spell", () => {
+  /** The words the checker would look at: every token outside a quotation. */
+  function checkable(html: string): string[] {
+    const editor = editorWith(html);
+    const map = readTextMap(editor);
+    const spans = quotedSpans(map, editor, QUOTED_SELECTOR);
+    return tokenize(map.text)
+      .filter((token) => !overlapsAny(spans, token.start, token.end))
+      .map((token) => token.word);
+  }
+
+  it("leaves out a citation's link and keeps the writing around it", () => {
+    // The shape lib/notes/insert.ts gives a cited passage, in invented text.
+    const html =
+      "<div>مېنىڭ خاتىرەم ئۇيغور</div>" +
+      '<blockquote dir="rtl">كىتابتىكى قۇر</blockquote>' +
+      '<p dir="rtl" style="font-size:13px;color:#8a8a8a"><a href="/books/1/read?page=2">«ئۇيغور تارىخ» — سىناق ئاپتور — 2-بەت</a></p>' +
+      "<div>ئاخىرقى سۆز</div>";
+    expect(checkable(html)).toEqual(["مېنىڭ", "خاتىرەم", "ئۇيغور", "كىتابتىكى", "قۇر", "ئاخىرقى", "سۆز"]);
+  });
+
+  it("leaves out a verse in the Uthmani face, however it is nested", () => {
+    const html =
+      '<p dir="rtl" style="text-align:right;"><span style="font-family:\'Uthmanic Hafs\',serif;font-size:20pt">﴿ين <b>لىن</b> مىن﴾</span><br>' +
+      '<span style="font-family:\'UKIJ Tuz\',serif">«تەرجىمە سۆز»</span></p>' +
+      "قۇر ئاخىرى";
+    expect(checkable(html)).toEqual(["تەرجىمە", "سۆز", "قۇر", "ئاخىرى"]);
+  });
+
+  it("leaves out a word only partly inside a quotation", () => {
+    expect(checkable('سىناق<a href="/x">سۆز</a> باشقا')).toEqual(["باشقا"]);
+  });
+
+  it("finds nothing quoted in a note without quotations, and never the editor itself", () => {
+    const editor = editorWith("<div>بىر</div><div>ئىككى</div>");
+    expect(quotedSpans(readTextMap(editor), editor, QUOTED_SELECTOR)).toEqual([]);
+    const linkRoot = document.createElement("a");
+    linkRoot.setAttribute("href", "/x");
+    linkRoot.textContent = "سۆز";
+    expect(quotedSpans(readTextMap(linkRoot), linkRoot, QUOTED_SELECTOR)).toEqual([]);
+  });
+
+  it("is the same definition the AI proofreader keeps from sending", () => {
+    // One selector for both; the proofreader's units are covered in
+    // tests/unit/ai-note-blocks.test.ts.
+    expect(QUOTED_SELECTOR).toBe('a[href], [style*="Uthmanic Hafs"]');
   });
 });
 

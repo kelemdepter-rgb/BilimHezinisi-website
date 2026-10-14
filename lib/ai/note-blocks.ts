@@ -31,17 +31,14 @@
  *     is flagged in the preview so the writer decides with their eyes open.
  */
 
+import { QUOTED_SELECTOR } from "@/lib/notes/quoted";
+
 /** Leaf text blocks — the same set the desktop collects, plus table cells. */
 const BLOCK_SELECTOR = "p, div, h1, h2, h3, h4, h5, h6, li, blockquote, td, th";
 
-/**
- * What must never be sent for correction.
- *
- * A link is how a citation is anchored (lib/notes/insert.ts), and the Uthmani
- * face is only ever applied to an inserted verse — so both are exact tests for
- * "this is quoted material", never a guess.
- */
-const QUOTED_SELECTOR = 'a[href], [style*="Uthmanic Hafs"]';
+// What must never be sent for correction is QUOTED_SELECTOR, shared with the
+// spellchecker (lib/notes/quoted.ts): a unit holding a citation's link or a
+// verse is quoted material as a whole.
 
 export type NoteUnit = {
   /** The element or bare text node this unit's lines came from. */

@@ -55,6 +55,12 @@ import { DICTIONARY_TITLE, DictionaryPanel } from "@/components/notes/dictionary
 import { useSpellcheck } from "@/components/notes/use-spellcheck";
 import { MAX_IGNORED_PER_NOTE } from "@/lib/spellcheck/ignore";
 import { MAX_PERSONAL_WORDS } from "@/lib/spellcheck/personal";
+import {
+  getSpellOnServerSnapshot,
+  getSpellOnSnapshot,
+  setSpellOn,
+  subscribeSpellOn,
+} from "@/lib/spellcheck/toggle-store";
 import { SourcePanel } from "@/components/notes/source-panel";
 import { NotesAiPanel } from "@/components/notes/ai-panel";
 import { FindBar } from "@/components/notes/find-bar";
@@ -63,6 +69,7 @@ import { ToolMenu } from "@/components/notes/tool-menu";
 import { useWideToolbar } from "@/components/notes/use-wide-toolbar";
 import { useAiState } from "@/lib/ai/use-ai-state";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
+import { AYA_SELECTOR } from "@/lib/notes/quoted";
 import {
   blockStyleAt,
   listStyleAt,
@@ -113,7 +120,8 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
    * time; italic, underline and find join it where there is room.
    */
   const wide = useWideToolbar();
-  const [spellOpen, setSpellOpen] = useState(false);
+  /** The spellchecker's switch, as the writer last left it in this browser (N14). */
+  const spellOpen = useSyncExternalStore(subscribeSpellOn, getSpellOnSnapshot, getSpellOnServerSnapshot);
   const [notice, setNotice] = useState<string | null>(null);
   const [sourceOpen, setSourceOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
@@ -176,7 +184,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     setCounts({ words, chars: text.length });
     // Only an inserted aya carries the Uthmani face, so this is an exact test
     // for "does this note quote the Qur'an" and never a guess.
-    setHasAya(Boolean(editor?.querySelector('[style*="Uthmanic Hafs"]')));
+    setHasAya(Boolean(editor?.querySelector(AYA_SELECTOR)));
   }, []);
 
   /** One place that records "the document changed", so nothing is forgotten. */
@@ -951,7 +959,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             className={spellOpen ? "hbtn on" : "hbtn"}
             data-testid="spell-toggle"
             aria-pressed={spellOpen}
-            onClick={() => setSpellOpen((open) => !open)}
+            onClick={() => setSpellOn(!spellOpen)}
           >
             <Icon name="check" />
             <span className="hidden sm:inline">ئىملا</span>
@@ -1145,7 +1153,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                   // The row takes the overflow's place, and switches the
                   // checker on if it was off.
                   setOverflowOpen(false);
-                  setSpellOpen(true);
+                  setSpellOn(true);
                   spell.openNav(savedRange.current);
                 }}
               >

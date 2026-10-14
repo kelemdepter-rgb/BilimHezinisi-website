@@ -534,6 +534,7 @@ test.describe("the spellchecker at line ends", () => {
 
       for (const button of [
         page.getByTestId("spell-suggestion").first(),
+        page.getByTestId("spell-popup-ignore"),
         page.getByTestId("spell-popup-add"),
         page.getByTestId("spell-popup-close"),
       ]) {

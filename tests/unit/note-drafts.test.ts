@@ -14,6 +14,7 @@ import {
   type DraftStorage,
 } from "@/lib/notes/drafts";
 import { decideOpening, type OpeningInput } from "@/lib/notes/opening";
+import { readIgnored, writeIgnored } from "@/lib/spellcheck/ignore";
 import {
   SAVE_CODES,
   CODE_STATE,
@@ -167,6 +168,22 @@ describe("device copies", () => {
       expect(readDraft(local, USER, 7)).toBeNull();
       expect(readDraft(local, OTHER, 7)).not.toBeNull();
       expect(session.getItem("bh-account-deletion")).toBeNull();
+    });
+
+    it("and the words that account accepted in single notes — nobody else's", () => {
+      const { local } = browser();
+      writeIgnored(local, USER, 7, ["ئۇيغور"]);
+      writeIgnored(local, USER, 9, ["خەزىنا"]);
+      writeIgnored(local, OTHER, 7, ["كىتاۋ"]);
+      local.setItem("bh-personal-dictionary", '["ئۇيغور"]');
+      rememberPendingDeletion(USER);
+
+      expect(finishPendingDeletion()).toBe(true);
+      expect(readIgnored(local, USER, 7)).toEqual([]);
+      expect(readIgnored(local, USER, 9)).toEqual([]);
+      expect(readIgnored(local, OTHER, 7)).toEqual(["كىتاۋ"]);
+      // The personal dictionary is the browser's, not the account's.
+      expect(local.getItem("bh-personal-dictionary")).toBe('["ئۇيغور"]');
     });
 
     it("without a noted deletion nothing is touched (sign-out never clears)", () => {

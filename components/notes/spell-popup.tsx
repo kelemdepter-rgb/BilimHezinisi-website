@@ -20,11 +20,15 @@ const GAP = 6;
 export function SpellPopup({
   state,
   onPick,
+  onIgnore,
   onAdd,
   onClose,
 }: {
   state: SpellPopupState;
   onPick: (replacement: string) => void;
+  /** «بۇ خاتىرىدە سەل قارا» — right in this note only. */
+  onIgnore: () => void;
+  /** «لۇغەتكە قوش» — right everywhere, in the personal dictionary. */
   onAdd: () => void;
   onClose: () => void;
 }) {
@@ -148,6 +152,16 @@ export function SpellPopup({
       )}
 
       <div className="border-t border-bd">
+        <button
+          type="button"
+          data-testid="spell-popup-ignore"
+          className="flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-start text-[13px] hover:bg-ab focus:bg-ab focus:outline-none"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onIgnore}
+        >
+          <Icon name="eye-off" className="shrink-0 text-am" />
+          بۇ خاتىرىدە سەل قارا
+        </button>
         <button
           type="button"
           data-testid="spell-popup-add"

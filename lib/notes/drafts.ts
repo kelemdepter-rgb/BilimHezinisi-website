@@ -12,6 +12,8 @@
  * and nothing more — the server decides who owns a note, every time.
  */
 
+import { clearAccountIgnores } from "@/lib/spellcheck/ignore";
+
 export const DRAFT_PREFIX = "bh-note-draft-v2:";
 /** Before PROMPT-43: the raw HTML, one key per note, no account and no base. */
 const LEGACY_KEY = /^bh-note-draft-(\d+)$/;
@@ -183,8 +185,9 @@ export function rememberPendingDeletion(userId: string): void {
 }
 
 /**
- * On the "account deleted" page: drop that account's copies, once. True when
- * a deletion this tab asked for was confirmed, so the caller can clear the
+ * On the "account deleted" page: drop that account's copies, once — and the
+ * words it accepted in single notes (lib/spellcheck/ignore.ts). True when a
+ * deletion this tab asked for was confirmed, so the caller can clear the
  * rest of what the notebook kept here.
  */
 export function finishPendingDeletion(): boolean {
@@ -193,6 +196,7 @@ export function finishPendingDeletion(): boolean {
     if (!userId) return false;
     window.sessionStorage.removeItem(PENDING_DELETION_KEY);
     clearAccountDrafts(browserStorage(), userId);
+    clearAccountIgnores(browserStorage(), userId);
     return true;
   } catch {
     // Storage refused: nothing was written there either.

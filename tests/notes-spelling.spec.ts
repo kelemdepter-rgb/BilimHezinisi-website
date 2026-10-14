@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { hasStaffTestEnv, loadEnvLocal } from "./env";
-import { dropNote, newNote } from "./fixtures/notes";
+import { dropNote, newNote, signedInUserId } from "./fixtures/notes";
 import { scrollPage, scrollToTop } from "./fixtures/scroll";
 
 loadEnvLocal();
@@ -29,11 +29,38 @@ function longNoteWith(words: readonly string[]): string {
   return filler(3) + words.map((word) => `<div>بۇ ${word} دېگەن سۆز.</div>${filler(30)}`).join("");
 }
 
-/** Switch the spellchecker on and wait for the dictionary. */
+/** Switch the spellchecker on, unless it already is, and wait for the dictionary. */
 async function spellcheckOn(page: Page) {
-  await page.getByTestId("spell-toggle").click();
+  const toggle = page.getByTestId("spell-toggle");
+  if ((await toggle.getAttribute("aria-pressed")) !== "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
   // The dictionary is 667 KB over the wire and unpacks in the worker.
   await expect(page.getByTestId("spell-summary")).toBeVisible({ timeout: 90_000 });
+}
+
+/** Every word the spellchecker has underlined, in the order it painted them. */
+async function markedWords(page: Page): Promise<string[]> {
+  return page.evaluate(() => {
+    const highlight = CSS.highlights?.get("bh-spell-error");
+    return highlight ? [...highlight].map((range) => (range as Range).toString()) : [];
+  });
+}
+
+/** Wait for a word's underline, then tap it and wait for its popup. */
+async function tapMarked(page: Page, word: string) {
+  await expect.poll(() => markBox(page, word), { timeout: 30_000 }).not.toBeNull();
+  const box = (await markBox(page, word))!;
+  await page.mouse.click(box.x, box.y);
+  await expect(page.getByTestId("spell-popup")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("spell-popup-word")).toHaveText(word);
+}
+
+/** A localStorage value, parsed, or null. */
+function stored(page: Page, key: string): Promise<unknown> {
+  return page.evaluate((name) => {
+    const raw = localStorage.getItem(name);
+    return raw === null ? null : (JSON.parse(raw) as unknown);
+  }, key);
 }
 
 /** Where a word's underline is on screen, or null when it is not underlined. */
@@ -195,6 +222,50 @@ test.describe("stepping through the errors", () => {
       }
     } finally {
       await dropNote(path);
+    }
+  });
+});
+
+test.describe("ignoring a word in one note", () => {
+  test("«بۇ خاتىرىدە سەل قارا» clears it in this note, for good, and nowhere else", async ({ page }) => {
+    const sentence = (word: string) => `<div>بۇ ${word} دېگەن سۆز.</div>`;
+    // Twice the word to ignore, and once a misspelling that stays: its mark
+    // is what proves a check has run before "nothing else is marked" is read.
+    const here = await newNote(page, { html: sentence(WRONG[1]) + sentence(WRONG[1]) + sentence(WRONG[0]) });
+    let elsewhere: string | null = null;
+    try {
+      const userId = await signedInUserId(page);
+      const noteId = Number(here.split("/").pop());
+      const personalBefore = await stored(page, "bh-personal-dictionary");
+
+      await spellcheckOn(page);
+      await expect(page.getByTestId("spell-summary")).toContainText("ئىملا: 3 خاتالىق");
+      await tapMarked(page, WRONG[1]);
+      await expectTappable(page.getByTestId("spell-popup-ignore"), "«بۇ خاتىرىدە سەل قارا»");
+      await page.getByTestId("spell-popup-ignore").click();
+
+      // Both of its marks go at once; the word stays in the text.
+      await expect(page.getByTestId("spell-popup")).toHaveCount(0);
+      await expect.poll(() => markedWords(page)).toEqual([WRONG[0]]);
+      await expect(page.getByTestId("spell-summary")).toContainText("ئىملا: 1 خاتالىق");
+      await expect(page.getByTestId("note-body")).toContainText(WRONG[1]);
+      expect(await stored(page, `bh-spell-ignore:${userId}:${noteId}`)).toEqual([WRONG[1]]);
+      // The personal dictionary is not touched.
+      expect(await stored(page, "bh-personal-dictionary")).toEqual(personalBefore);
+
+      // Still ignored after a reload.
+      await page.reload();
+      await expect(page.getByTestId("note-body")).toHaveAttribute("contenteditable", "true");
+      await spellcheckOn(page);
+      await expect.poll(() => markedWords(page), { timeout: 30_000 }).toEqual([WRONG[0]]);
+
+      // Another note: the same word is marked there.
+      elsewhere = await newNote(page, { html: sentence(WRONG[1]) });
+      await spellcheckOn(page);
+      await expect.poll(() => markedWords(page), { timeout: 30_000 }).toEqual([WRONG[1]]);
+    } finally {
+      await dropNote(here);
+      if (elsewhere) await dropNote(elsewhere);
     }
   });
 });

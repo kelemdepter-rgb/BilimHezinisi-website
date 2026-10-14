@@ -52,6 +52,7 @@ import type { NoteDocument } from "@/lib/notes/data";
 import { SpellPopup } from "@/components/notes/spell-popup";
 import { SpellNavBar } from "@/components/notes/spell-nav";
 import { useSpellcheck } from "@/components/notes/use-spellcheck";
+import { MAX_IGNORED_PER_NOTE } from "@/lib/spellcheck/ignore";
 import { SourcePanel } from "@/components/notes/source-panel";
 import { NotesAiPanel } from "@/components/notes/ai-panel";
 import { FindBar } from "@/components/notes/find-bar";
@@ -88,6 +89,7 @@ const NOTICE = "mt-3 rounded-[var(--radius)] px-3.5 py-2.5 text-[13px] leading-6
 const BLOCKING_CODES: ReadonlySet<SaveCode> = new Set(["not_found", "needs_account", "in_trash"]);
 /** The back arrow waits at most this long for an untouched note to be discarded. */
 const DISCARD_WAIT_MS = 3000;
+const IGNORE_FULL = `بۇ خاتىرىدە ${MAX_IGNORED_PER_NOTE} سۆزگە سەل قارالدى — ئارتۇقىنى قوشقىلى بولمايدۇ. بۇ سۆزنى «لۇغەتكە قوش» ئارقىلىق قوبۇل قىلسىڭىز بولىدۇ.`;
 
 const BLOCK_ICON: Record<BlockStyle, IconName> = { normal: "type", heading: "heading", quote: "quote" };
 
@@ -152,7 +154,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
    * panel. It owns the marks, the popup and the worker; the editor only has to
    * tell it when the text changed and where a tap landed.
    */
-  const spell = useSpellcheck(editorRef, spellOpen, toolbarRef);
+  const spell = useSpellcheck(editorRef, spellOpen, { userId: note.user_id, noteId: note.id }, toolbarRef);
 
   /**
    * AI exists in the notebook only for a writer who switched it on at /my/ai
@@ -1503,6 +1505,9 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
         <SpellPopup
           state={spell.popup}
           onPick={(replacement) => spell.applySuggestion(spell.popup!.mark, replacement)}
+          onIgnore={() => {
+            if (!spell.ignoreInNote(spell.popup!.mark.word)) setNotice(IGNORE_FULL);
+          }}
           onAdd={() => spell.addToPersonal(spell.popup!.mark.word)}
           onClose={spell.closePopup}
         />

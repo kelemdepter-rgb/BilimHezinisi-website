@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SpellChecker, type SpellStatus } from "@/lib/spellcheck/client";
 import { isSingleToken, tokenize } from "@/lib/spellcheck/dictionary";
+import { ignoreKey, readIgnored, withIgnored, writeIgnored } from "@/lib/spellcheck/ignore";
+import { browserStorage } from "@/lib/notes/drafts";
 import {
   canHighlight,
   hitTest,
@@ -93,9 +95,12 @@ function caretIn(editor: HTMLElement): Range | null {
 export function useSpellcheck(
   editorRef: React.RefObject<HTMLDivElement | null>,
   enabled: boolean,
+  /** The note being checked, whose own accepted words apply to it alone. */
+  note: { userId: string; noteId: number },
   /** The sticky toolbar: a word scrolled under it is out of sight. */
   toolbarRef?: React.RefObject<HTMLElement | null>,
 ) {
+  const { userId, noteId } = note;
   const checker = useRef<SpellChecker | null>(null);
   const [status, setStatus] = useState<SpellStatus>("off");
   const [marks, setMarks] = useState<MarkedWord[]>([]);
@@ -112,6 +117,12 @@ export function useSpellcheck(
    * because that changes the answers.
    */
   const verdicts = useRef<Map<string, boolean>>(new Map());
+  /**
+   * Words accepted in this note only (lib/spellcheck/ignore.ts). Applied
+   * after the verdicts, which stay about the dictionary alone: the same word
+   * in another note is still asked about, and still marked.
+   */
+  const ignored = useRef<ReadonlySet<string>>(new Set());
 
   /**
    * Do the marks still describe the note?
@@ -284,7 +295,7 @@ export function useSpellcheck(
     if (pass !== latestPass.current) return;
 
     const next: MarkedWord[] = tokens
-      .filter((token) => verdicts.current.get(token.word) === false)
+      .filter((token) => verdicts.current.get(token.word) === false && !ignored.current.has(token.word))
       .map((token) => ({ word: token.word, start: token.start, end: token.end }));
 
     mapRef.current = map;
@@ -340,6 +351,21 @@ export function useSpellcheck(
       closeNav();
     };
   }, [closeNav, commitMarks, enabled]);
+
+  // This note's accepted words: read when the checker starts, and again
+  // whenever another tab with the same note open accepts one.
+  useEffect(() => {
+    if (!enabled) return;
+    const key = ignoreKey(userId, noteId);
+    ignored.current = new Set(readIgnored(browserStorage(), userId, noteId));
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== key) return;
+      ignored.current = new Set(readIgnored(browserStorage(), userId, noteId));
+      void runCheck();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [enabled, noteId, runCheck, userId]);
 
   // Every change to the note, whatever made it, makes the marks stale and
   // earns a fresh check.
@@ -663,10 +689,30 @@ export function useSpellcheck(
     [dropMarks, personal],
   );
 
+  /**
+   * «بۇ خاتىرىدە سەل قارا» — right in this note, and only here: the word's
+   * verdict stays as it was, so every other note still marks it. False when
+   * the note's list is full.
+   */
+  const ignoreInNote = useCallback(
+    (word: string): boolean => {
+      setPopup(null);
+      const next = withIgnored([...ignored.current], word);
+      if (!next) return false;
+      ignored.current = new Set(next);
+      // Kept for the page's life even where the browser refuses to store it.
+      writeIgnored(browserStorage(), userId, noteId, next);
+      dropMarks((mark) => mark.word !== word);
+      return true;
+    },
+    [dropMarks, noteId, userId],
+  );
+
   return {
     status,
     marks,
     popup,
+    ignoreInNote,
     closePopup: useCallback(() => setPopup(null), []),
     onEditorPointerUp,
     scheduleCheck,

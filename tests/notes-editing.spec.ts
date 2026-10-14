@@ -433,6 +433,7 @@ test.describe("the toolbar on a phone", () => {
     "format-eraser",
     "note-color",
     "export-docx",
+    "spell-nav-open-menu",
     "note-font",
     "note-size-down",
     "note-size-up",

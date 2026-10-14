@@ -7,6 +7,7 @@ import {
   canHighlight,
   hitTest,
   HIGHLIGHT_NAME,
+  offsetAtPoint,
   rangeFor,
   readTextMap,
   wordRange,
@@ -58,6 +59,18 @@ export type SpellPopupState = {
   loading: boolean;
 };
 
+/**
+ * «بىر-بىرلەپ كۆرۈش» — stepping through the errors one at a time (PROMPT-48).
+ *
+ * `at` is where the writer is: the number of the word being looked at, or —
+ * once that word has been fixed or accepted — how many errors lie behind.
+ */
+export type SpellNav = { open: boolean; at: number; done: boolean };
+
+const NAV_CLOSED: SpellNav = { open: false, at: 0, done: false };
+/** How long «ئىملا خاتالىقى قالمىدى.» stays before the row closes itself. */
+const NAV_DONE_MS = 2000;
+
 /** The part of the page a word can be seen in, in viewport coordinates. */
 function visibleArea(toolbar: HTMLElement | null): { top: number; bottom: number } {
   const viewport = window.visualViewport;
@@ -65,6 +78,16 @@ function visibleArea(toolbar: HTMLElement | null): { top: number; bottom: number
   const viewBottom = viewTop + (viewport?.height ?? window.innerHeight);
   const toolbarBottom = toolbar?.getBoundingClientRect().bottom ?? 0;
   return { top: Math.max(viewTop, toolbarBottom), bottom: viewBottom };
+}
+
+/** The caret, as a collapsed Range of its own, when it is inside `editor`. */
+function caretIn(editor: HTMLElement): Range | null {
+  const selection = document.getSelection();
+  if (!selection || selection.rangeCount === 0 || !selection.focusNode) return null;
+  if (!editor.contains(selection.focusNode)) return null;
+  const caret = document.createRange();
+  caret.setStart(selection.focusNode, selection.focusOffset);
+  return caret;
 }
 
 export function useSpellcheck(
@@ -118,6 +141,29 @@ export function useSpellcheck(
   const popupWord = useRef<Range | null>(null);
 
   /**
+   * Stepping through the errors. The row's state is `nav`; the rest lives in
+   * refs because the check that finishes in the background reads it.
+   *
+   * WHERE THE WRITER IS. `cursor` is a collapsed LIVE Range in the note: the
+   * browser moves it with every edit before it, so typing elsewhere never
+   * sends «كېيىنكى» to the wrong place. It is put at the start of each word
+   * stepped to, and at the caret when the row opens or the note is tapped.
+   * `onMark` says it stands on the word being looked at — so «كېيىنكى» goes
+   * past that word — rather than on a word that was fixed, accepted, or never
+   * there, where the next error may start exactly at the cursor.
+   */
+  const [nav, setNav] = useState<SpellNav>(NAV_CLOSED);
+  const navOpen = useRef(false);
+  const navDone = useRef(false);
+  const cursor = useRef<Range | null>(null);
+  const onMark = useRef(false);
+  /** A step asked for before the dictionary was ready, taken once it is. */
+  const pendingStep = useRef<1 | -1 | 0>(0);
+  const doneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The latest `step`, for a check that finishes after the row asked for one. */
+  const stepRef = useRef<(direction: 1 | -1) => void>(() => {});
+
+  /**
    * The ref is what the pointer handler reads and the state is what the summary
    * renders, so both are written together. The handler cannot read the state:
    * it is attached once and would close over whatever `marks` was at the time.
@@ -125,6 +171,60 @@ export function useSpellcheck(
   const commitMarks = useCallback((list: MarkedWord[]) => {
     marksRef.current = list;
     setMarks(list);
+  }, []);
+
+  /** Where the cursor is in `map`'s text; -1 before the very first character. */
+  const cursorOffset = useCallback(
+    (map: TextMap): number => {
+      const point = cursor.current;
+      const editor = editorRef.current;
+      if (!point || !editor || !editor.contains(point.startContainer)) return -1;
+      return offsetAtPoint(map, point.startContainer, point.startOffset);
+    },
+    [editorRef],
+  );
+
+  /** Bring the row's number up to date with the marks and the cursor. */
+  const syncNav = useCallback(() => {
+    if (!navOpen.current || navDone.current) return;
+    const map = mapRef.current;
+    const list = marksRef.current;
+    let at = 0;
+    if (map) {
+      const from = cursorOffset(map);
+      const here = onMark.current ? list.findIndex((mark) => mark.start === from) : -1;
+      at = here >= 0 ? here + 1 : list.filter((mark) => mark.start < from).length;
+    }
+    setNav((current) => (current.open && current.at !== at ? { ...current, at } : current));
+  }, [cursorOffset]);
+
+  const closeNav = useCallback(() => {
+    navOpen.current = false;
+    navDone.current = false;
+    pendingStep.current = 0;
+    if (doneTimer.current) clearTimeout(doneTimer.current);
+    doneTimer.current = null;
+    cursor.current = null;
+    onMark.current = false;
+    setNav(NAV_CLOSED);
+  }, []);
+
+  /** «ئىملا خاتالىقى قالمىدى.», then the row goes by itself. */
+  const finishNav = useCallback(() => {
+    if (navDone.current) return;
+    navDone.current = true;
+    pendingStep.current = 0;
+    setNav({ open: true, at: 0, done: true });
+    doneTimer.current = setTimeout(closeNav, NAV_DONE_MS);
+  }, [closeNav]);
+
+  /** An error turned up again while the row said there were none: back to counting. */
+  const reopenNav = useCallback(() => {
+    if (!navDone.current) return;
+    navDone.current = false;
+    if (doneTimer.current) clearTimeout(doneTimer.current);
+    doneTimer.current = null;
+    setNav((current) => (current.open ? { ...current, done: false } : current));
   }, []);
 
   /** Paint the current marks. No DOM mutation — see lib/spellcheck/marks.ts. */
@@ -191,7 +291,19 @@ export function useSpellcheck(
     checkedRevision.current = seen;
     commitMarks(next);
     paint(map, next);
-  }, [commitMarks, editorRef, paint, pullChanges]);
+
+    if (navOpen.current) {
+      if (next.length === 0) finishNav();
+      else reopenNav();
+      syncNav();
+    }
+    // The row was opened before the dictionary was ready.
+    const waiting = pendingStep.current;
+    if (waiting !== 0 && navOpen.current) {
+      pendingStep.current = 0;
+      stepRef.current(waiting);
+    }
+  }, [commitMarks, editorRef, finishNav, paint, pullChanges, reopenNav, syncNav]);
 
   /**
    * Called by the editor on every change; coalesced into one pass. A change
@@ -225,8 +337,9 @@ export function useSpellcheck(
       if (canHighlight()) CSS.highlights.delete(HIGHLIGHT_NAME);
       commitMarks([]);
       setPopup(null);
+      closeNav();
     };
-  }, [commitMarks, enabled]);
+  }, [closeNav, commitMarks, enabled]);
 
   // Every change to the note, whatever made it, makes the marks stale and
   // earns a fresh check.
@@ -250,6 +363,7 @@ export function useSpellcheck(
   useEffect(
     () => () => {
       if (timer.current) clearTimeout(timer.current);
+      if (doneTimer.current) clearTimeout(doneTimer.current);
     },
     [],
   );
@@ -303,39 +417,57 @@ export function useSpellcheck(
     };
   }, [popupOpen, toolbarRef]);
 
+  /** Open the corrections for one marked word, whose Range in the note is `range`. */
+  const openMark = useCallback(
+    (mark: MarkedWord, range: Range) => {
+      popupWord.current = range;
+      const box = range.getBoundingClientRect();
+      setPopup({
+        mark,
+        rect: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
+        clearTop: visibleArea(toolbarRef?.current ?? null).top,
+        suggestions: [],
+        loading: true,
+      });
+
+      void checker.current?.suggest(mark.word).then((list) => {
+        setPopup((current) =>
+          current && current.mark.start === mark.start
+            ? { ...current, suggestions: list, loading: false }
+            : current,
+        );
+      });
+    },
+    [toolbarRef],
+  );
+
   /** Open the corrections for the marked word at a screen position, if there is one. */
-  const openAt = useCallback((x: number, y: number) => {
-    const map = mapRef.current;
-    if (!map || marksRef.current.length === 0) return;
+  const openAt = useCallback(
+    (x: number, y: number) => {
+      const map = mapRef.current;
+      if (!map || marksRef.current.length === 0) return;
 
-    const mark = hitTest(map, marksRef.current, x, y);
-    // The map is current, so this only fails if the DOM and the map disagree
-    // — in which case showing nothing beats showing a word that is not there.
-    const range = mark ? wordRange(map, mark) : null;
-    if (!mark || !range) {
-      popupWord.current = null;
-      setPopup(null);
-      return;
-    }
-
-    popupWord.current = range;
-    const box = range.getBoundingClientRect();
-    setPopup({
-      mark,
-      rect: { top: box.top, bottom: box.bottom, left: box.left, right: box.right },
-      clearTop: visibleArea(toolbarRef?.current ?? null).top,
-      suggestions: [],
-      loading: true,
-    });
-
-    void checker.current?.suggest(mark.word).then((list) => {
-      setPopup((current) =>
-        current && current.mark.start === mark.start
-          ? { ...current, suggestions: list, loading: false }
-          : current,
-      );
-    });
-  }, [toolbarRef]);
+      const mark = hitTest(map, marksRef.current, x, y);
+      // The map is current, so this only fails if the DOM and the map disagree
+      // — in which case showing nothing beats showing a word that is not there.
+      const range = mark ? wordRange(map, mark) : null;
+      if (!mark || !range) {
+        popupWord.current = null;
+        setPopup(null);
+        return;
+      }
+      // Stepping carries on from a word the writer tapped themselves.
+      if (navOpen.current) {
+        const start = range.cloneRange();
+        start.collapse(true);
+        cursor.current = start;
+        onMark.current = true;
+        syncNav();
+      }
+      openMark(mark, range);
+    },
+    [openMark, syncNav],
+  );
 
   /**
    * A tap on the note. If anything changed since the last check, the pending
@@ -346,7 +478,14 @@ export function useSpellcheck(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (!enabled) return;
       const { clientX: x, clientY: y } = event;
+      // While stepping, «كېيىنكى» goes on from wherever the writer tapped.
+      const editor = editorRef.current;
+      if (navOpen.current && editor) {
+        cursor.current = caretIn(editor);
+        onMark.current = false;
+      }
       if (isCurrent()) {
+        syncNav();
         openAt(x, y);
         return;
       }
@@ -360,7 +499,93 @@ export function useSpellcheck(
         if (isCurrent()) openAt(x, y);
       });
     },
-    [enabled, isCurrent, openAt, runCheck],
+    [editorRef, enabled, isCurrent, openAt, runCheck, syncNav],
+  );
+
+  /**
+   * «كېيىنكى» / «ئالدىنقى»: the next error after the cursor, or the last one
+   * before it, wrapping at either end. The word is scrolled to the middle of
+   * what can be seen below the sticky header — the visual viewport, so a
+   * phone's keyboard is allowed for — and its corrections open beside it.
+   */
+  const step = useCallback(
+    async (direction: 1 | -1) => {
+      if (!navOpen.current) return;
+      if (checker.current?.status !== "ready") {
+        // Taken by the first check once the dictionary is in.
+        pendingStep.current = direction;
+        return;
+      }
+      if (!isCurrent()) {
+        if (timer.current) {
+          clearTimeout(timer.current);
+          timer.current = null;
+        }
+        await runCheck();
+        // Still changing: the writer is typing, and a step would land on
+        // offsets the typing has already moved.
+        if (!isCurrent() || !navOpen.current) return;
+      }
+
+      const map = mapRef.current;
+      const list = marksRef.current;
+      if (!map) return;
+      if (list.length === 0) {
+        finishNav();
+        return;
+      }
+      const from = cursorOffset(map);
+      const target =
+        direction === 1
+          ? (list.find((mark) => (onMark.current ? mark.start > from : mark.start >= from)) ?? list[0])
+          : (list.findLast((mark) => mark.start < from) ?? list[list.length - 1]);
+      const range = wordRange(map, target);
+      if (!range) {
+        void runCheck();
+        return;
+      }
+
+      const start = range.cloneRange();
+      start.collapse(true);
+      cursor.current = start;
+      onMark.current = true;
+      setNav({ open: true, at: list.indexOf(target) + 1, done: false });
+
+      // Instantly: the popup is placed from where the word is once the page
+      // has moved, and a smooth scroll would still be on its way.
+      const box = range.getBoundingClientRect();
+      const view = visibleArea(toolbarRef?.current ?? null);
+      const shift = box.top + box.height / 2 - (view.top + view.bottom) / 2;
+      if (Math.abs(shift) > 1) window.scrollBy({ top: shift, behavior: "instant" });
+      openMark(target, range);
+    },
+    [cursorOffset, finishNav, isCurrent, openMark, runCheck, toolbarRef],
+  );
+
+  useEffect(() => {
+    stepRef.current = (direction) => void step(direction);
+  });
+
+  /**
+   * Open the row and go to the first error after the caret — `caret`, the
+   * one the editor remembers, which outlives the tap on a button that took
+   * the focus; failing that, the live selection; failing that, the start.
+   */
+  const openNav = useCallback(
+    (caret: Range | null) => {
+      const editor = editorRef.current;
+      if (doneTimer.current) clearTimeout(doneTimer.current);
+      doneTimer.current = null;
+      navOpen.current = true;
+      navDone.current = false;
+      const remembered = caret && editor?.contains(caret.startContainer) ? caret.cloneRange() : null;
+      remembered?.collapse(false);
+      cursor.current = remembered ?? (editor ? caretIn(editor) : null);
+      onMark.current = false;
+      setNav({ open: true, at: 0, done: false });
+      void step(1);
+    },
+    [editorRef, step],
   );
 
   /**
@@ -395,9 +620,29 @@ export function useSpellcheck(
       // behaves like undoing anything else the writer typed.
       document.execCommand("insertText", false, replacement);
 
+      // The cursor stays at the start of the corrected word; «كېيىنكى»
+      // carries on from there.
+      onMark.current = false;
       void runCheck();
     },
     [editorRef, runCheck],
+  );
+
+  /**
+   * Marks taken away by an answer from the popup, at once, without waiting
+   * for a check: the word is right now, wherever it occurs.
+   */
+  const dropMarks = useCallback(
+    (keep: (mark: MarkedWord) => boolean) => {
+      const remaining = marksRef.current.filter(keep);
+      commitMarks(remaining);
+      paint(mapRef.current, remaining);
+      if (!navOpen.current) return;
+      onMark.current = false;
+      if (remaining.length === 0) finishNav();
+      else syncNav();
+    },
+    [commitMarks, finishNav, paint, syncNav],
   );
 
   /** «لۇغەتكە قوش» — this word is right; stop telling me it is not. */
@@ -413,11 +658,9 @@ export function useSpellcheck(
       checker.current?.setPersonal(next);
       // The cached verdict for this word is now wrong, and only for this word.
       verdicts.current.delete(word);
-      const remaining = marksRef.current.filter((mark) => mark.word !== word);
-      commitMarks(remaining);
-      paint(mapRef.current, remaining);
+      dropMarks((mark) => mark.word !== word);
     },
-    [commitMarks, paint, personal],
+    [dropMarks, personal],
   );
 
   return {
@@ -430,6 +673,10 @@ export function useSpellcheck(
     runCheck,
     applySuggestion,
     addToPersonal,
+    nav,
+    openNav,
+    closeNav,
+    step,
     /** False on browsers without the Custom Highlight API; the UI says so. */
     canUnderline: canHighlight(),
   };

@@ -227,6 +227,48 @@ export function offsetOf(map: TextMap, node: Node, offset: number): number | nul
   return null;
 }
 
+/**
+ * The flattened offset of ANY point in the document: a text node and an
+ * offset in it, or an element and a child index — where a caret or a live
+ * Range can sit after an edit restructured the nodes around it. A point
+ * between two text nodes resolves to the start of the next one; a point after
+ * the last, to the end of the text. Unlike `offsetOf`, never null and never
+ * the start of a whole block for a point in the middle of it.
+ */
+export function offsetAtPoint(map: TextMap, node: Node, offset: number): number {
+  const index = map.nodes.indexOf(node as Text);
+  if (index >= 0) return map.starts[index] + Math.min(Math.max(offset, 0), map.nodes[index].data.length);
+  if (map.nodes.length === 0) return 0;
+
+  const point = (node.ownerDocument ?? document).createRange();
+  try {
+    point.setStart(node, offset);
+  } catch {
+    return 0;
+  }
+  // The first text node that starts at or after the point. Nodes are in
+  // document order, so the answer is a binary search away.
+  let low = 0;
+  let high = map.nodes.length - 1;
+  let found = map.nodes.length;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    let side: number;
+    try {
+      side = point.comparePoint(map.nodes[mid], 0);
+    } catch {
+      return 0;
+    }
+    if (side >= 0) {
+      found = mid;
+      high = mid - 1;
+    } else {
+      low = mid + 1;
+    }
+  }
+  return found < map.nodes.length ? map.starts[found] : map.text.length;
+}
+
 /** The marked word covering an offset, if any. Marks never overlap. */
 export function wordAtOffset(marks: readonly MarkedWord[], offset: number): MarkedWord | null {
   for (const mark of marks) {

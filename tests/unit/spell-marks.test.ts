@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { isSingleToken, tokenize } from "@/lib/spellcheck/dictionary";
 import {
   LINE_SEPARATOR,
+  offsetAtPoint,
   offsetOf,
   rangeFor,
   readTextMap,
@@ -139,6 +140,25 @@ describe("offsets across separators", () => {
     for (const token of tokenize(map.text)) {
       expect(rangeFor(map, token.start, token.end)!.toString(), token.word).toBe(token.word);
     }
+  });
+
+  it("finds any point's offset — a text position, or an element and a child index", () => {
+    const editor = editorWith(html);
+    const map = readTextMap(editor);
+    // Every text position comes back as its own flattened offset.
+    map.nodes.forEach((node, index) => {
+      for (let within = 0; within <= node.data.length; within += 1) {
+        expect(offsetAtPoint(map, node, within)).toBe(map.starts[index] + within);
+      }
+    });
+    // Between nodes: the start of the next text, whichever element holds the point.
+    const heading = editor.querySelector("h2")!;
+    expect(offsetAtPoint(map, editor, 0)).toBe(0);
+    expect(offsetAtPoint(map, heading, 1)).toBe(map.text.indexOf("بىرىنچى"));
+    const list = editor.querySelector("ul")!;
+    expect(offsetAtPoint(map, list, 0)).toBe(map.text.indexOf("تۆتىنچى"));
+    // After the last text: the end.
+    expect(offsetAtPoint(map, editor, editor.childNodes.length)).toBe(map.text.length);
   });
 
   it("does not open the previous line's last word from the next line's first letter", () => {

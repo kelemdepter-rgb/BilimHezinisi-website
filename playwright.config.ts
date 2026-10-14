@@ -365,6 +365,25 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Spelling made comfortable (PROMPT-48): stepping through the errors,
+         * a word ignored in one note, the switch remembered, the personal
+         * dictionary's panel, and quotations left unmarked. Runs in Firefox
+         * and WebKit too, below.
+         */
+        name: `notes-spelling-${viewport.name}`,
+        testMatch: /[\\/]notes-spelling\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Licence attribution, the legal pages, password recovery and the
         // account page. Anonymous by default — everything a reader without an
         // account must be able to reach — with the account block opting into
@@ -762,11 +781,11 @@ export default defineConfig({
       },
     ]),
     ...NOTEBOOK_ENGINES.map((engine) => ({
-      // The same seven specs, setup and signed-in state as the Chromium
+      // The same eight specs, setup and signed-in state as the Chromium
       // notes, notes-sources, notes-save, notes-editing, notes-history,
-      // notes-list and notes-ai projects above.
+      // notes-list, notes-spelling and notes-ai projects above.
       name: `notebook-${engine.name}`,
-      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-list|-ai)?\.spec\.ts$/,
+      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-list|-spelling|-ai)?\.spec\.ts$/,
       dependencies: ["setup"],
       use: {
         browserName: engine.browser,

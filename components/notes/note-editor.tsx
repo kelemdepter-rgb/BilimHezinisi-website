@@ -50,6 +50,7 @@ import {
 } from "@/lib/notes/typography-store";
 import type { NoteDocument } from "@/lib/notes/data";
 import { SpellPopup } from "@/components/notes/spell-popup";
+import { SpellNavBar } from "@/components/notes/spell-nav";
 import { useSpellcheck } from "@/components/notes/use-spellcheck";
 import { SourcePanel } from "@/components/notes/source-panel";
 import { NotesAiPanel } from "@/components/notes/ai-panel";
@@ -1127,6 +1128,23 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 <Icon name="clock" />
                 {HISTORY_TITLE}
               </button>
+              <button
+                type="button"
+                className="hbtn"
+                data-testid="spell-nav-open-menu"
+                // The caret stays in the note: stepping starts after it.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  // The row takes the overflow's place, and switches the
+                  // checker on if it was off.
+                  setOverflowOpen(false);
+                  setSpellOpen(true);
+                  spell.openNav(savedRange.current);
+                }}
+              >
+                <Icon name="check" />
+                خاتالىقلارنى بىر-بىرلەپ كۆرۈش
+              </button>
             </div>
 
             {/* Typography for the page, not for the selection — see
@@ -1206,6 +1224,14 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           onReplacedAll={(snapshot) =>
             keepVersion("before-replace-all", { title: titleRef.current, html: snapshot })
           }
+        />
+
+        <SpellNavBar
+          nav={spell.nav}
+          status={spell.status}
+          total={spell.marks.length}
+          onStep={(direction) => void spell.step(direction)}
+          onClose={spell.closeNav}
         />
       </header>
 
@@ -1391,17 +1417,31 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           </p>
         )}
 
-        <p className="mt-3 text-[12px] text-ink3" data-testid="note-counts">
-          {counts.words} سۆز · {counts.chars.toLocaleString("en-US")} ھەرپ
-          {spellOpen && spell.status === "ready" && (
-            <span data-testid="spell-summary">
-              {" · "}
-              {spell.marks.length === 0
-                ? "ئىملا: خاتالىق يوق"
-                : `ئىملا: ${spell.marks.length} خاتالىق — سۆزنى بېسىڭ`}
-            </span>
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-ink3">
+          <p data-testid="note-counts">
+            {counts.words} سۆز · {counts.chars.toLocaleString("en-US")} ھەرپ
+            {spellOpen && spell.status === "ready" && (
+              <span data-testid="spell-summary">
+                {" · "}
+                {spell.marks.length === 0
+                  ? "ئىملا: خاتالىق يوق"
+                  : `ئىملا: ${spell.marks.length} خاتالىق — سۆزنى بېسىڭ`}
+              </span>
+            )}
+          </p>
+          {spellOpen && spell.status === "ready" && spell.marks.length > 0 && !spell.nav.open && (
+            <button
+              type="button"
+              className="hbtn"
+              data-testid="spell-nav-open"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => spell.openNav(savedRange.current)}
+            >
+              <Icon name="chevron-down" />
+              بىر-بىرلەپ كۆرۈش
+            </button>
           )}
-        </p>
+        </div>
 
         {spellOpen && spell.status === "loading" && (
           <p className="mt-1 text-[12px] text-ink3" data-testid="spell-status">

@@ -573,10 +573,13 @@ export function useSpellcheck(
         return;
       }
       const from = cursorOffset(map);
-      const target =
-        direction === 1
-          ? (list.find((mark) => (onMark.current ? mark.start > from : mark.start >= from)) ?? list[0])
-          : (list.findLast((mark) => mark.start < from) ?? list[list.length - 1]);
+      let target: MarkedWord;
+      if (direction === 1) {
+        target = list.find((mark) => (onMark.current ? mark.start > from : mark.start >= from)) ?? list[0];
+      } else {
+        const before = list.filter((mark) => mark.start < from);
+        target = before.length > 0 ? before[before.length - 1] : list[list.length - 1];
+      }
       const range = wordRange(map, target);
       if (!range) {
         void runCheck();

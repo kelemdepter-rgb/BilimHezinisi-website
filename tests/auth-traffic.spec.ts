@@ -215,3 +215,117 @@ test.describe("a signed-in reader", () => {
     expect(extraClients(traffic), "one client per storage key").toHaveLength(0);
   });
 });
+
+/**
+ * A bookmark or a note added while the reader's first load of them is still
+ * on its way (2026-10-17).
+ *
+ * The reader loads this book's bookmarks and notes once, as it opens. On a
+ * slow connection the database can READ that list before the reader adds
+ * something and DELIVER it after — and the late answer used to replace the
+ * panel's list, so a bookmark that was saved vanished from the panel until a
+ * reload, and readers added it again. Here the first load is read at once and
+ * held back until the additions have been saved: the order a slow phone
+ * produces, made certain.
+ */
+test.describe("added while the first load is still on its way", () => {
+  // page.route cannot see a request the site's service worker answers.
+  test.use({ serviceWorkers: "block" });
+
+  test("a bookmark and a note stay listed when the load lands after them", async ({ page }) => {
+    const bookId = seededBookId();
+    const userId = await signedInUserId(page);
+    const admin = adminClient();
+    // Already there before the book opens: what the late answer brings.
+    const oldBookmark = `كونا خەتكۈچ ${RUN_ID}`;
+    const oldNote = `كونا خاتىرە ${RUN_ID}`;
+    // Added while it is on its way.
+    const newBookmark = `يېڭى خەتكۈچ ${RUN_ID}`;
+    const newNote = `يېڭى خاتىرە ${RUN_ID}`;
+    page.on("dialog", (dialog) => {
+      void dialog.accept(dialog.message().startsWith("خەتكۈچ") ? newBookmark : newNote);
+    });
+
+    let deliver!: () => void;
+    const held = new Promise<void>((resolve) => (deliver = resolve));
+    let asked = 0;
+    let read = 0;
+    try {
+      const seeded = await Promise.all([
+        admin.from("bookmarks").insert({ user_id: userId, book_id: bookId, page_no: 2, position: 0, name: oldBookmark }),
+        admin.from("book_notes").insert({ user_id: userId, book_id: bookId, page_no: 2, position: 0, text: oldNote }),
+      ]);
+      for (const { error } of seeded) expect(error).toBeNull();
+
+      await page.route(/\/rest\/v1\/(bookmarks|book_notes)\?/, async (route) => {
+        if (route.request().method() !== "GET") return route.continue();
+        // Read now, before anything is added; delivered only when released.
+        asked += 1;
+        const response = await route.fetch();
+        read += 1;
+        await held;
+        await route.fulfill({ response });
+      });
+
+      await page.goto(`/books/${bookId}/read`);
+      await expect(page.getByTestId("reader-page").first()).toBeVisible();
+      // Both lists have been read by the database, and none has arrived. In
+      // development React runs the loading effect twice, so there may be two
+      // of each; every one asked for must be read before anything is added.
+      const settled = async () => {
+        await page.waitForTimeout(500);
+        return read >= 2 && read === asked;
+      };
+      await expect.poll(settled, { timeout: 15_000 }).toBe(true);
+
+      const isInsert = (table: string) => (response: { request(): { method(): string }; url(): string }) =>
+        response.request().method() === "POST" && response.url().includes(`/rest/v1/${table}?`);
+
+      const bookmarkSaved = page.waitForResponse(isInsert("bookmarks"));
+      await page.getByTestId("add-bookmark").click();
+      expect((await bookmarkSaved).ok(), "the bookmark is saved").toBe(true);
+
+      const panel = page.getByTestId("reader-panel");
+      await page.getByTestId("panel-toggle").click();
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText(newBookmark)).toBeVisible();
+
+      await panel.getByRole("tab", { name: /خاتىرە/ }).click();
+      const noteSaved = page.waitForResponse(isInsert("book_notes"));
+      await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
+      expect((await noteSaved).ok(), "the note is saved").toBe(true);
+      await expect(panel.getByText(newNote)).toBeVisible();
+
+      // The load lands. What it brings appears — and what was added stays.
+      deliver();
+      await expect(panel.getByText(oldNote)).toBeVisible({ timeout: 15_000 });
+      await expect(panel.getByText(newNote)).toBeVisible();
+      await expect(panel.getByRole("tab", { name: /خاتىرە/ })).toContainText("(2)");
+      await panel.getByRole("tab", { name: /خەتكۈچ/ }).click();
+      await expect(panel.getByText(oldBookmark)).toBeVisible();
+      await expect(panel.getByText(newBookmark)).toBeVisible();
+      await expect(panel.getByRole("tab", { name: /خەتكۈچ/ })).toContainText("(2)");
+
+      // And they were really written: a fresh load lists all four.
+      await page.unroute(/\/rest\/v1\/(bookmarks|book_notes)\?/);
+      await page.reload();
+      await page.getByTestId("panel-toggle").click();
+      await expect(panel.getByText(newBookmark)).toBeVisible({ timeout: 15_000 });
+      await expect(panel.getByText(oldBookmark)).toBeVisible();
+    } finally {
+      deliver();
+      await admin
+        .from("bookmarks")
+        .delete()
+        .eq("user_id", userId)
+        .eq("book_id", bookId)
+        .in("name", [oldBookmark, newBookmark]);
+      await admin
+        .from("book_notes")
+        .delete()
+        .eq("user_id", userId)
+        .eq("book_id", bookId)
+        .in("text", [oldNote, newNote]);
+    }
+  });
+});

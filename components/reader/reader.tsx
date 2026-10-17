@@ -43,6 +43,7 @@ import {
   type BookPage,
   type MatchPage,
 } from "@/lib/reader/pages";
+import { mergeLoaded, withAnnotation } from "@/lib/reader/annotations";
 import {
   initialPageWindow,
   parseStoredPosition,
@@ -142,6 +143,8 @@ export function Reader({
   const [restoredPage, setRestoredPage] = useState<number | null>(null);
   const [bookmarks, setBookmarks] = useState<Annotation[]>([]);
   const [notes, setNotes] = useState<Annotation[]>([]);
+  /** Removed in this visit: a load read before the removal must not bring them back. */
+  const removedAnnotations = useRef({ bookmark: new Set<number>(), note: new Set<number>() });
   const [findOpen, setFindOpen] = useState(false);
   const [findTerm, setFindTerm] = useState(highlight);
   const [matchPages, setMatchPages] = useState<MatchPage[]>([]);
@@ -185,14 +188,27 @@ export function Reader({
     if (published) rememberOfflineBook(bookId, title);
   }, [bookId, published, title]);
 
+  /**
+   * The bookmarks and notes, loaded once as the book opens — and MERGED with
+   * what the reader added or removed while the answer was on its way, never
+   * written over it (lib/reader/annotations.ts says why). An answer for a run
+   * of this effect that has been replaced is dropped: React runs it twice in
+   * development, and the first answer can land last.
+   */
   useEffect(() => {
     if (!signedIn) return;
+    let current = true;
     void fetchAnnotations(bookId)
       .then(({ bookmarks: b, notes: n }) => {
-        setBookmarks(b);
-        setNotes(n);
+        if (!current) return;
+        const removed = removedAnnotations.current;
+        setBookmarks((previous) => mergeLoaded(b, previous, removed.bookmark));
+        setNotes((previous) => mergeLoaded(n, previous, removed.note));
       })
       .catch(() => undefined);
+    return () => {
+      current = false;
+    };
   }, [bookId, signedIn]);
 
   const updateSettings = useCallback((patch: Partial<ReaderSettings>) => {
@@ -629,10 +645,7 @@ export function Reader({
         position.pageNo,
         name.trim() || `${position.pageNo}-بەت`,
       );
-      if (created)
-        setBookmarks((previous) =>
-          [...previous, created].sort((a, b) => a.page_no - b.page_no),
-        );
+      if (created) setBookmarks((previous) => withAnnotation(previous, created));
     } catch {
       setError("خەتكۈچ قوشۇلمىدى.");
     }
@@ -645,10 +658,7 @@ export function Reader({
     if (text === null || !text.trim()) return;
     try {
       const created = await addNote(bookId, position.pageNo, text.trim());
-      if (created)
-        setNotes((previous) =>
-          [...previous, created].sort((a, b) => a.page_no - b.page_no),
-        );
+      if (created) setNotes((previous) => withAnnotation(previous, created));
     } catch {
       setError("خاتىرە قوشۇلمىدى.");
     }
@@ -657,6 +667,7 @@ export function Reader({
   async function removeAnnotation(kind: "bookmark" | "note", id: number) {
     try {
       await deleteAnnotation(kind, id);
+      removedAnnotations.current[kind].add(id);
       if (kind === "bookmark")
         setBookmarks((previous) => previous.filter((item) => item.id !== id));
       else setNotes((previous) => previous.filter((item) => item.id !== id));

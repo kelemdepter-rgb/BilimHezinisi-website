@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page, type Response } from "@playwright/test";
 import { RUN_ID, SEED_BOOK_TITLE, hasStaffTestEnv, loadEnvLocal, readSeed } from "./env";
 import { adminClient, signedInUserId } from "./fixtures/notes";
 
@@ -65,6 +65,55 @@ async function assertNoHorizontalOverflow(page: Page) {
   expect(metrics.scrollWidth, "page must not scroll horizontally").toBeLessThanOrEqual(
     metrics.innerWidth + 1,
   );
+}
+
+/** A request that writes a new row into `table`. */
+function isInsert(table: "bookmarks" | "book_notes") {
+  return (response: Response) =>
+    response.request().method() === "POST" && response.url().includes(`/rest/v1/${table}?`);
+}
+
+/** The id of the row an insert wrote, from its answer. */
+async function insertedId(response: Response): Promise<number> {
+  const body = (await response.json()) as { id: number } | { id: number }[];
+  return Array.isArray(body) ? body[0].id : body.id;
+}
+
+/**
+ * «خەتكۈچ قوشۇش» through the toolbar's form: name it, save it, and wait for
+ * the database to have it. Returns the saved row's id.
+ */
+async function addBookmarkThroughForm(page: Page, name: string): Promise<number> {
+  await page.getByTestId("add-bookmark").click();
+  const form = page.getByTestId("annotation-form");
+  await expect(form).toHaveAttribute("data-kind", "bookmark");
+  await form.getByTestId("annotation-input").fill(name);
+  const saved = page.waitForResponse(isInsert("bookmarks"));
+  await form.getByTestId("annotation-save").click();
+  const response = await saved;
+  expect(response.ok(), "the bookmark is saved").toBe(true);
+  await expect(form).toHaveCount(0);
+  return insertedId(response);
+}
+
+/**
+ * «خاتىرە قوشۇش» in the panel: the panel steps aside for the form and comes
+ * back once the note is saved. Returns the saved row's id.
+ */
+async function addNoteThroughForm(page: Page, text: string): Promise<number> {
+  const panel = page.getByTestId("reader-panel");
+  await panel.getByRole("tab", { name: /خاتىرە/ }).click();
+  await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
+  const form = page.getByTestId("annotation-form");
+  await expect(form).toHaveAttribute("data-kind", "note");
+  await form.getByTestId("annotation-input").fill(text);
+  const saved = page.waitForResponse(isInsert("book_notes"));
+  await form.getByTestId("annotation-save").click();
+  const response = await saved;
+  expect(response.ok(), "the note is saved").toBe(true);
+  await expect(form).toHaveCount(0);
+  await expect(panel).toBeVisible();
+  return insertedId(response);
 }
 
 test.describe("a signed-out reader", () => {
@@ -151,27 +200,20 @@ test.describe("a signed-in reader", () => {
     // failure that said nothing about bookmarking.
     const bookmark = `سىناق خەتكۈچ ${RUN_ID}`;
     const note = `سىناق خاتىرە ${RUN_ID}`;
-    const answers: string[] = [];
-    page.on("dialog", (dialog) => {
-      answers.push(dialog.message());
-      void dialog.accept(dialog.message().startsWith("خەتكۈچ") ? bookmark : note);
-    });
 
     try {
       await page.goto(`/books/${bookId}/read`);
       await expect(page.getByTestId("reader-page").first()).toBeVisible();
 
-      await page.getByTestId("add-bookmark").click();
-      await expect.poll(() => answers.length, { timeout: 10_000 }).toBeGreaterThan(0);
+      await addBookmarkThroughForm(page, bookmark);
 
       const panel = page.getByTestId("reader-panel");
       await page.getByTestId("panel-toggle").click();
       await expect(panel).toBeVisible();
       await expect(panel.getByText(bookmark)).toBeVisible({ timeout: 15_000 });
 
-      // Notes live behind their own tab, and adding one opens the same prompt.
-      await panel.getByRole("tab", { name: /خاتىرە/ }).click();
-      await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
+      // Notes live behind their own tab, and adding one opens the same form.
+      await addNoteThroughForm(page, note);
       await expect(panel.getByText(note)).toBeVisible({ timeout: 15_000 });
 
       // Both must survive a reload — that is what proves they were written.
@@ -242,9 +284,6 @@ test.describe("added while the first load is still on its way", () => {
     // Added while it is on its way.
     const newBookmark = `يېڭى خەتكۈچ ${RUN_ID}`;
     const newNote = `يېڭى خاتىرە ${RUN_ID}`;
-    page.on("dialog", (dialog) => {
-      void dialog.accept(dialog.message().startsWith("خەتكۈچ") ? newBookmark : newNote);
-    });
 
     let deliver!: () => void;
     const held = new Promise<void>((resolve) => (deliver = resolve));
@@ -278,22 +317,14 @@ test.describe("added while the first load is still on its way", () => {
       };
       await expect.poll(settled, { timeout: 15_000 }).toBe(true);
 
-      const isInsert = (table: string) => (response: { request(): { method(): string }; url(): string }) =>
-        response.request().method() === "POST" && response.url().includes(`/rest/v1/${table}?`);
-
-      const bookmarkSaved = page.waitForResponse(isInsert("bookmarks"));
-      await page.getByTestId("add-bookmark").click();
-      expect((await bookmarkSaved).ok(), "the bookmark is saved").toBe(true);
+      await addBookmarkThroughForm(page, newBookmark);
 
       const panel = page.getByTestId("reader-panel");
       await page.getByTestId("panel-toggle").click();
       await expect(panel).toBeVisible();
       await expect(panel.getByText(newBookmark)).toBeVisible();
 
-      await panel.getByRole("tab", { name: /خاتىرە/ }).click();
-      const noteSaved = page.waitForResponse(isInsert("book_notes"));
-      await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
-      expect((await noteSaved).ok(), "the note is saved").toBe(true);
+      await addNoteThroughForm(page, newNote);
       await expect(panel.getByText(newNote)).toBeVisible();
 
       // The load lands. What it brings appears — and what was added stays.
@@ -326,6 +357,205 @@ test.describe("added while the first load is still on its way", () => {
         .eq("user_id", userId)
         .eq("book_id", bookId)
         .in("text", [oldNote, newNote]);
+    }
+  });
+});
+
+/**
+ * The form that names a bookmark and writes a note (2026-10-17). It replaced
+ * `window.prompt`: one line only, the browser's look rather than the reader's,
+ * and different again in the installed app. Every text is invented, and every
+ * row a test makes is removed by its id.
+ */
+test.describe("the bookmark and note form", () => {
+  /** Every insert into the two tables, as the browser sent it. */
+  function countInserts(page: Page) {
+    const inserts = { bookmarks: 0, book_notes: 0 };
+    page.on("request", (request) => {
+      if (request.method() !== "POST") return;
+      if (request.url().includes("/rest/v1/bookmarks?")) inserts.bookmarks += 1;
+      if (request.url().includes("/rest/v1/book_notes?")) inserts.book_notes += 1;
+    });
+    return inserts;
+  }
+
+  async function openBook(page: Page) {
+    await page.goto(`/books/${seededBookId()}/read`);
+    await expect(page.getByTestId("reader-page").first()).toBeVisible();
+  }
+
+  /** Visible, a 44 px target, and the thing under its centre is itself. */
+  async function expectTappable(control: Locator, name: string) {
+    await expect(control, name).toBeInViewport({ ratio: 1 });
+    const box = (await control.boundingBox())!;
+    expect(Math.round(box.height), `${name} is a 44 px target`).toBeGreaterThanOrEqual(44);
+    const onTop = await control.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return hit !== null && element.contains(hit);
+    });
+    expect(onTop, `${name} is not covered`).toBe(true);
+  }
+
+  test("a note keeps more than one line, through a reload", async ({ page }) => {
+    const bookId = seededBookId();
+    const userId = await signedInUserId(page);
+    const lines = [`بىرىنچى قۇر ${RUN_ID}`, "ئىككىنچى قۇر", "", "تۆتىنچى قۇر"];
+    const text = lines.join("\n");
+    let id: number | null = null;
+    try {
+      await openBook(page);
+      await page.getByTestId("panel-toggle").click();
+      id = await addNoteThroughForm(page, text);
+
+      const panel = page.getByTestId("reader-panel");
+      const shown = panel.locator("li").filter({ hasText: lines[0] }).getByTestId("annotation-text");
+      await expect(shown).toHaveCount(1);
+      expect(await shown.evaluate((element) => (element as HTMLElement).innerText)).toBe(text);
+
+      // Stored as written, line breaks and all.
+      const { data } = await adminClient().from("book_notes").select("text").eq("id", id).single();
+      expect((data as { text: string }).text).toBe(text);
+
+      await page.reload();
+      await page.getByTestId("panel-toggle").click();
+      await panel.getByRole("tab", { name: /خاتىرە/ }).click();
+      await expect(shown).toHaveCount(1, { timeout: 15_000 });
+      expect(await shown.evaluate((element) => (element as HTMLElement).innerText)).toBe(text);
+    } finally {
+      if (id !== null) {
+        await adminClient().from("book_notes").delete().eq("id", id).eq("user_id", userId).eq("book_id", bookId);
+      }
+    }
+  });
+
+  test("Escape and «بىكار قىلىش» save nothing; an empty name is «N-بەت»; an empty note is nothing", async ({
+    page,
+  }) => {
+    const bookId = seededBookId();
+    const userId = await signedInUserId(page);
+    const inserts = countInserts(page);
+    let id: number | null = null;
+    try {
+      await openBook(page);
+      const form = page.getByTestId("annotation-form");
+      const input = form.getByTestId("annotation-input");
+
+      // A bookmark is offered the page's own name, selected so typing replaces it.
+      await page.getByTestId("add-bookmark").click();
+      await expect(input).toBeFocused();
+      const suggested = await input.inputValue();
+      expect(suggested).toMatch(/^\d+-بەت$/);
+      expect(await input.evaluate((field) => (field as HTMLInputElement).selectionEnd)).toBe(suggested.length);
+
+      // Escape: gone, nothing sent, and the focus back on the button.
+      await page.keyboard.press("Escape");
+      await expect(form).toHaveCount(0);
+      await expect(page.getByTestId("add-bookmark")).toBeFocused();
+
+      // «بىكار قىلىش»: the same.
+      await page.getByTestId("add-bookmark").click();
+      await input.fill("ساقلانمايدۇ");
+      await form.getByTestId("annotation-cancel").click();
+      await expect(form).toHaveCount(0);
+
+      // A note cancelled from the panel: the panel comes back, unchanged.
+      const panel = page.getByTestId("reader-panel");
+      await page.getByTestId("panel-toggle").click();
+      await panel.getByRole("tab", { name: /خاتىرە/ }).click();
+      const notesTab = panel.getByRole("tab", { name: /خاتىرە/ });
+      const before = await notesTab.innerText();
+      await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
+      await expect(form).toHaveAttribute("data-kind", "note");
+      await expect(panel).toBeHidden();
+      await input.fill("ساقلانمايدىغان خاتىرە");
+      await page.keyboard.press("Escape");
+      await expect(form).toHaveCount(0);
+      await expect(panel).toBeVisible();
+      await expect(notesTab).toHaveText(before);
+
+      // An empty note is nothing, as before: the form closes, nothing is sent.
+      await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
+      await input.fill("   ");
+      await form.getByTestId("annotation-save").click();
+      await expect(form).toHaveCount(0);
+      await expect(panel).toBeVisible();
+      await expect(notesTab).toHaveText(before);
+      expect(inserts, "nothing cancelled or empty was sent").toEqual({ bookmarks: 0, book_notes: 0 });
+
+      // An empty bookmark name is the page's own name, as before.
+      await page.getByTestId("panel-close").click();
+      await page.getByTestId("add-bookmark").click();
+      const page_no = (await input.inputValue()).replace("-بەت", "");
+      await input.fill("");
+      const saved = page.waitForResponse(isInsert("bookmarks"));
+      await form.getByTestId("annotation-save").click();
+      const response = await saved;
+      expect(response.ok()).toBe(true);
+      id = await insertedId(response);
+      const { data } = await adminClient().from("bookmarks").select("name, page_no").eq("id", id).single();
+      expect(data).toEqual({ name: `${page_no}-بەت`, page_no: Number(page_no) });
+      await page.getByTestId("panel-toggle").click();
+      await panel.getByRole("tab", { name: /خەتكۈچ/ }).click();
+      await expect(panel.locator("li").filter({ hasText: `${page_no}-بەت` })).not.toHaveCount(0);
+      expect(inserts).toEqual({ bookmarks: 1, book_notes: 0 });
+    } finally {
+      if (id !== null) {
+        await adminClient().from("bookmarks").delete().eq("id", id).eq("user_id", userId).eq("book_id", bookId);
+      }
+    }
+  });
+
+  test("on a phone: in the toolbar, over nothing, and in reach after scrolling", async ({ page }, testInfo) => {
+    const own = testInfo.project.use.viewport!;
+    await openBook(page);
+
+    for (const kind of ["bookmark", "note"] as const) {
+      if (kind === "bookmark") {
+        await page.getByTestId("add-bookmark").click();
+      } else {
+        await page.getByTestId("panel-toggle").click();
+        const panel = page.getByTestId("reader-panel");
+        await panel.getByRole("tab", { name: /خاتىرە/ }).click();
+        await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
+      }
+      const form = page.getByTestId("annotation-form");
+      await expect(form).toHaveAttribute("data-kind", kind);
+
+      for (const width of own.width < 640 ? [own.width, 360] : [own.width]) {
+        await page.setViewportSize({ width, height: own.height });
+        await assertNoHorizontalOverflow(page);
+
+        // Part of the sticky toolbar — never a layer over the text.
+        const inToolbar = await form.evaluate(
+          (element) => element.closest('[data-testid="reader-toolbar"]') !== null,
+        );
+        expect(inToolbar, "the form is a row of the toolbar").toBe(true);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        const toolbar = (await page.getByTestId("reader-toolbar").boundingBox())!;
+        const text = (await page.getByTestId("reader-content").boundingBox())!;
+        expect(text.y, "the text starts below the form").toBeGreaterThanOrEqual(toolbar.y + toolbar.height - 1);
+
+        // Scrolled down and back up, every control of it is still there.
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        await page.waitForTimeout(300);
+        await expectTappable(form.getByTestId("annotation-save"), `«ساقلاش» scrolled down at ${width} px`);
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForTimeout(300);
+        for (const [id, name] of [
+          ["annotation-input", "the field"],
+          ["annotation-save", "«ساقلاش»"],
+          ["annotation-cancel", "«بىكار قىلىش»"],
+          ["keyboard-toggle", "the Uyghur keyboard"],
+        ] as const) {
+          await expectTappable(form.getByTestId(id), `${name} at ${width} px (${kind})`);
+        }
+      }
+
+      await page.setViewportSize({ width: own.width, height: own.height });
+      await form.getByTestId("annotation-cancel").click();
+      await expect(form).toHaveCount(0);
+      if (kind === "note") await page.getByTestId("panel-close").click();
     }
   });
 });

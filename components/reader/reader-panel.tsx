@@ -169,7 +169,11 @@ export function ReaderPanel({
                     <span className="block text-[12px] font-semibold text-am">
                       {item.page_no}-بەت
                     </span>
-                    <span className="mt-0.5 line-clamp-3 block text-[13px] leading-6">
+                    {/* A note keeps the lines it was written in. */}
+                    <span
+                      className="mt-0.5 line-clamp-3 block whitespace-pre-line text-[13px] leading-6"
+                      data-testid="annotation-text"
+                    >
                       {item.text}
                     </span>
                   </button>

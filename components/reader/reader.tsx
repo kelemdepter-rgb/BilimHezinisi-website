@@ -17,6 +17,7 @@ import { QuoteCard } from "@/components/reader/quote-card";
 import { KeyboardControl } from "@/components/search/uyghur-keyboard";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ReaderPanel } from "@/components/reader/reader-panel";
+import { AnnotationForm, type AnnotationDraft } from "@/components/reader/annotation-form";
 import { AiPanel, useDockedLayout } from "@/components/reader/ai-panel";
 import { readSelection } from "@/lib/ai/book-context";
 import { MarkdownContent } from "@/components/reader/markdown-content";
@@ -67,6 +68,8 @@ import type { Theme } from "@/lib/theme";
 
 const WINDOW_SIZE = 8;
 const FETCH_AHEAD_PX = 1200;
+/** What the reader is told when a bookmark or a note could not be saved. */
+const SAVE_FAILED = { bookmark: "خەتكۈچ قوشۇلمىدى.", note: "خاتىرە قوشۇلمىدى." } as const;
 
 /**
  * ?page= as the address bar has it, for a document that came from the cache.
@@ -145,6 +148,11 @@ export function Reader({
   const [notes, setNotes] = useState<Annotation[]>([]);
   /** Removed in this visit: a load read before the removal must not bring them back. */
   const removedAnnotations = useRef({ bookmark: new Set<number>(), note: new Set<number>() });
+  /** The bookmark or note being named or written, in the toolbar's form. */
+  const [draft, setDraft] = useState<AnnotationDraft | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const draftSeq = useRef(0);
+  const bookmarkButtonRef = useRef<HTMLButtonElement>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [findTerm, setFindTerm] = useState(highlight);
   const [matchPages, setMatchPages] = useState<MatchPage[]>([]);
@@ -635,32 +643,55 @@ export function Reader({
     await goToOccurrence(stepPosition(findIndex, delta, occurrences.length));
   }
 
-  async function createBookmark() {
-    const position = currentPosition();
-    const name = window.prompt("خەتكۈچ ئىسمى:", `${position.pageNo}-بەت`);
-    if (name === null) return;
-    try {
-      const created = await addBookmark(
-        bookId,
-        position.pageNo,
-        name.trim() || `${position.pageNo}-بەت`,
-      );
-      if (created) setBookmarks((previous) => withAnnotation(previous, created));
-    } catch {
-      setError("خەتكۈچ قوشۇلمىدى.");
-    }
+  /** «خەتكۈچ قوشۇش»: the form, for the page under the top of the screen. */
+  function createBookmark() {
+    const { pageNo } = currentPosition();
+    draftSeq.current += 1;
+    setDraft({ id: draftSeq.current, kind: "bookmark", pageNo, initial: `${pageNo}-بەت`, fromPanel: false });
   }
 
-  async function createNote() {
+  /** «خاتىرە قوشۇش» in the panel: the panel steps aside for the form, and comes back after it. */
+  function createNote() {
     const selected = window.getSelection()?.toString().trim() ?? "";
-    const position = currentPosition();
-    const text = window.prompt("خاتىرە:", selected);
-    if (text === null || !text.trim()) return;
+    const { pageNo } = currentPosition();
+    draftSeq.current += 1;
+    setPanelOpen(false);
+    setDraft({ id: draftSeq.current, kind: "note", pageNo, initial: selected, fromPanel: true });
+  }
+
+  /** Closed, saved or not: back to where the reader asked for it. */
+  const closeDraft = useCallback((closing: AnnotationDraft) => {
+    setDraft(null);
+    if (closing.fromPanel) setPanelOpen(true);
+    else bookmarkButtonRef.current?.focus();
+  }, []);
+
+  /**
+   * What the form saves. An empty bookmark name is «N-بەت» and an empty note
+   * is nothing, as before. A save that fails keeps the form open with the
+   * text in it, so nothing typed is lost.
+   */
+  async function saveDraft(saving: AnnotationDraft, text: string) {
+    if (saving.kind === "note" && !text.trim()) {
+      closeDraft(saving);
+      return;
+    }
+    setSavingDraft(true);
     try {
-      const created = await addNote(bookId, position.pageNo, text.trim());
-      if (created) setNotes((previous) => withAnnotation(previous, created));
+      if (saving.kind === "bookmark") {
+        const created = await addBookmark(bookId, saving.pageNo, text.trim() || `${saving.pageNo}-بەت`);
+        if (created) setBookmarks((previous) => withAnnotation(previous, created));
+      } else {
+        const created = await addNote(bookId, saving.pageNo, text.trim());
+        if (created) setNotes((previous) => withAnnotation(previous, created));
+      }
+      // A failed try said so; this one worked. Anything else stays said.
+      setError((current) => (current === SAVE_FAILED.bookmark || current === SAVE_FAILED.note ? null : current));
+      closeDraft(saving);
     } catch {
-      setError("خاتىرە قوشۇلمىدى.");
+      setError(SAVE_FAILED[saving.kind]);
+    } finally {
+      setSavingDraft(false);
     }
   }
 
@@ -802,9 +833,11 @@ export function Reader({
           {signedIn && (
             <button
               type="button"
+              ref={bookmarkButtonRef}
               className="ibtn"
               data-testid="add-bookmark"
               aria-label="خەتكۈچ قوشۇش"
+              aria-expanded={draft?.kind === "bookmark"}
               onClick={createBookmark}
             >
               <Icon name="bookmark" className="ic-lg" />
@@ -873,6 +906,17 @@ export function Reader({
               )}
             </div>
           </div>
+        )}
+
+        {draft && (
+          <AnnotationForm
+            key={draft.id}
+            draft={draft}
+            busy={savingDraft}
+            active={!panelOpen}
+            onSave={(text) => void saveDraft(draft, text)}
+            onCancel={() => closeDraft(draft)}
+          />
         )}
       </header>
 

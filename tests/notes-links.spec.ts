@@ -9,9 +9,10 @@ test.skip(!hasStaffTestEnv(), "Supabase env not configured");
 
 /**
  * Stage 8 of the notebook (PROMPT-49): a citation's link opened and unlinked
- * from inside the note, and the outline of a note's headings. Citations come
- * from the seeded test book and the Qur'an through the source panel, the way
- * a writer makes them; every other text is invented.
+ * from inside the note, the outline of a note's headings, and the format
+ * painter. Citations come from the seeded test book and the Qur'an through
+ * the source panel, the way a writer makes them; every other text is
+ * invented.
  */
 
 const AYA = { sura: 1, aya: 2 };
@@ -391,6 +392,191 @@ test.describe("the outline", () => {
         await page.getByTestId("outline-close").click();
         await expect(panel).toHaveCount(0);
       }
+    } finally {
+      await dropNote(path);
+    }
+  });
+});
+
+/** Select exactly `text` inside the note, wherever it is, and let the editor see it. */
+async function selectInNote(page: Page, text: string) {
+  await page.getByTestId("note-body").evaluate((editor, wanted) => {
+    (editor as HTMLElement).focus();
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const at = (node as Text).data.indexOf(wanted);
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + wanted.length);
+      const selection = getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return;
+    }
+    throw new Error(`no «${wanted}» in the note`);
+  }, text);
+  // selectionchange is delivered after the task; the editor reads the caret then.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+}
+
+/** How the text `text` looks: bold, italic, underlined, and its colour. */
+function looks(page: Page, text: string) {
+  return page.getByTestId("note-body").evaluate((editor, wanted) => {
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!(node as Text).data.includes(wanted)) continue;
+      const element = node.parentElement!;
+      const style = getComputedStyle(element);
+      let underline = false;
+      for (let at: Element | null = element; at && at !== editor; at = at.parentElement) {
+        if (getComputedStyle(at).textDecorationLine.includes("underline")) underline = true;
+      }
+      return {
+        bold: Number(style.fontWeight) >= 600,
+        italic: style.fontStyle === "italic",
+        underline,
+        color: style.color,
+      };
+    }
+    throw new Error(`no «${wanted}» in the note`);
+  }, text);
+}
+
+/** «فورمات سۈپۈرگىسى» lives under «باشقا ئىقتىدارلار» at every width. */
+async function takeFormat(page: Page) {
+  await page.getByTestId("toolbar-more").click();
+  await page.getByTestId("painter-toggle").click();
+}
+
+const RED = "rgb(192, 57, 43)";
+const BLUE = "rgb(46, 134, 193)";
+
+test.describe("the format painter", () => {
+  test("bold and coloured onto plain text, two «يېنىۋېلىش» to take it back, kept after a save", async ({ page }) => {
+    const path = await newNote(page, {
+      html:
+        '<div><b><font color="#c0392b">مەنبە سۆز</font></b> ئاددىي قۇر.</div>' +
+        "<div>نىشان قۇر بۇ يەردە.</div>",
+    });
+    try {
+      const body = page.getByTestId("note-body");
+      const before = await body.innerHTML();
+      const theme = (await looks(page, "نىشان قۇر")).color;
+
+      await selectInNote(page, "مەنبە");
+      await takeFormat(page);
+      // Pressed, and the row says what to do next.
+      await page.getByTestId("toolbar-more").click();
+      await expect(page.getByTestId("painter-toggle")).toHaveAttribute("aria-pressed", "true");
+      await page.getByTestId("toolbar-more").click();
+      await expect(page.getByTestId("painter-hint")).toHaveText(
+        "ئەمدى فورمات بېرىدىغان تېكىستنى تاللاپ، «فورماتنى بېرىش» نى بېسىڭ.",
+      );
+
+      await selectInNote(page, "نىشان قۇر");
+      await page.getByTestId("painter-apply").click();
+      await expect(page.getByTestId("painter-bar")).toHaveCount(0);
+      expect(await looks(page, "نىشان قۇر")).toEqual({ bold: true, italic: false, underline: false, color: RED });
+      // Only what was selected.
+      expect((await looks(page, "بۇ يەردە")).bold).toBe(false);
+
+      // One press per property changed: the colour, then the bold.
+      await page.getByTestId("format-undo").click();
+      expect(await looks(page, "نىشان قۇر")).toEqual({ bold: true, italic: false, underline: false, color: theme });
+      await page.getByTestId("format-undo").click();
+      expect(await looks(page, "نىشان قۇر")).toEqual({ bold: false, italic: false, underline: false, color: theme });
+      expect(await body.innerHTML()).toBe(before);
+
+      // Painted again, it survives the save and a reload.
+      await selectInNote(page, "مەنبە");
+      await takeFormat(page);
+      await selectInNote(page, "نىشان قۇر");
+      await page.getByTestId("painter-apply").click();
+      await expect(page.getByTestId("save-state")).toHaveText("ساقلاندى", { timeout: 25_000 });
+      await page.reload();
+      await expect(page.getByTestId("note-body")).toHaveAttribute("contenteditable", "true");
+      expect(await looks(page, "نىشان قۇر")).toEqual({ bold: true, italic: false, underline: false, color: RED });
+    } finally {
+      await dropNote(path);
+    }
+  });
+
+  test("a source with no colour of its own leaves the target's colour alone", async ({ page }) => {
+    const path = await newNote(page, {
+      html: '<div><i>يانتۇ مەنبە</i> ئاددىي.</div><div><b><font color="#2e86c1">كۆك نىشان</font></b></div>',
+    });
+    try {
+      await selectInNote(page, "يانتۇ");
+      await takeFormat(page);
+      await selectInNote(page, "كۆك نىشان");
+      await page.getByTestId("painter-apply").click();
+      // Italic now, and not bold any more, as the source — and still blue.
+      expect(await looks(page, "كۆك نىشان")).toEqual({ bold: false, italic: true, underline: false, color: BLUE });
+    } finally {
+      await dropNote(path);
+    }
+  });
+
+  test("asks for a selection first, and can be put down again", async ({ page }) => {
+    const path = await newNote(page, { html: "<div><u>ئاستى سىزىقلىق</u> ۋە ئاددىي.</div>" });
+    try {
+      // Nothing selected: the first tap explains.
+      await page.getByTestId("note-body").click();
+      await takeFormat(page);
+      await expect(page.getByTestId("note-notice")).toHaveText("ئاۋۋال فورماتى ئېلىنىدىغان تېكىستنى تاللاڭ.");
+      await expect(page.getByTestId("painter-bar")).toHaveCount(0);
+
+      await selectInNote(page, "ئاستى");
+      await page.getByTestId("painter-toggle").click();
+      await expect(page.getByTestId("painter-bar")).toBeVisible();
+      // «فورماتنى بېرىش» with nothing selected says so, and waits.
+      await page.getByTestId("note-body").evaluate(() => getSelection()!.collapseToEnd());
+      await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+      await page.getByTestId("painter-apply").click();
+      await expect(page.getByTestId("painter-hint")).toHaveText("ئاۋۋال فورمات بېرىدىغان تېكىستنى تاللاڭ.");
+      await expect(page.getByTestId("painter-bar")).toBeVisible();
+
+      await page.getByTestId("painter-cancel").click();
+      await expect(page.getByTestId("painter-bar")).toHaveCount(0);
+      expect((await looks(page, "ئاددىي")).underline).toBe(false);
+    } finally {
+      await dropNote(path);
+    }
+  });
+
+  test("its row is in reach after scrolling down and up, and the header goes back to two rows", async ({
+    page,
+  }, testInfo) => {
+    const path = await newNote(page, { html: `<div><b>توم مەنبە</b></div>${filler(60)}<div>ئەڭ ئاخىرقى قۇر.</div>` });
+    try {
+      const { width: own, height } = testInfo.project.use.viewport!;
+      const header = page.getByTestId("note-toolbar");
+      const resting = (await header.boundingBox())!.height;
+      await selectInNote(page, "توم");
+      await takeFormat(page);
+      await expect(page.getByTestId("painter-bar")).toBeVisible();
+
+      const widths = own < 768 ? [own, 360] : [own];
+      for (const width of widths) {
+        await page.setViewportSize({ width, height });
+        expect(await horizontalOverflow(page), `no sideways scroll at ${width}px`).toBeLessThanOrEqual(1);
+        // Down to the last line: the row is in the sticky header, still in reach there.
+        await scrollPage(page, 4000);
+        await expectTappable(page.getByTestId("painter-apply"), `painter-apply below, at ${width}px`);
+        await expectTappable(page.getByTestId("painter-cancel"), `painter-cancel below, at ${width}px`);
+        await scrollPage(page, -8000);
+        await scrollToTop(page);
+        await expectTappable(page.getByTestId("painter-apply"), `painter-apply at the top, at ${width}px`);
+      }
+
+      // The last line painted from down there.
+      await page.setViewportSize({ width: own, height });
+      await selectInNote(page, "ئەڭ ئاخىرقى");
+      await page.getByTestId("painter-apply").click();
+      expect((await looks(page, "ئەڭ ئاخىرقى")).bold).toBe(true);
+      await scrollToTop(page);
+      await expect.poll(async () => Math.round((await header.boundingBox())!.height)).toBe(Math.round(resting));
     } finally {
       await dropNote(path);
     }

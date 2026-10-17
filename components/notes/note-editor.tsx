@@ -70,6 +70,8 @@ import { FindBar } from "@/components/notes/find-bar";
 import { HistoryPanel } from "@/components/notes/history-panel";
 import { OUTLINE_TITLE, OutlinePanel } from "@/components/notes/outline-panel";
 import { outlineHeadings } from "@/lib/notes/outline";
+import { PAINTER_NEEDS_SOURCE, PAINTER_TITLE, PainterBar } from "@/components/notes/painter-bar";
+import { captureFormat, paint, selectedTexts, type PaintFormat } from "@/lib/notes/painter";
 import { ToolMenu } from "@/components/notes/tool-menu";
 import { useWideToolbar } from "@/components/notes/use-wide-toolbar";
 import { useAiState } from "@/lib/ai/use-ai-state";
@@ -135,6 +137,11 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dictionaryOpen, setDictionaryOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
+  /**
+   * The format painter, holding the format it took (PROMPT-49); `needsTarget`
+   * once «فورماتنى بېرىش» was pressed with nothing selected.
+   */
+  const [painter, setPainter] = useState<{ format: PaintFormat; needsTarget: boolean } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   /** Bumped on every open so the panel resets itself during render. */
   const [aiToken, setAiToken] = useState(0);
@@ -747,6 +754,81 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     readCaret();
   }
 
+  /**
+   * What is selected in the note: the live selection when it is in the note,
+   * otherwise the one remembered — a tap on a button can take the live one
+   * away in some engines before its click arrives.
+   */
+  function noteSelection(): Range | null {
+    const editor = editorRef.current;
+    if (!editor) return null;
+    const selection = document.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (editor.contains(range.commonAncestorContainer)) return range.cloneRange();
+    }
+    const saved = savedRange.current;
+    return saved && editor.contains(saved.commonAncestorContainer) ? saved.cloneRange() : null;
+  }
+
+  /**
+   * «فورمات سۈپۈرگىسى», the first tap (N24): take the format at the start of
+   * the selection — or explain that there has to be one. Pressed again, the
+   * painter is put down.
+   */
+  function togglePainter() {
+    if (painter) {
+      setPainter(null);
+      return;
+    }
+    const editor = editorRef.current;
+    const range = noteSelection();
+    const format = editor && range && !range.collapsed ? captureFormat(editor, range) : null;
+    if (!format) {
+      setNotice(PAINTER_NEEDS_SOURCE);
+      return;
+    }
+    setPainter({ format, needsTarget: false });
+    setNotice((current) => (current === PAINTER_NEEDS_SOURCE ? null : current));
+    // The painter's row takes the overflow's place, as the find bar does.
+    setOverflowOpen(false);
+  }
+
+  /**
+   * «فورماتنى بېرىش», the second tap: the selection's bold, italic and
+   * underline made to match, and the source's colour given only if it had
+   * one of its own (lib/notes/painter.ts). One batch, so autosave, the counts
+   * and the spellchecker run once; one «يېنىۋېلىش» per command run.
+   */
+  function applyPainter() {
+    const editor = editorRef.current;
+    if (!editor || !painter || !ready || choosing || inTrash) return;
+    const range = noteSelection();
+    if (!range || selectedTexts(range).length === 0) {
+      setPainter({ ...painter, needsTarget: true });
+      return;
+    }
+    const { format } = painter;
+    runBatch(() => {
+      editor.focus();
+      const selection = window.getSelection();
+      if (!selection) return;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      paint(editor, format, {
+        exec: (command, value) => {
+          document.execCommand(command, false, value);
+        },
+        selection: () => {
+          const live = window.getSelection();
+          return live && live.rangeCount > 0 ? live.getRangeAt(0) : null;
+        },
+      });
+    });
+    setPainter(null);
+    readCaret();
+  }
+
   /** An earlier version of the note, back on screen as an edit to be saved. */
   const restoreBody = useCallback(
     (html: string) => {
@@ -1226,6 +1308,18 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                 label="فورماتنى تازىلاش"
                 onClick={() => exec("removeFormat")}
               />
+              <button
+                type="button"
+                className={painter ? "hbtn on" : "hbtn"}
+                data-testid="painter-toggle"
+                aria-pressed={painter !== null}
+                // The selection whose format is taken stays selected.
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={togglePainter}
+              >
+                <Icon name="paint-roller" />
+                {PAINTER_TITLE}
+              </button>
               <label className="hbtn cursor-pointer" data-testid="note-color">
                 <Icon name="brush" />
                 <span className="hidden sm:inline">رەڭ</span>
@@ -1393,6 +1487,13 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           total={spell.marks.length}
           onStep={(direction) => void spell.step(direction)}
           onClose={spell.closeNav}
+        />
+
+        <PainterBar
+          armed={painter !== null}
+          needsTarget={painter?.needsTarget ?? false}
+          onApply={applyPainter}
+          onCancel={() => setPainter(null)}
         />
       </header>
 

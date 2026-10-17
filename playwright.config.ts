@@ -386,8 +386,8 @@ export default defineConfig({
       {
         /**
          * Finding your way in a note (PROMPT-49): a citation's link opened
-         * and unlinked from inside the note, and the outline of its
-         * headings. Runs in Firefox and WebKit too, below.
+         * and unlinked from inside the note, the outline of its headings,
+         * and the format painter. Runs in Firefox and WebKit too, below.
          */
         name: `notes-links-${viewport.name}`,
         testMatch: /[\\/]notes-links\.spec\.ts$/,

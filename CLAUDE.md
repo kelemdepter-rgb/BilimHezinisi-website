@@ -533,6 +533,39 @@ here. The table is left in place because an applied migration is never edited ·
   `<blockquote>` before its link — is NOT quoted by this definition, so both
   still look at it.
 
+## Notebook links, outline and painter (PROMPT-49)
+- **A tap on a link in a note opens the link card**
+  (`components/notes/link-popover.tsx`) — nothing in a contentEditable
+  follows a link (N10): its text, where it goes (`describeLink` in
+  `lib/notes/links.ts`: «كىتاب: «ماۋزۇ» — 3-بەت» from the citation's own
+  label, «قۇرئان: 2:255», otherwise the host name), «ئېچىش» and
+  «ئۇلىنىشنى ئېلىۋېتىش». Ctrl/Cmd+click opens at once. The spell popup
+  never opens for a tap on a link.
+- **Only http(s) addresses and this site's paths are ever opened**, and only
+  through `openLink` — a new tab, `noopener,noreferrer`. Any other scheme, or
+  a user name before the host, is shown as written and never opened.
+- **Unlinking is one `execCommand("unlink")` over the link's whole text**:
+  the text stays, one «يېنىۋېلىش» puts the link back.
+- **Boxes anchored to the note share one rule**,
+  `components/notes/anchored.ts`: measured, then placed below or above the
+  anchor, never over the toolbar or under the keyboard; they follow it on
+  scroll and resize (page and visual viewport) at most once a frame and go
+  only when it leaves the visible part. The spell popup and the link card use
+  it; a third box does too.
+- **«مۇندەرىجە»** lists `h1`–`h4` (`lib/notes/outline.ts`), empty ones left
+  out, indented from the note's highest level, re-read 300 ms after each
+  change. A tap puts the heading 8 px below the sticky header with the caret
+  at its start; on a phone the sheet closes first, then the jump is made.
+  The sheet frame is `components/notes/note-panel.tsx` (history and outline).
+- **The format painter carries only what a note can keep**
+  (`lib/notes/painter.ts`): bold, italic, underline, and a colour only when
+  the text has one of its own — never the theme's ink, which would stay dark
+  in the dark and sepia themes. It paints with the toolbar's own commands in
+  one `runBatch`, never a styled span (`font-weight` and `text-decoration`
+  do not survive the allow-list): at most two commands a property, one
+  «يېنىۋېلىش» each; a heading's boldness is never touched. Two taps — the
+  second, «فورماتنى بېرىش», in a header row that is never open by default.
+
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
 `npm run lint` + `npm run build` → Playwright smoke (mobile + desktop viewports) →

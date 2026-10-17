@@ -1,21 +1,17 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Icon } from "@/components/icons";
+import { UNPLACED, placeAnchored, useDismiss } from "@/components/notes/anchored";
 import type { SpellPopupState } from "@/components/notes/use-spellcheck";
-
-/** Kept clear of the viewport edges and of the sticky toolbar above. */
-const EDGE = 8;
-const GAP = 6;
 
 /**
  * The corrections for one word, anchored at the word itself.
  *
  * Fixed positioning, in viewport coordinates, because the anchor comes from
  * `getBoundingClientRect` and the editor scrolls inside the page. It prefers to
- * sit below the word and flips above when there is no room — which on a phone
- * is most of the time, since the on-screen keyboard takes the bottom half of
- * the screen and `visualViewport` is the only thing that knows how much.
+ * sit below the word and flips above when there is no room — see
+ * components/notes/anchored.ts, which the link card shares.
  */
 export function SpellPopup({
   state,
@@ -33,67 +29,16 @@ export function SpellPopup({
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<React.CSSProperties>({
-    position: "fixed",
-    top: -9999,
-    insetInlineStart: 0,
-    visibility: "hidden",
-  });
+  const [style, setStyle] = useState<React.CSSProperties>(UNPLACED);
 
-  // Measure, then place. Placing from the anchor alone would guess the popup's
-  // height, and a wrong guess is what puts it under the keyboard.
+  // Measure, then place.
   useLayoutEffect(() => {
     const node = ref.current;
     if (!node) return;
-
-    const viewport = window.visualViewport;
-    const viewTop = viewport?.offsetTop ?? 0;
-    const viewHeight = viewport?.height ?? window.innerHeight;
-    const viewWidth = viewport?.width ?? window.innerWidth;
-    const box = node.getBoundingClientRect();
-
-    // Never over the toolbar — measured, with the find bar or the overflow
-    // open as much as without — and never below the keyboard.
-    const topLimit = Math.max(viewTop, state.clearTop) + EDGE;
-    const bottomLimit = viewTop + viewHeight - EDGE;
-
-    let top = state.rect.bottom + GAP;
-    if (top + box.height > bottomLimit) {
-      const above = state.rect.top - GAP - box.height;
-      top = above >= topLimit ? above : Math.max(topLimit, bottomLimit - box.height);
-    }
-    top = Math.min(Math.max(top, topLimit), Math.max(topLimit, bottomLimit - box.height));
-
-    // Centre on the word, then pull inside the viewport. Physical left is
-    // correct here: this is a viewport coordinate, not a text direction.
-    let left = state.rect.left + (state.rect.right - state.rect.left) / 2 - box.width / 2;
-    left = Math.min(Math.max(left, EDGE), Math.max(EDGE, viewWidth - box.width - EDGE));
-
-    setStyle({
-      position: "fixed",
-      top,
-      left,
-      maxHeight: Math.max(120, bottomLimit - top),
-      visibility: "visible",
-    });
+    setStyle(placeAnchored(node.getBoundingClientRect(), state.rect, state.clearTop));
   }, [state.rect, state.clearTop]);
 
-  // Outside tap closes. Pointerdown rather than click so it fires before the
-  // editor's own handler re-opens a popup for the same word.
-  useEffect(() => {
-    const onDown = (event: PointerEvent) => {
-      if (!ref.current?.contains(event.target as Node)) onClose();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("pointerdown", onDown, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [onClose]);
+  useDismiss(ref, onClose);
 
   return (
     <div

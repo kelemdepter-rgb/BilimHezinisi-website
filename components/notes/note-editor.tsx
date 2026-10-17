@@ -50,6 +50,9 @@ import {
 } from "@/lib/notes/typography-store";
 import type { NoteDocument } from "@/lib/notes/data";
 import { SpellPopup } from "@/components/notes/spell-popup";
+import { LinkPopover, type LinkPopoverState } from "@/components/notes/link-popover";
+import { anchorRect, useFollowAnchor, visibleArea } from "@/components/notes/anchored";
+import { describeLink, linkAt, openLink } from "@/lib/notes/links";
 import { SpellNavBar } from "@/components/notes/spell-nav";
 import { DICTIONARY_TITLE, DictionaryPanel } from "@/components/notes/dictionary-panel";
 import { useSpellcheck } from "@/components/notes/use-spellcheck";
@@ -187,10 +190,27 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     setHasAya(Boolean(editor?.querySelector(AYA_SELECTOR)));
   }, []);
 
+  /**
+   * The link card for the link a tap landed on (PROMPT-49). An edit closes
+   * it, like the spell popup: the link it describes may have just changed.
+   */
+  const [linkPopup, setLinkPopup] = useState<LinkPopoverState | null>(null);
+
   /** One place that records "the document changed", so nothing is forgotten. */
   const markChanged = useCallback(() => {
     setRevision((value) => value + 1);
+    setLinkPopup(null);
   }, []);
+
+  /** The link card follows its link as the page and the keyboard move. */
+  useFollowAnchor(
+    linkPopup !== null,
+    toolbarRef,
+    () => linkPopup?.link.getBoundingClientRect() ?? null,
+    (rect, clearTop) => setLinkPopup((current) => (current ? { ...current, rect, clearTop } : current)),
+    () => setLinkPopup(null),
+  );
+  const closeLinkPopup = useCallback(() => setLinkPopup(null), []);
 
   /** Remember the caret, and read the block and list it is in for the toolbar to show. */
   const readCaret = useCallback(() => {
@@ -669,6 +689,57 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   /** A bulleted or numbered list; the kind the caret is already in takes the list away. */
   function setList(kind: Exclude<ListStyle, null>) {
     exec(kind === "bulleted" ? "insertUnorderedList" : "insertOrderedList");
+  }
+
+  /**
+   * A tap on the note. On a link (N10) it opens the link card — nothing in a
+   * contentEditable follows a link, and a note that is not editable yet would
+   * be left by one — or, with Ctrl (Cmd on a Mac), opens the link at once.
+   * Anywhere else it is the spellchecker's: the popup for a marked word.
+   */
+  function onEditorClick(event: React.MouseEvent<HTMLDivElement>) {
+    const editor = editorRef.current;
+    const link = editor ? linkAt(editor, event.target) : null;
+    if (!editor || !link) {
+      spell.onEditorPointerUp(event);
+      return;
+    }
+    event.preventDefault();
+    spell.closePopup();
+    const text = (link.textContent ?? "").replace(/\s+/g, " ").trim();
+    const where = describeLink(link.getAttribute("href") ?? "", text, window.location.href);
+    if ((event.ctrlKey || event.metaKey) && openLink(where)) return;
+    // Text being selected across a link is not a tap on it.
+    const selection = document.getSelection();
+    if (selection && !selection.isCollapsed && editor.contains(selection.anchorNode)) return;
+    setLinkPopup({
+      link,
+      text,
+      where,
+      rect: anchorRect(link.getBoundingClientRect()),
+      clearTop: visibleArea(toolbarRef.current).top,
+    });
+  }
+
+  /**
+   * «ئۇلىنىشنى ئېلىۋېتىش» — the link goes and its text stays: one native
+   * command over the link's whole text, so one «يېنىۋېلىش» puts it back.
+   */
+  function unlink(link: HTMLAnchorElement) {
+    const editor = editorRef.current;
+    setLinkPopup(null);
+    if (!editor || !link.isConnected || !editor.contains(link)) return;
+    runBatch(() => {
+      editor.focus();
+      const selection = window.getSelection();
+      if (!selection) return;
+      const whole = document.createRange();
+      whole.selectNodeContents(link);
+      selection.removeAllRanges();
+      selection.addRange(whole);
+      document.execCommand("unlink");
+    });
+    readCaret();
   }
 
   /** An earlier version of the note, back on screen as an edit to be saved. */
@@ -1425,8 +1496,8 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           onPaste={onPaste}
           // There is no element around a misspelled word to click — the marks
           // are painted, not inserted — so the tap is mapped back to the text
-          // by position. See lib/spellcheck/marks.ts.
-          onClick={spell.onEditorPointerUp}
+          // by position (lib/spellcheck/marks.ts). A link is an element.
+          onClick={onEditorClick}
         />
 
         {/*
@@ -1539,6 +1610,19 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             if (spell.addToPersonal(spell.popup!.mark.word) === "full") setNotice(PERSONAL_FULL);
           }}
           onClose={spell.closePopup}
+        />
+      )}
+
+      {linkPopup && (
+        <LinkPopover
+          state={linkPopup}
+          editable={ready && !choosing && !inTrash}
+          onOpen={() => {
+            openLink(linkPopup.where);
+            setLinkPopup(null);
+          }}
+          onUnlink={() => unlink(linkPopup.link)}
+          onClose={closeLinkPopup}
         />
       )}
     </div>

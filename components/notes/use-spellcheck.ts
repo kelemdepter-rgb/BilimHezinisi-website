@@ -8,6 +8,7 @@ import { MAX_PERSONAL_WORDS, isPersonalWord } from "@/lib/spellcheck/personal";
 import { getPersonalSnapshot, setPersonalWords, subscribePersonal } from "@/lib/spellcheck/personal-store";
 import { browserStorage } from "@/lib/notes/drafts";
 import { QUOTED_SELECTOR } from "@/lib/notes/quoted";
+import { useFollowAnchor, visibleArea, type AnchorRect } from "@/components/notes/anchored";
 import {
   canHighlight,
   hitTest,
@@ -32,7 +33,7 @@ const RECHECK_MS = 450;
 export type SpellPopupState = {
   mark: MarkedWord;
   /** Viewport coordinates of the word, for anchoring. */
-  rect: { top: number; bottom: number; left: number; right: number };
+  rect: AnchorRect;
   /** Where the visible page starts: below the sticky toolbar, or the top of the visual viewport. */
   clearTop: number;
   suggestions: string[];
@@ -50,15 +51,6 @@ export type SpellNav = { open: boolean; at: number; done: boolean };
 const NAV_CLOSED: SpellNav = { open: false, at: 0, done: false };
 /** How long «ئىملا خاتالىقى قالمىدى.» stays before the row closes itself. */
 const NAV_DONE_MS = 2000;
-
-/** The part of the page a word can be seen in, in viewport coordinates. */
-function visibleArea(toolbar: HTMLElement | null): { top: number; bottom: number } {
-  const viewport = window.visualViewport;
-  const viewTop = viewport?.offsetTop ?? 0;
-  const viewBottom = viewTop + (viewport?.height ?? window.innerHeight);
-  const toolbarBottom = toolbar?.getBoundingClientRect().bottom ?? 0;
-  return { top: Math.max(viewTop, toolbarBottom), bottom: viewBottom };
-}
 
 /** The caret, as a collapsed Range of its own, when it is inside `editor`. */
 function caretIn(editor: HTMLElement): Range | null {
@@ -410,50 +402,17 @@ export function useSpellcheck(
    * The popup follows its word while the word can be seen (N16).
    *
    * Marks are painted, not built from elements, so the browser moves them
-   * with the page by itself. The popup's anchor is a snapshot of where the
-   * word was, and used to be thrown away on any scroll or resize — but on a
-   * phone, tapping a word focuses the note, the keyboard rises and the page
-   * scrolls, which closed the popup the moment it opened. Now a scroll or a
-   * resize, of the page or of the visual viewport the keyboard shrinks, moves
-   * the anchor instead, at most once a frame; the popup closes only when the
-   * word has left the visible part of the page (or on an outside tap, Escape
-   * or an edit).
+   * with the page by itself; the popup's anchor moves with them, and the
+   * popup closes only when the word has left the visible part of the page
+   * (or on an outside tap, Escape or an edit). components/notes/anchored.ts.
    */
-  const popupOpen = popup !== null;
-  useEffect(() => {
-    if (!popupOpen) return;
-    let frame = 0;
-    const follow = () => {
-      frame = 0;
-      const range = popupWord.current;
-      if (!range) return;
-      const box = range.getBoundingClientRect();
-      const view = visibleArea(toolbarRef?.current ?? null);
-      const gone =
-        (box.width === 0 && box.height === 0) || box.bottom <= view.top || box.top >= view.bottom;
-      if (gone) {
-        setPopup(null);
-        return;
-      }
-      const rect = { top: box.top, bottom: box.bottom, left: box.left, right: box.right };
-      setPopup((current) => (current ? { ...current, rect, clearTop: view.top } : current));
-    };
-    const schedule = () => {
-      if (frame === 0) frame = requestAnimationFrame(follow);
-    };
-    const viewport = window.visualViewport;
-    window.addEventListener("scroll", schedule, { passive: true, capture: true });
-    window.addEventListener("resize", schedule);
-    viewport?.addEventListener("resize", schedule);
-    viewport?.addEventListener("scroll", schedule);
-    return () => {
-      if (frame !== 0) cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", schedule, { capture: true });
-      window.removeEventListener("resize", schedule);
-      viewport?.removeEventListener("resize", schedule);
-      viewport?.removeEventListener("scroll", schedule);
-    };
-  }, [popupOpen, toolbarRef]);
+  useFollowAnchor(
+    popup !== null,
+    toolbarRef,
+    () => popupWord.current?.getBoundingClientRect() ?? null,
+    (rect, clearTop) => setPopup((current) => (current ? { ...current, rect, clearTop } : current)),
+    () => setPopup(null),
+  );
 
   /** Open the corrections for one marked word, whose Range in the note is `range`. */
   const openMark = useCallback(

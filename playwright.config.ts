@@ -384,6 +384,24 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * Finding your way in a note (PROMPT-49): a citation's link opened
+         * and unlinked from inside the note. Runs in Firefox and WebKit too,
+         * below.
+         */
+        name: `notes-links-${viewport.name}`,
+        testMatch: /[\\/]notes-links\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Licence attribution, the legal pages, password recovery and the
         // account page. Anonymous by default — everything a reader without an
         // account must be able to reach — with the account block opting into
@@ -781,11 +799,11 @@ export default defineConfig({
       },
     ]),
     ...NOTEBOOK_ENGINES.map((engine) => ({
-      // The same eight specs, setup and signed-in state as the Chromium
+      // The same nine specs, setup and signed-in state as the Chromium
       // notes, notes-sources, notes-save, notes-editing, notes-history,
-      // notes-list, notes-spelling and notes-ai projects above.
+      // notes-list, notes-spelling, notes-links and notes-ai projects above.
       name: `notebook-${engine.name}`,
-      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-list|-spelling|-ai)?\.spec\.ts$/,
+      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-list|-spelling|-links|-ai)?\.spec\.ts$/,
       dependencies: ["setup"],
       use: {
         browserName: engine.browser,

@@ -68,6 +68,8 @@ import { SourcePanel } from "@/components/notes/source-panel";
 import { NotesAiPanel } from "@/components/notes/ai-panel";
 import { FindBar } from "@/components/notes/find-bar";
 import { HistoryPanel } from "@/components/notes/history-panel";
+import { OUTLINE_TITLE, OutlinePanel } from "@/components/notes/outline-panel";
+import { outlineHeadings } from "@/lib/notes/outline";
 import { ToolMenu } from "@/components/notes/tool-menu";
 import { useWideToolbar } from "@/components/notes/use-wide-toolbar";
 import { useAiState } from "@/lib/ai/use-ai-state";
@@ -105,6 +107,8 @@ const PERSONAL_FULL = `شەخسىي لۇغەتتە ${MAX_PERSONAL_WORDS.toLocale
 const IGNORE_FULL = `بۇ خاتىرىدە ${MAX_IGNORED_PER_NOTE} سۆزگە سەل قارالدى — ئارتۇقىنى قوشقىلى بولمايدۇ. بۇ سۆزنى «لۇغەتكە قوش» ئارقىلىق قوبۇل قىلسىڭىز بولىدۇ.`;
 
 const BLOCK_ICON: Record<BlockStyle, IconName> = { normal: "type", heading: "heading", quote: "quote" };
+/** A heading jumped to from the outline lands this far below the sticky header. */
+const HEADING_GAP = 8;
 
 export function NoteEditor({ note }: { note: NoteDocument }) {
   const router = useRouter();
@@ -130,6 +134,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [findOpen, setFindOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dictionaryOpen, setDictionaryOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   /** Bumped on every open so the panel resets itself during render. */
   const [aiToken, setAiToken] = useState(0);
@@ -769,6 +774,52 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
 
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
   const closeDictionary = useCallback(() => setDictionaryOpen(false), []);
+  const closeOutline = useCallback(() => setOutlineOpen(false), []);
+
+  /**
+   * Go to the outline's `index`th heading (PROMPT-49): scrolled to just
+   * below the sticky header — the visual viewport's top, where a phone's
+   * keyboard has moved it — with the caret at its start, so writing carries
+   * on from there.
+   */
+  const goToHeading = useCallback((index: number) => {
+    const editor = editorRef.current;
+    const heading = editor ? outlineHeadings(editor)[index] : undefined;
+    if (!editor || !heading) return;
+    if (editor.isContentEditable) {
+      editor.focus({ preventScroll: true });
+      const caret = document.createRange();
+      caret.setStart(heading, 0);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(caret);
+    }
+    // Instantly, and after the caret: nothing is left to move the page afterwards.
+    const shift = heading.getBoundingClientRect().top - (visibleArea(toolbarRef.current).top + HEADING_GAP);
+    if (Math.abs(shift) > 1) window.scrollBy({ top: shift, behavior: "instant" });
+  }, []);
+
+  /**
+   * On a phone the outline is a sheet over the note: it closes first, and
+   * the jump is made once it has gone (the effect below) — by then the page
+   * is no longer held still underneath it. From 1024 px up it stays open
+   * beside the note, for the next jump.
+   */
+  const pendingHeading = useRef<number | null>(null);
+  function jumpToHeading(index: number) {
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      pendingHeading.current = index;
+      setOutlineOpen(false);
+      return;
+    }
+    goToHeading(index);
+  }
+  useEffect(() => {
+    if (outlineOpen || pendingHeading.current === null) return;
+    const index = pendingHeading.current;
+    pendingHeading.current = null;
+    goToHeading(index);
+  }, [outlineOpen, goToHeading]);
 
   /** The AI panel's «ئەسلىگە قايتۇرۇش»: what it would discard is kept first. */
   const undoAiCorrection = useCallback(
@@ -1217,6 +1268,18 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               <button
                 type="button"
                 className="hbtn"
+                data-testid="outline-open"
+                onClick={() => {
+                  setOverflowOpen(false);
+                  setOutlineOpen(true);
+                }}
+              >
+                <Icon name="list" />
+                {OUTLINE_TITLE}
+              </button>
+              <button
+                type="button"
+                className="hbtn"
                 data-testid="spell-nav-open-menu"
                 // The caret stays in the note: stepping starts after it.
                 onMouseDown={(event) => event.preventDefault()}
@@ -1578,6 +1641,14 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       />
 
       <DictionaryPanel open={dictionaryOpen} onClose={closeDictionary} findGlued={spell.findGlued} />
+
+      <OutlinePanel
+        open={outlineOpen}
+        editorRef={editorRef}
+        revision={revision}
+        onJump={jumpToHeading}
+        onClose={closeOutline}
+      />
 
       {aiAvailable && (
         <NotesAiPanel

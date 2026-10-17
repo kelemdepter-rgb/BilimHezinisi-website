@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
-import { SEED_BOOK_TITLE, hasStaffTestEnv, loadEnvLocal, readSeed } from "./env";
+import { RUN_ID, SEED_BOOK_TITLE, hasStaffTestEnv, loadEnvLocal, readSeed } from "./env";
+import { adminClient, signedInUserId } from "./fixtures/notes";
 
 loadEnvLocal();
 
@@ -144,41 +145,58 @@ test.describe("a signed-in reader", () => {
 
   test("still adds, lists and deletes a bookmark and a note", async ({ page }) => {
     const bookId = seededBookId();
+    // This run's own labels. The account and the seeded book are shared by
+    // every attempt in a run, so a fixed label also matched whatever an
+    // earlier, failed attempt had left behind — two rows, and a strict-mode
+    // failure that said nothing about bookmarking.
+    const bookmark = `سىناق خەتكۈچ ${RUN_ID}`;
+    const note = `سىناق خاتىرە ${RUN_ID}`;
     const answers: string[] = [];
     page.on("dialog", (dialog) => {
       answers.push(dialog.message());
-      void dialog.accept(dialog.message().startsWith("خەتكۈچ") ? "سىناق خەتكۈچ" : "سىناق خاتىرە");
+      void dialog.accept(dialog.message().startsWith("خەتكۈچ") ? bookmark : note);
     });
 
-    await page.goto(`/books/${bookId}/read`);
-    await expect(page.getByTestId("reader-page").first()).toBeVisible();
+    try {
+      await page.goto(`/books/${bookId}/read`);
+      await expect(page.getByTestId("reader-page").first()).toBeVisible();
 
-    await page.getByTestId("add-bookmark").click();
-    await expect.poll(() => answers.length, { timeout: 10_000 }).toBeGreaterThan(0);
+      await page.getByTestId("add-bookmark").click();
+      await expect.poll(() => answers.length, { timeout: 10_000 }).toBeGreaterThan(0);
 
-    const panel = page.getByTestId("reader-panel");
-    await page.getByTestId("panel-toggle").click();
-    await expect(panel).toBeVisible();
-    await expect(panel.getByText("سىناق خەتكۈچ")).toBeVisible({ timeout: 15_000 });
+      const panel = page.getByTestId("reader-panel");
+      await page.getByTestId("panel-toggle").click();
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText(bookmark)).toBeVisible({ timeout: 15_000 });
 
-    // Notes live behind their own tab, and adding one opens the same prompt.
-    await panel.getByRole("tab", { name: /خاتىرە/ }).click();
-    await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
-    await expect(panel.getByText("سىناق خاتىرە")).toBeVisible({ timeout: 15_000 });
+      // Notes live behind their own tab, and adding one opens the same prompt.
+      await panel.getByRole("tab", { name: /خاتىرە/ }).click();
+      await panel.getByRole("button", { name: /خاتىرە قوشۇش/ }).click();
+      await expect(panel.getByText(note)).toBeVisible({ timeout: 15_000 });
 
-    // Both must survive a reload — that is what proves they were written.
-    await page.reload();
-    await page.getByTestId("panel-toggle").click();
-    await expect(panel.getByText("سىناق خەتكۈچ")).toBeVisible({ timeout: 15_000 });
+      // Both must survive a reload — that is what proves they were written.
+      await page.reload();
+      await page.getByTestId("panel-toggle").click();
+      await expect(panel.getByText(bookmark)).toBeVisible({ timeout: 15_000 });
 
-    // …and both must be removable again, so the library is left as it was.
-    for (const label of ["سىناق خەتكۈچ", "سىناق خاتىرە"]) {
-      const tab = label.endsWith("خەتكۈچ") ? /خەتكۈچ/ : /خاتىرە/;
-      await panel.getByRole("tab", { name: tab }).click();
-      const row = panel.locator("li").filter({ hasText: label });
-      await expect(row).toHaveCount(1);
-      await row.getByRole("button", { name: "ئۆچۈرۈش" }).click();
-      await expect(row).toHaveCount(0, { timeout: 15_000 });
+      // …and both must be removable again, so the library is left as it was.
+      for (const [label, tab] of [
+        [bookmark, /خەتكۈچ/],
+        [note, /خاتىرە/],
+      ] as const) {
+        await panel.getByRole("tab", { name: tab }).click();
+        const row = panel.locator("li").filter({ hasText: label });
+        await expect(row).toHaveCount(1);
+        await row.getByRole("button", { name: "ئۆچۈرۈش" }).click();
+        await expect(row).toHaveCount(0, { timeout: 15_000 });
+      }
+    } finally {
+      // Whatever an attempt that stopped half-way left, and only that: this
+      // account's rows on this book with this run's labels.
+      const userId = await signedInUserId(page);
+      const admin = adminClient();
+      await admin.from("bookmarks").delete().eq("user_id", userId).eq("book_id", bookId).eq("name", bookmark);
+      await admin.from("book_notes").delete().eq("user_id", userId).eq("book_id", bookId).eq("text", note);
     }
   });
 

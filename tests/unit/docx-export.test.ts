@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
-import { buildDocx } from "@/lib/notes/export-docx";
+import { buildDocx, type DocxOptions } from "@/lib/notes/export-docx";
+import { ayaInsertHtml } from "@/lib/notes/insert";
 
 /**
  * A .docx is a zip of XML. "Valid" here means the archive really opens, the
@@ -10,14 +11,15 @@ import { buildDocx } from "@/lib/notes/export-docx";
  *
  * Every text below is invented for the test.
  */
-async function openDocx(title: string, html: string) {
-  const blob = await buildDocx(title, html);
+async function openDocx(title: string, html: string, options?: DocxOptions) {
+  const blob = await buildDocx(title, html, options);
   const zip = await JSZip.loadAsync(await blob.arrayBuffer());
   const part = async (name: string) => (await zip.file(name)?.async("string")) ?? "";
   return {
     blob,
     zip,
     documentXml: await part("word/document.xml"),
+    stylesXml: await part("word/styles.xml"),
     numberingXml: await part("word/numbering.xml"),
   };
 }
@@ -328,5 +330,67 @@ describe("DOCX export keeps the note's shape (N12)", () => {
       "center",
       "right",
     ]);
+  });
+});
+
+describe("DOCX export uses the notebook's typography", () => {
+  const typography = { font: "tuz", fontSize: 20, lineHeight: 2 } as const;
+
+  it("the default run font is the chosen face, for every script slot", async () => {
+    const { stylesXml } = await openDocx("ف", "<p>تېكىست</p>", { typography });
+    const defaults = parse(stylesXml).getElementsByTagNameNS(W, "rPrDefault")[0];
+    const fonts = defaults.getElementsByTagNameNS(W, "rFonts")[0];
+    for (const slot of ["ascii", "hAnsi", "cs", "eastAsia"]) {
+      expect(fonts.getAttributeNS(W, slot), slot).toBe("UKIJ Tuz");
+    }
+  });
+
+  it("the default size is the notebook's px size in points, for complex script too", async () => {
+    const { stylesXml } = await openDocx("ف", "<p>تېكىست</p>", { typography });
+    const defaults = parse(stylesXml).getElementsByTagNameNS(W, "rPrDefault")[0];
+    // 20 px × 0.75 = 15 pt = 30 half-points.
+    expect(val(defaults, "sz")).toBe("30");
+    expect(val(defaults, "szCs")).toBe("30");
+  });
+
+  it("line spacing follows the notebook's line height", async () => {
+    const { stylesXml } = await openDocx("ف", "<p>تېكىست</p>", { typography });
+    const defaults = parse(stylesXml).getElementsByTagNameNS(W, "pPrDefault")[0];
+    const spacing = defaults.getElementsByTagNameNS(W, "spacing")[0];
+    // 15 pt × 2 = 30 pt = 600 twips, at least — CSS line-height is a line
+    // box of exactly that, and "at least" never clips a larger run.
+    expect(spacing.getAttributeNS(W, "line")).toBe("600");
+    expect(spacing.getAttributeNS(W, "lineRule")).toBe("atLeast");
+  });
+
+  it("the defaults are the notebook's own defaults when nothing was chosen", async () => {
+    const { stylesXml } = await openDocx("ف", "<p>تېكىست</p>");
+    const defaults = parse(stylesXml).getElementsByTagNameNS(W, "rPrDefault")[0];
+    expect(defaults.getElementsByTagNameNS(W, "rFonts")[0].getAttributeNS(W, "cs")).toBe("UKIJ Ekran");
+    expect(val(defaults, "szCs")).toBe("24");
+  });
+
+  it("the title is in the same face, larger", async () => {
+    const { stylesXml } = await openDocx("ف", "<p>تېكىست</p>", { typography });
+    const title = Array.from(parse(stylesXml).getElementsByTagNameNS(W, "style")).find(
+      (style) => style.getAttributeNS(W, "styleId") === "Title",
+    )!;
+    expect(title.getElementsByTagNameNS(W, "rFonts")[0].getAttributeNS(W, "cs")).toBe("UKIJ Tuz");
+    expect(Number(val(title, "szCs"))).toBeGreaterThan(30);
+  });
+
+  it("headings scale with the body, so none is smaller than the text", async () => {
+    const { stylesXml } = await openDocx("ف", "<h4>كىچىك ماۋزۇ</h4>", { typography });
+    const styles = Array.from(parse(stylesXml).getElementsByTagNameNS(W, "style"));
+    for (const id of ["Heading1", "Heading2", "Heading3", "Heading4"]) {
+      const style = styles.find((element) => element.getAttributeNS(W, "styleId") === id)!;
+      expect(Number(val(style, "szCs")), id).toBeGreaterThanOrEqual(30);
+    }
+  });
+
+  it("an inserted verse keeps its Uthmani face", async () => {
+    const html = ayaInsertHtml({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, "both", "سىناق");
+    const { documentXml } = await openDocx("ف", html, { typography });
+    expect(documentXml).toContain('w:cs="Uthmanic Hafs"');
   });
 });

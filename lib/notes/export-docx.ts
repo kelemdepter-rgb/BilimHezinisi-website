@@ -5,6 +5,7 @@ import {
   ExternalHyperlink,
   HeadingLevel,
   LevelFormat,
+  LineRuleType,
   Packer,
   Paragraph,
   Table,
@@ -18,6 +19,7 @@ import {
 } from "docx";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
 import { exportFileName, exportUrl, holdsVerse, parseNote, saveFile } from "@/lib/notes/export-shared";
+import { DEFAULT_TYPOGRAPHY, NOTE_FONT_STACKS, type NoteTypography } from "@/lib/notes/typography";
 import { BLOCK_TAGS } from "@/lib/spellcheck/marks";
 
 /**
@@ -37,18 +39,29 @@ import { BLOCK_TAGS } from "@/lib/spellcheck/marks";
  * for `<ul>` and numbers for `<ol>`, and every `<ol>` counting from 1 on its
  * own definition. Tables are real Word tables, right-to-left, spans kept.
  *
+ * THE NOTEBOOK'S TYPE. The document's defaults are the face, size and line
+ * height the writer chose for the notebook (lib/notes/typography.ts). Fonts
+ * are named, never embedded — the licences and the file size both say no —
+ * so Word uses the face when it is installed, as UKIJ is on most Uyghur
+ * writers' machines. An inserted verse keeps its own Uthmani face.
+ *
  * SOURCES. A citation stays a link back to the book, resolved to an absolute
- * address so it still opens from a file on somebody's desktop; a run's
- * font-family travels, so an inserted verse is in the Uthmani face in Word
- * as on screen; and a note that quotes the Qur'an carries the credit its
- * sources require.
+ * address so it still opens from a file on somebody's desktop, and a note
+ * that quotes the Qur'an carries the credit its sources require.
  */
+
+export type DocxOptions = {
+  /** The notebook's face, size and line height; its defaults when absent. */
+  typography?: NoteTypography;
+};
 
 /** A4 with Word's one-inch margins (the docx defaults): the width text may use, in twips. */
 const TEXT_WIDTH = 11906 - 2 * 1440;
 /** How far each list level and each quote steps in from the start side. */
 const STEP = 720;
 const HANGING = 360;
+/** The ink headings are drawn in on the paper theme (`--text`). */
+const INK = "2A2012";
 /** A link with no colour of its own. */
 const LINK_BLUE = "1155CC";
 
@@ -122,6 +135,8 @@ type Context = {
   item: ListItem | null;
   /** Whitespace is kept and a newline breaks the line. */
   pre: boolean;
+  /** A `<p>`: on screen it is set off from its neighbours (`.md-body p`). */
+  spaced: boolean;
 };
 
 /** The first family of a CSS stack, unquoted — Word wants one name, not a list. */
@@ -284,8 +299,15 @@ class DocxWalk {
   /** Every numbering definition the note's lists need, made as they are met. */
   readonly numbering: { reference: string; levels: ILevelsOptions[] }[] = [];
   private lists = 0;
+  private gap: number;
 
-  constructor(private readonly base: string) {}
+  constructor(
+    private readonly base: string,
+    bodyHalfPoints: number,
+  ) {
+    // `.md-body p { margin-block: 0.85em }`, in twips (half-points × 10).
+    this.gap = Math.round(bodyHalfPoints * 0.85 * 10);
+  }
 
   /** The children of `parent`: blocks in turn, the words between them gathered into paragraphs. */
   blocks(parent: Node, context: Context, out: (Paragraph | Table)[]): void {
@@ -314,6 +336,7 @@ class DocxWalk {
       ...context,
       style: inlineStyle(element, context.style),
       alignment: alignmentOf(element) ?? context.alignment,
+      spaced: tag === "p",
     };
 
     if (tag === "ul" || tag === "ol") this.list(element, own, out);
@@ -350,7 +373,7 @@ class DocxWalk {
     }
 
     const item = (numbered: boolean): ListItem => ({ reference, level, numbered });
-    const inner: Context = { ...context, heading: undefined };
+    const inner: Context = { ...context, spaced: false, heading: undefined };
     let loose: Node[] = [];
     const flush = () => {
       if (loose.length > 0) this.paragraph(loose, { ...inner, item: item(true) }, out);
@@ -416,6 +439,7 @@ class DocxWalk {
       quote: 0,
       item: null,
       pre: false,
+      spaced: false,
     });
 
     const rows = htmlRows.map((row, index) => {
@@ -521,17 +545,28 @@ class DocxWalk {
       ...(start > 0 && (!numbered || context.quote > 0)
         ? { indent: numbered ? { left: start, hanging: HANGING } : { left: start } }
         : {}),
+      ...(context.spaced ? { spacing: { after: this.gap } } : {}),
     };
     out.push(new Paragraph(options));
   }
 }
 
 /** Build the .docx bytes. Exported separately so a test can open the result. */
-export async function buildDocx(title: string, html: string): Promise<Blob> {
+export async function buildDocx(title: string, html: string, options: DocxOptions = {}): Promise<Blob> {
+  const typography = options.typography ?? DEFAULT_TYPOGRAPHY;
   const base = window.location.href;
   const root = parseNote(html);
+  const verse = holdsVerse(root);
 
-  const walk = new DocxWalk(base);
+  const face = firstFamily(NOTE_FONT_STACKS[typography.font]) ?? "UKIJ Ekran";
+  const faces = { ascii: face, hAnsi: face, cs: face, eastAsia: face };
+  // 1 px = 0.75 pt; Word counts half-points.
+  const body = Math.round(typography.fontSize * 0.75 * 2);
+  const scaled = (em: number) => Math.round(body * em);
+  /** em → twips, for spacing. */
+  const twips = (em: number) => Math.round(body * em * 10);
+
+  const walk = new DocxWalk(base, body);
   const children: (Paragraph | Table)[] = [
     new Paragraph({
       bidirectional: true,
@@ -539,23 +574,54 @@ export async function buildDocx(title: string, html: string): Promise<Blob> {
       children: [new TextRun({ text: title, rightToLeft: true })],
     }),
   ];
-  walk.blocks(root, { style: PLAIN, quote: 0, item: null, pre: false }, children);
+  walk.blocks(
+    root,
+    { style: PLAIN, quote: 0, item: null, pre: false, spaced: false },
+    children,
+  );
   // An empty note still has to produce a file Word will open with a body.
   if (children.length === 1) children.push(new Paragraph({ bidirectional: true, children: [] }));
 
   // The credit the Qur'an's sources require (lib/notes/attribution.ts):
   // once, at the end, and only when a verse is actually in the note.
-  if (holdsVerse(root)) {
+  if (verse) {
     children.push(
       new Paragraph({ bidirectional: true, children: [] }),
       new Paragraph({
         bidirectional: true,
-        children: [new TextRun({ text: QURAN_ATTRIBUTION, rightToLeft: true, size: 18 })],
+        children: [new TextRun({ text: QURAN_ATTRIBUTION, rightToLeft: true, size: scaled(0.72) })],
       }),
     );
   }
 
+  const heading = (em: number) => ({
+    run: { size: scaled(em), bold: true, color: INK },
+    paragraph: { spacing: { before: twips(1.2), after: twips(0.5) } },
+  });
+
   const document_ = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: faces, size: body, sizeComplexScript: body },
+          // CSS line-height is a line box of exactly size × height; "at
+          // least" that reproduces it and never clips a larger run, where
+          // Word's "multiple" would multiply the font's own, taller line gap.
+          paragraph: { spacing: { line: twips(typography.lineHeight), lineRule: LineRuleType.AT_LEAST } },
+        },
+        title: {
+          run: { font: faces, size: scaled(1.75), bold: true, color: INK },
+          paragraph: { spacing: { after: twips(0.85) } },
+        },
+        // The note's own heading sizes (.md-body h1…h6), so none is smaller than the text.
+        heading1: heading(1.5),
+        heading2: heading(1.3),
+        heading3: heading(1.15),
+        heading4: heading(1),
+        heading5: heading(1),
+        heading6: heading(1),
+      },
+    },
     numbering: { config: walk.numbering },
     sections: [{ properties: {}, children }],
   });
@@ -564,6 +630,6 @@ export async function buildDocx(title: string, html: string): Promise<Blob> {
 }
 
 /** Build and hand it to the browser as a download. */
-export async function downloadDocx(title: string, html: string): Promise<void> {
-  saveFile(await buildDocx(title, html), exportFileName(title, "docx"));
+export async function downloadDocx(title: string, html: string, options: DocxOptions = {}): Promise<void> {
+  saveFile(await buildDocx(title, html, options), exportFileName(title, "docx"));
 }

@@ -1339,7 +1339,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
                   // note is actually exported, not on every visit to the editor.
                   void import("@/lib/notes/export-docx")
                     .then(({ downloadDocx }) =>
-                      downloadDocx(title, editorRef.current?.innerHTML ?? ""),
+                      downloadDocx(title, editorRef.current?.innerHTML ?? "", { typography }),
                     )
                     .catch(() => setNotice("ھۆججەتنى چىقارغىلى بولمىدى."))
                 }

@@ -154,11 +154,23 @@ type Context = {
   spaced: boolean;
 };
 
-/** The first family of a CSS stack, unquoted — Word wants one name, not a list. */
+/**
+ * Names this site gives its own font files in @font-face (app/globals.css)
+ * that no font file carries. Word finds a font by the name inside the file,
+ * and the Uthmani files call themselves «KFGQPC … Uthmanic Script …» — so
+ * for Word a verse's stack is read from the next name on, which for an
+ * inserted verse is «KFGQPC Uthmanic Script HAFS», the name of the Uthmani
+ * font readers install on Windows (checked in the font files' name tables).
+ */
+const WEB_ONLY_FAMILIES: ReadonlySet<string> = new Set(["uthmanic hafs", "uthmanic hafs b"]);
+
+/** The first family of a CSS stack Word can find, unquoted — Word wants one name, not a list. */
 function firstFamily(stack: string): string | undefined {
-  const [first] = stack.split(",");
-  const name = (first ?? "").trim().replace(/^['"]|['"]$/g, "").trim();
-  return name || undefined;
+  for (const part of stack.split(",")) {
+    const name = part.trim().replace(/^['"]|['"]$/g, "").trim();
+    if (name && !WEB_ONLY_FAMILIES.has(name.toLowerCase())) return name;
+  }
+  return undefined;
 }
 
 /** CSS px/pt → docx half-points. Word measures type in half-points. */

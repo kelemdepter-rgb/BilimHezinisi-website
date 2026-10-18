@@ -391,10 +391,14 @@ describe("DOCX export uses the notebook's typography", () => {
     }
   });
 
-  it("an inserted verse keeps its Uthmani face", async () => {
+  it("an inserted verse keeps its Uthmani face, by the name Word finds it under", async () => {
     const html = ayaInsertHtml({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, "both", "سىناق");
     const { documentXml } = await openDocx("ف", html, { typography });
-    expect(documentXml).toContain('w:cs="Uthmanic Hafs"');
+    // «Uthmanic Hafs» is only this site's @font-face name; the font file's own is the stack's next.
+    expect(documentXml).toContain('w:cs="KFGQPC Uthmanic Script HAFS"');
+    expect(documentXml).not.toContain('"Uthmanic Hafs"');
+    // The translation beside it stays in the reading face.
+    expect(documentXml).toContain('w:cs="UKIJ Ekran"');
   });
 });
 

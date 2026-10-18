@@ -191,7 +191,8 @@ test.describe("citing a verse from a note", () => {
     const { xml } = await exportedDocx(page);
     // The verse itself, its face, and the credit its licence requires.
     expect(xml).toContain(arabic.replace(/^﴿/, "").replace(/﴾$/, "").slice(0, 12));
-    expect(xml).toContain("Uthmanic Hafs");
+    // By the name inside the font file, which is the one Word looks for.
+    expect(xml).toContain("KFGQPC Uthmanic Script HAFS");
     expect(xml).toContain("Tanzil Project");
 
     await deleteNote(page, path);

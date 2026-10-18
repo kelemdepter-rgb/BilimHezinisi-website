@@ -566,6 +566,58 @@ here. The table is left in place because an applied migration is never edited ·
   «يېنىۋېلىش» each; a heading's boldness is never touched. Two taps — the
   second, «فورماتنى بېرىش», in a header row that is never open by default.
 
+## Notebook export (PROMPT-50 — in the browser, never on a server)
+- **«چىقىرىش»** (`components/notes/export-menu.tsx`) is a header row that
+  takes the overflow's place, never open by default and never a popover
+  below the overflow (that pushed the sticky header past a 375×667 screen):
+  «Word (.docx)», «PDF / بېسىپ چىقىرىش», «Markdown (.md)», «تېكىست (.txt)»
+  and the switch «مەنبەلەرنى ئاستى ئىزاھات قىلىش» (`bh-note-export-footnotes`,
+  `lib/notes/export-prefs.ts`; off by default; Word AND Markdown follow it).
+  The menu is `lazy()` and does the exporting itself; the editor only lends
+  it the note (`read`) and prefetches it 3 s after load, so it is cached for
+  printing offline. Each writer is a dynamic `import()` inside it. The note
+  page's first-load JavaScript grew 1,953 B (635 B gzip) with all of this —
+  measure `.next/diagnostics/route-bundle-stats.json` before and after any
+  change here (Next 16's build output no longer prints sizes), and keep
+  anything new out of the editor's static imports: Turbopack keeps a whole
+  module, unused exports included. No route converts a note, ever.
+- **Word walks blocks recursively over `BLOCK_TAGS`**
+  (`lib/notes/export-docx.ts`): every block its own paragraph, a `<br>` a
+  `w:br`, an empty line an empty paragraph, a block's last `<br>` nothing;
+  list items at their depth (`w:ilvl`), and **every `<ol>` its own numbering
+  definition** — two `w:num` over one definition continue each other's count
+  in Word. Tables are `w:bidiVisual` with gridSpan/vMerge. Only what is ON is
+  written to a run (`bold: false` would undo a heading's bold).
+- **`w:jc` in a right-to-left paragraph is logical**: CSS right/start →
+  `left`, left/end → `right`, centre, justify → `both`; indents use `w:left`
+  (the start side). Checked in LibreOffice's DOCX import and export;
+  pinned in tests/unit/docx-export.test.ts. Never "fix" it to physical.
+- **Word's defaults are the notebook's typography**: the first family of
+  `NOTE_FONT_STACKS[font]` in all four `w:rFonts` slots, size × 0.75 pt
+  (`w:sz` and `w:szCs`), line height as an at-least spacing, title and
+  headings scaled from the body. Fonts are named, never embedded, by the
+  name inside the font file: «Uthmanic Hafs» is only our `@font-face` alias,
+  so a verse is written as the stack's next name, «KFGQPC Uthmanic Script
+  HAFS» (`WEB_ONLY_FAMILIES`) — checked in Word itself.
+- **A citation is `isCitationParagraph`** (`lib/notes/insert.ts`): a `<p>`
+  holding only a link to `/books/N/read…` or `/quran/N?aya=N`.
+  `takeCitations` (`lib/notes/export-shared.ts`) turns each into a mark at
+  the end of the passage before it and a footnote of label + absolute
+  address. Every exported link is `describeLink(...).url` — absolute, http(s)
+  or this site — or only its words.
+- **Markdown** wraps `createTurndown()` and never changes its rules (they are
+  the upload pipeline's). **Text** follows the line map's rule (block edges
+  and `<br>` end lines), keeps empty lines, sets paragraphs off with a blank
+  line, and is UTF-8 with a BOM and CRLF. Every format ends with the Qur'an's
+  credit when a verse is quoted; Markdown and text name an untitled note
+  «يېڭى خاتىرە».
+- **Print**: `window.print()`; on paper `[data-note-page]` keeps only the
+  note (`.md-body`) and what is `print:block` in `<main>` (the print-only
+  title, the credit) — rules in the `@media print` block of
+  app/globals.css, not `print:` classes on the editor. The print colours
+  name `:root[data-theme]` and `:root:not([data-theme])` too, or the dark
+  theme's ink outranks them.
+
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
 `npm run lint` + `npm run build` → Playwright smoke (mobile + desktop viewports) →

@@ -1,42 +1,83 @@
 import {
   AlignmentType,
+  BorderStyle,
   Document,
   ExternalHyperlink,
   HeadingLevel,
+  LevelFormat,
   Packer,
   Paragraph,
+  Table,
+  TableCell,
+  TableRow,
   TextRun,
-  type ISectionOptions,
+  WidthType,
+  type ILevelsOptions,
+  type IParagraphOptions,
+  type ParagraphChild,
 } from "docx";
-import { QURAN_ATTRIBUTION, UTHMANIC_MARKER } from "@/lib/notes/attribution";
+import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
+import { exportFileName, exportUrl, holdsVerse, parseNote, saveFile } from "@/lib/notes/export-shared";
+import { BLOCK_TAGS } from "@/lib/spellcheck/marks";
 
 /**
- * Turn the editor's HTML into a Word file, in the browser.
+ * Turn the editor's HTML into a Word file, in the browser (lib/notes/
+ * export-shared.ts says why never on a server).
  *
- * Deliberately not a server route: the document is already in the tab, and
- * sending it to a Vercel function and back would spend the free tier's
- * invocations on work the browser can do — and put private writing through a
- * server that has no reason to see it.
+ * THE SHAPE OF THE NOTE (N12). The walk below is recursive over the same
+ * block set the spellchecker's line map uses (BLOCK_TAGS in
+ * lib/spellcheck/marks.ts): every block is its own paragraph however deep it
+ * sits, words between two blocks are a paragraph of their own, a `<br>` is a
+ * line break inside its paragraph, and an empty line (`<div><br></div>`)
+ * stays an empty paragraph. Before PROMPT-50 only the editor's top-level
+ * children were paragraphs, so a quote of several lines, or a list item
+ * holding paragraphs, arrived in Word as one run-on line.
  *
- * Three things a cited note needs that plain formatting does not:
- *   - the link back to the book stays a link, resolved to an absolute URL so
- *     it still opens from a file sitting on somebody's desktop;
- *   - a run's font-family travels, so an inserted verse is in the Uthmani face
- *     in Word as well as on screen;
- *   - a note that quotes the Qur'an carries the credit its sources require.
+ * Lists: one paragraph per item at its nesting depth (`w:ilvl`), bullets
+ * for `<ul>` and numbers for `<ol>`, and every `<ol>` counting from 1 on its
+ * own definition. Tables are real Word tables, right-to-left, spans kept.
+ *
+ * SOURCES. A citation stays a link back to the book, resolved to an absolute
+ * address so it still opens from a file on somebody's desktop; a run's
+ * font-family travels, so an inserted verse is in the Uthmani face in Word
+ * as on screen; and a note that quotes the Qur'an carries the credit its
+ * sources require.
  */
 
-const HEADINGS: Record<string, (typeof HeadingLevel)[keyof typeof HeadingLevel]> = {
-  H1: HeadingLevel.HEADING_1,
-  H2: HeadingLevel.HEADING_2,
-  H3: HeadingLevel.HEADING_3,
-  H4: HeadingLevel.HEADING_4,
+/** A4 with Word's one-inch margins (the docx defaults): the width text may use, in twips. */
+const TEXT_WIDTH = 11906 - 2 * 1440;
+/** How far each list level and each quote steps in from the start side. */
+const STEP = 720;
+const HANGING = 360;
+/** A link with no colour of its own. */
+const LINK_BLUE = "1155CC";
+
+type HeadingValue = (typeof HeadingLevel)[keyof typeof HeadingLevel];
+type AlignmentValue = (typeof AlignmentType)[keyof typeof AlignmentType];
+
+const HEADINGS: Record<string, HeadingValue> = {
+  h1: HeadingLevel.HEADING_1,
+  h2: HeadingLevel.HEADING_2,
+  h3: HeadingLevel.HEADING_3,
+  h4: HeadingLevel.HEADING_4,
+  h5: HeadingLevel.HEADING_5,
+  h6: HeadingLevel.HEADING_6,
 };
 
-const ALIGNMENT: Record<string, (typeof AlignmentType)[keyof typeof AlignmentType]> = {
+/**
+ * CSS text-align → w:jc in a right-to-left (w:bidi) paragraph. In the values
+ * every Word reads (ECMA-376 1st edition), `left` and `right` are not
+ * physical there: `left` is the paragraph's START, its right side, and
+ * `right` its end. LibreOffice reads and writes DOCX the same way (checked
+ * 2026-10-18 in its DomainMapper `handleParaJustification` and
+ * docxattributeoutput `ParaAdjust`); tests/unit/docx-export.test.ts pins it.
+ */
+const ALIGNMENT: Record<string, AlignmentValue> = {
+  right: AlignmentType.LEFT,
+  start: AlignmentType.LEFT,
+  left: AlignmentType.RIGHT,
+  end: AlignmentType.RIGHT,
   center: AlignmentType.CENTER,
-  left: AlignmentType.LEFT,
-  right: AlignmentType.RIGHT,
   justify: AlignmentType.JUSTIFIED,
 };
 
@@ -44,12 +85,44 @@ type InlineStyle = {
   bold: boolean;
   italics: boolean;
   underline: boolean;
+  strike: boolean;
+  subScript: boolean;
+  superScript: boolean;
   color?: string;
   font?: string;
+  /** Half-points. */
   size?: number;
 };
 
-const PLAIN: InlineStyle = { bold: false, italics: false, underline: false };
+const PLAIN: InlineStyle = {
+  bold: false,
+  italics: false,
+  underline: false,
+  strike: false,
+  subScript: false,
+  superScript: false,
+};
+
+/** What a paragraph is made of before it becomes Word's runs. */
+type Segment =
+  | { kind: "text"; text: string; style: InlineStyle; url: string | null }
+  | { kind: "break" };
+
+/** The list item a paragraph is in: its numbering, its depth, and whether it is numbered yet. */
+type ListItem = { reference: string; level: number; numbered: boolean };
+
+/** Everything a block hands down to the blocks inside it. */
+type Context = {
+  style: InlineStyle;
+  alignment?: AlignmentValue;
+  heading?: HeadingValue;
+  /** How many quotes deep. */
+  quote: number;
+  /** Inside a list item. */
+  item: ListItem | null;
+  /** Whitespace is kept and a newline breaks the line. */
+  pre: boolean;
+};
 
 /** The first family of a CSS stack, unquoted — Word wants one name, not a list. */
 function firstFamily(stack: string): string | undefined {
@@ -66,21 +139,6 @@ function toHalfPoints(value: string): number | undefined {
   // 1px ≈ 0.75pt at the CSS reference resolution.
   const points = found[2].toLowerCase() === "px" ? size * 0.75 : size;
   return Math.round(points * 2);
-}
-
-/**
- * A relative href turned into one a Word file can follow.
- *
- * An exported note lives outside the browser, so `/books/12/read?page=3` means
- * nothing to it. Resolving against the current origin keeps the citation
- * clickable wherever the file ends up.
- */
-function absoluteHref(href: string): string | null {
-  try {
-    return new URL(href, window.location.origin).toString();
-  } catch {
-    return null;
-  }
 }
 
 /** Word wants RRGGBB with no hash; browsers hand back `rgb(r, g, b)` or `#rgb`. */
@@ -100,153 +158,406 @@ function toDocxColor(css: string): string | undefined {
   return full.toUpperCase();
 }
 
-/** One TextRun carrying everything inherited down to this point. */
-function runWith(text: string, style: InlineStyle): TextRun {
+/** The formatting an element adds to what it inherits. */
+function inlineStyle(element: HTMLElement, inherited: InlineStyle): InlineStyle {
+  const tag = element.localName;
+  const style = element.style;
+  return {
+    bold: inherited.bold || tag === "b" || tag === "strong" || tag === "th",
+    italics: inherited.italics || tag === "i" || tag === "em",
+    underline: inherited.underline || tag === "u",
+    strike: inherited.strike || tag === "s",
+    subScript: inherited.subScript || tag === "sub",
+    superScript: inherited.superScript || tag === "sup",
+    color: (style.color && toDocxColor(style.color)) || inherited.color,
+    font: (style.fontFamily && firstFamily(style.fontFamily)) || inherited.font,
+    size: (style.fontSize && toHalfPoints(style.fontSize)) || inherited.size,
+  };
+}
+
+/** A block's own alignment, from its style or the `align` attribute execCommand may still write. */
+function alignmentOf(element: HTMLElement): AlignmentValue | undefined {
+  const value = (element.style.textAlign || element.getAttribute("align") || "").trim().toLowerCase();
+  return Object.hasOwn(ALIGNMENT, value) ? ALIGNMENT[value] : undefined;
+}
+
+function isElement(node: Node): node is HTMLElement {
+  return node.nodeType === 1;
+}
+
+function isBlock(node: Node): node is HTMLElement {
+  return isElement(node) && BLOCK_TAGS.has(node.localName);
+}
+
+/** An inline element holding a block — `<b><p>…</p></b>` from a paste — is walked like a block. */
+function holdsBlock(element: HTMLElement): boolean {
+  for (const tag of BLOCK_TAGS) if (element.getElementsByTagName(tag).length > 0) return true;
+  return false;
+}
+
+/**
+ * Drop what only holds a line open: whitespace at either end, and one last
+ * `<br>` — a browser keeps an empty line alive with one (`<div><br></div>`),
+ * and draws a block's final `<br>` as nothing at all.
+ */
+function trimSegments(segments: Segment[], pre: boolean): Segment[] {
+  const out = [...segments];
+  const blank = (segment: Segment | undefined) => segment?.kind === "text" && !pre && !segment.text.trim();
+  while (blank(out.at(-1))) out.pop();
+  if (out.at(-1)?.kind === "break") out.pop();
+  while (blank(out.at(-1))) out.pop();
+  while (blank(out[0])) out.shift();
+  if (!pre) {
+    const first = out[0];
+    if (first?.kind === "text") out[0] = { ...first, text: first.text.trimStart() };
+    const last = out.at(-1);
+    if (last?.kind === "text") out[out.length - 1] = { ...last, text: last.text.trimEnd() };
+  }
+  return out;
+}
+
+function textRun(text: string, style: InlineStyle): TextRun {
   return new TextRun({
     text,
     rightToLeft: true,
-    bold: style.bold,
-    italics: style.italics,
+    // Only what is ON: an explicit "not bold" would undo a heading's bold.
+    ...(style.bold ? { bold: true } : {}),
+    ...(style.italics ? { italics: true } : {}),
     // docx wants an options object here, not a boolean; the empty object
     // means "single line, automatic colour".
     ...(style.underline ? { underline: {} } : {}),
+    ...(style.strike ? { strike: true } : {}),
+    ...(style.subScript ? { subScript: true } : {}),
+    ...(style.superScript ? { superScript: true } : {}),
     ...(style.color ? { color: style.color } : {}),
     ...(style.font ? { font: style.font } : {}),
     ...(style.size ? { size: style.size } : {}),
   });
 }
 
-/** What a run may be: plain text, or text inside a link. */
-type Inline = TextRun | ExternalHyperlink;
-
-/** Walk inline nodes, carrying bold/italic/underline/colour/face down the tree. */
-function runsFrom(node: Node, inherited: InlineStyle = PLAIN): Inline[] {
-  if (node.nodeType === Node.TEXT_NODE) {
-    const text = node.textContent ?? "";
-    if (!text) return [];
-    return [runWith(text, inherited)];
-  }
-  if (node.nodeType !== Node.ELEMENT_NODE) return [];
-
-  const element = node as HTMLElement;
-  const tag = element.tagName;
-  const style: InlineStyle = {
-    bold: inherited.bold || tag === "B" || tag === "STRONG",
-    italics: inherited.italics || tag === "I" || tag === "EM",
-    underline: inherited.underline || tag === "U",
-    color: (element.style.color && toDocxColor(element.style.color)) || inherited.color,
-    font: (element.style.fontFamily && firstFamily(element.style.fontFamily)) || inherited.font,
-    size: (element.style.fontSize && toHalfPoints(element.style.fontSize)) || inherited.size,
+/** Segments → Word's runs, with consecutive runs of one link kept inside one hyperlink. */
+function runsOf(segments: Segment[]): ParagraphChild[] {
+  const out: ParagraphChild[] = [];
+  let link: { url: string; children: TextRun[] } | null = null;
+  const close = () => {
+    if (link) out.push(new ExternalHyperlink({ link: link.url, children: link.children }));
+    link = null;
   };
 
-  if (tag === "A") {
-    const href = absoluteHref(element.getAttribute("href") ?? "");
-    const children: TextRun[] = [];
-    for (const child of Array.from(element.childNodes)) {
-      for (const run of runsFrom(child, { ...style, underline: true, color: style.color ?? "1155CC" })) {
-        // A link cannot nest another link, so anything that came back as one
-        // is flattened to its text — which cannot happen from our own markup.
-        if (run instanceof ExternalHyperlink) continue;
-        children.push(run);
+  for (const segment of segments) {
+    if (segment.kind === "break") {
+      close();
+      out.push(new TextRun({ break: 1, rightToLeft: true }));
+    } else if (segment.url) {
+      const run = textRun(segment.text, segment.style);
+      if (link && link.url === segment.url) link.children.push(run);
+      else {
+        close();
+        link = { url: segment.url, children: [run] };
       }
+    } else {
+      close();
+      out.push(textRun(segment.text, segment.style));
     }
-    if (!href || children.length === 0) return children;
-    return [new ExternalHyperlink({ children, link: href })];
   }
-
-  const runs: Inline[] = [];
-  for (const child of Array.from(element.childNodes)) runs.push(...runsFrom(child, style));
-  return runs;
-}
-
-function paragraphsFrom(root: HTMLElement): Paragraph[] {
-  const out: Paragraph[] = [];
-
-  for (const node of Array.from(root.childNodes)) {
-    if (node.nodeType === Node.TEXT_NODE) {
-      const text = (node.textContent ?? "").trim();
-      if (text) out.push(new Paragraph({ bidirectional: true, children: [new TextRun({ text, rightToLeft: true })] }));
-      continue;
-    }
-    if (node.nodeType !== Node.ELEMENT_NODE) continue;
-
-    const element = node as HTMLElement;
-    const tag = element.tagName;
-
-    if (tag === "UL" || tag === "OL") {
-      for (const item of Array.from(element.querySelectorAll("li"))) {
-        out.push(
-          new Paragraph({
-            bidirectional: true,
-            children: runsFrom(item),
-            ...(tag === "UL" ? { bullet: { level: 0 } } : { numbering: { reference: "ug-numbering", level: 0 } }),
-          }),
-        );
-      }
-      continue;
-    }
-
-    const alignment = ALIGNMENT[element.style.textAlign];
-    out.push(
-      new Paragraph({
-        bidirectional: true,
-        children: runsFrom(element),
-        ...(HEADINGS[tag] ? { heading: HEADINGS[tag] } : {}),
-        ...(tag === "BLOCKQUOTE" ? { indent: { start: 720 } } : {}),
-        ...(alignment ? { alignment } : {}),
-      }),
-    );
-  }
-
-  // An empty document still has to produce a file Word will open.
-  if (out.length === 0) out.push(new Paragraph({ bidirectional: true, children: [] }));
+  close();
   return out;
 }
 
-/**
- * The credit an exported note owes when it quotes the Qur'an — appended once,
- * at the end, and only when a verse is actually in the document. See
- * lib/notes/attribution.ts.
- */
-function quranCredit(container: HTMLElement): Paragraph[] {
-  if (!container.querySelector(`[style*="${UTHMANIC_MARKER}"]`)) return [];
-  return [
-    new Paragraph({ bidirectional: true, children: [] }),
-    new Paragraph({
+/** One numbering definition's nine levels. */
+function levels(format: (typeof LevelFormat)[keyof typeof LevelFormat]): ILevelsOptions[] {
+  const bullets = ["●", "○", "■"];
+  return Array.from({ length: 9 }, (_, level) => ({
+    level,
+    format,
+    text: format === LevelFormat.BULLET ? bullets[level % bullets.length] : `%${level + 1}.`,
+    // The number at the start side, as `left` means in a right-to-left paragraph (ALIGNMENT).
+    alignment: AlignmentType.LEFT,
+    start: 1,
+    style: { paragraph: { indent: { left: STEP * (level + 1), hanging: HANGING } } },
+  }));
+}
+
+const BULLETS = "ug-bullets";
+
+class DocxWalk {
+  /** Every numbering definition the note's lists need, made as they are met. */
+  readonly numbering: { reference: string; levels: ILevelsOptions[] }[] = [];
+  private lists = 0;
+
+  constructor(private readonly base: string) {}
+
+  /** The children of `parent`: blocks in turn, the words between them gathered into paragraphs. */
+  blocks(parent: Node, context: Context, out: (Paragraph | Table)[]): void {
+    let inline: Node[] = [];
+    const flush = () => {
+      if (inline.length > 0) this.paragraph(inline, context, out);
+      inline = [];
+    };
+    for (const child of Array.from(parent.childNodes)) {
+      if (isBlock(child)) {
+        flush();
+        this.block(child, context, out);
+      } else if (isElement(child) && holdsBlock(child)) {
+        flush();
+        this.blocks(child, { ...context, style: inlineStyle(child, context.style) }, out);
+      } else {
+        inline.push(child);
+      }
+    }
+    flush();
+  }
+
+  private block(element: HTMLElement, context: Context, out: (Paragraph | Table)[]): void {
+    const tag = element.localName;
+    const own: Context = {
+      ...context,
+      style: inlineStyle(element, context.style),
+      alignment: alignmentOf(element) ?? context.alignment,
+    };
+
+    if (tag === "ul" || tag === "ol") this.list(element, own, out);
+    else if (tag === "table") out.push(this.table(element as HTMLTableElement, own));
+    else if (tag === "hr") {
+      out.push(
+        new Paragraph({
+          bidirectional: true,
+          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: "auto", space: 1 } },
+          children: [],
+        }),
+      );
+    } else if (tag === "blockquote") this.blocks(element, { ...own, quote: context.quote + 1 }, out);
+    else if (HEADINGS[tag]) this.blocks(element, { ...own, heading: HEADINGS[tag] }, out);
+    else if (tag === "pre") this.blocks(element, { ...own, pre: true }, out);
+    else this.blocks(element, own, out);
+  }
+
+  /**
+   * One list. Its items are one level deeper than the item it sits in, and
+   * a list met directly inside a list — execCommand("indent") writes
+   * `<ul><li>…</li><ul>…</ul></ul>` — deeper still.
+   */
+  private list(element: HTMLElement, context: Context, out: (Paragraph | Table)[]): void {
+    const level = context.item ? Math.min(context.item.level + 1, 8) : 0;
+    let reference = BULLETS;
+    if (element.localName === "ol") {
+      // Its own definition, so it counts from 1 whatever came before: two
+      // w:num over one definition carry on each other's count in Word.
+      reference = `ug-numbers-${++this.lists}`;
+      this.numbering.push({ reference, levels: levels(LevelFormat.DECIMAL) });
+    } else if (!this.numbering.some((entry) => entry.reference === BULLETS)) {
+      this.numbering.push({ reference: BULLETS, levels: levels(LevelFormat.BULLET) });
+    }
+
+    const item = (numbered: boolean): ListItem => ({ reference, level, numbered });
+    const inner: Context = { ...context, heading: undefined };
+    let loose: Node[] = [];
+    const flush = () => {
+      if (loose.length > 0) this.paragraph(loose, { ...inner, item: item(true) }, out);
+      loose = [];
+    };
+    for (const child of Array.from(element.childNodes)) {
+      if (isElement(child) && child.localName === "li") {
+        flush();
+        this.blocks(
+          child,
+          {
+            ...inner,
+            style: inlineStyle(child, inner.style),
+            alignment: alignmentOf(child) ?? inner.alignment,
+            item: item(false),
+          },
+          out,
+        );
+      } else if (isElement(child) && (child.localName === "ul" || child.localName === "ol")) {
+        flush();
+        this.list(child, { ...inner, item: item(true) }, out);
+      } else if (isBlock(child)) {
+        flush();
+        this.block(child, { ...inner, item: item(true) }, out);
+      } else {
+        loose.push(child);
+      }
+    }
+    flush();
+  }
+
+  /**
+   * A right-to-left Word table. Cells are walked like the note itself, so a
+   * cell keeps its lines and lists; `colspan` and `rowspan` survive as
+   * gridSpan and vMerge, and short rows are filled out to the grid.
+   */
+  private table(element: HTMLTableElement, context: Context): Table {
+    const htmlRows = Array.from(element.rows).filter((row) => row.cells.length > 0);
+
+    // Lay the cells on the grid once, to know how wide it is and how much of
+    // each row a span from above already covers.
+    const carried: number[] = [];
+    const covered: number[] = [];
+    for (const [index, row] of htmlRows.entries()) {
+      const below = htmlRows.length - index;
+      let column = 0;
+      for (const cell of Array.from(row.cells)) {
+        while ((carried[column] ?? 0) > 0) column++;
+        const columns = Math.min(Math.max(cell.colSpan, 1), 63);
+        const rows = cell.rowSpan === 0 ? below : Math.min(Math.max(cell.rowSpan, 1), below);
+        for (let k = 0; k < columns; k++) carried[column + k] = rows;
+        column += columns;
+      }
+      covered.push(carried.filter((left) => left > 0).length);
+      for (let k = 0; k < carried.length; k++) if ((carried[k] ?? 0) > 0) carried[k] -= 1;
+    }
+    const width = Math.max(1, ...covered);
+    const columnWidth = Math.floor(TEXT_WIDTH / width);
+
+    const cellContext = (cell: HTMLTableCellElement): Context => ({
+      style: inlineStyle(cell, context.style),
+      alignment: alignmentOf(cell),
+      quote: 0,
+      item: null,
+      pre: false,
+    });
+
+    const rows = htmlRows.map((row, index) => {
+      const cells = Array.from(row.cells).map((cell) => {
+        const children: (Paragraph | Table)[] = [];
+        this.blocks(cell, cellContext(cell), children);
+        const columns = Math.min(Math.max(cell.colSpan, 1), 63);
+        const below = htmlRows.length - index;
+        const rows = cell.rowSpan === 0 ? below : Math.min(Math.max(cell.rowSpan, 1), below);
+        return new TableCell({
+          children,
+          width: { size: columnWidth * columns, type: WidthType.DXA },
+          ...(columns > 1 ? { columnSpan: columns } : {}),
+          ...(rows > 1 ? { rowSpan: rows } : {}),
+        });
+      });
+      for (let k = covered[index]; k < width; k++) {
+        cells.push(
+          new TableCell({
+            children: [new Paragraph({ bidirectional: true, children: [] })],
+            width: { size: columnWidth, type: WidthType.DXA },
+          }),
+        );
+      }
+      return new TableRow({ children: cells });
+    });
+
+    return new Table({
+      rows,
+      visuallyRightToLeft: true,
+      width: { size: columnWidth * width, type: WidthType.DXA },
+      columnWidths: Array.from({ length: width }, () => columnWidth),
+    });
+  }
+
+  /** Inline nodes → segments, carrying formatting and the link they sit in. */
+  private segments(node: Node, style: InlineStyle, url: string | null, pre: boolean): Segment[] {
+    if (node.nodeType === 3) {
+      const raw = node.textContent ?? "";
+      if (!pre) {
+        const text = raw.replace(/[ \t\n\r\f]+/g, " ");
+        return text ? [{ kind: "text", text, style, url }] : [];
+      }
+      const out: Segment[] = [];
+      raw.split("\n").forEach((line, index) => {
+        if (index > 0) out.push({ kind: "break" });
+        if (line) out.push({ kind: "text", text: line, style, url });
+      });
+      return out;
+    }
+    if (!isElement(node)) return [];
+
+    const tag = node.localName;
+    if (tag === "br") return [{ kind: "break" }];
+
+    let own = inlineStyle(node, style);
+    let link = url;
+    if (tag === "a") {
+      link = exportUrl(node, this.base);
+      if (link) own = { ...own, underline: true, color: own.color ?? LINK_BLUE };
+    }
+    return Array.from(node.childNodes).flatMap((child) => this.segments(child, own, link, pre));
+  }
+
+  /** Gathered inline nodes → one paragraph, or none when they hold nothing at all. */
+  private paragraph(nodes: Node[], context: Context, out: (Paragraph | Table)[]): void {
+    const raw: Segment[] = [];
+    for (const node of nodes) {
+      for (const segment of this.segments(node, context.style, null, context.pre)) {
+        // Collapse a space that ends one run and starts the next, as the browser does.
+        const previous = raw.at(-1);
+        if (
+          segment.kind === "text" &&
+          !context.pre &&
+          previous?.kind === "text" &&
+          previous.text.endsWith(" ") &&
+          segment.text.startsWith(" ")
+        ) {
+          const text = segment.text.slice(1);
+          if (text) raw.push({ ...segment, text });
+        } else raw.push(segment);
+      }
+    }
+    const segments = trimSegments(raw, context.pre);
+    // Words, or a line held open by a <br>: anything else draws nothing on screen.
+    if (segments.length === 0 && !raw.some((segment) => segment.kind === "break")) return;
+
+    const item = context.item;
+    const numbered = item !== null && !item.numbered;
+    if (item) item.numbered = true;
+
+    let start = context.quote * STEP;
+    if (item) start += STEP * (item.level + 1);
+
+    const options: IParagraphOptions = {
       bidirectional: true,
-      children: [new TextRun({ text: QURAN_ATTRIBUTION, rightToLeft: true, size: 18 })],
-    }),
-  ];
+      children: runsOf(segments),
+      ...(context.heading ? { heading: context.heading } : {}),
+      ...(context.alignment ? { alignment: context.alignment } : {}),
+      ...(item && numbered ? { numbering: { reference: item.reference, level: item.level } } : {}),
+      // A numbered item takes its indent from its level unless a quote moves it;
+      // a later paragraph of the item lines up under the first one's text.
+      ...(start > 0 && (!numbered || context.quote > 0)
+        ? { indent: numbered ? { left: start, hanging: HANGING } : { left: start } }
+        : {}),
+    };
+    out.push(new Paragraph(options));
+  }
 }
 
 /** Build the .docx bytes. Exported separately so a test can open the result. */
 export async function buildDocx(title: string, html: string): Promise<Blob> {
-  const container = document.createElement("div");
-  container.innerHTML = html;
+  const base = window.location.href;
+  const root = parseNote(html);
 
-  const section: ISectionOptions = {
-    properties: {},
-    children: [
+  const walk = new DocxWalk(base);
+  const children: (Paragraph | Table)[] = [
+    new Paragraph({
+      bidirectional: true,
+      heading: HeadingLevel.TITLE,
+      children: [new TextRun({ text: title, rightToLeft: true })],
+    }),
+  ];
+  walk.blocks(root, { style: PLAIN, quote: 0, item: null, pre: false }, children);
+  // An empty note still has to produce a file Word will open with a body.
+  if (children.length === 1) children.push(new Paragraph({ bidirectional: true, children: [] }));
+
+  // The credit the Qur'an's sources require (lib/notes/attribution.ts):
+  // once, at the end, and only when a verse is actually in the note.
+  if (holdsVerse(root)) {
+    children.push(
+      new Paragraph({ bidirectional: true, children: [] }),
       new Paragraph({
         bidirectional: true,
-        heading: HeadingLevel.TITLE,
-        children: [new TextRun({ text: title, rightToLeft: true })],
+        children: [new TextRun({ text: QURAN_ATTRIBUTION, rightToLeft: true, size: 18 })],
       }),
-      ...paragraphsFrom(container),
-      ...quranCredit(container),
-    ],
-  };
+    );
+  }
 
   const document_ = new Document({
-    numbering: {
-      config: [
-        {
-          reference: "ug-numbering",
-          levels: [{ level: 0, format: "decimal", text: "%1.", alignment: AlignmentType.START }],
-        },
-      ],
-    },
-    sections: [section],
+    numbering: { config: walk.numbering },
+    sections: [{ properties: {}, children }],
   });
 
   return Packer.toBlob(document_);
@@ -254,14 +565,5 @@ export async function buildDocx(title: string, html: string): Promise<Blob> {
 
 /** Build and hand it to the browser as a download. */
 export async function downloadDocx(title: string, html: string): Promise<void> {
-  const blob = await buildDocx(title, html);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${title.replace(/[\\/:*?"<>|]/g, "_").slice(0, 80) || "خاتىرە"}.docx`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  // Revoke on the next tick — Safari needs the URL alive when the click lands.
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveFile(await buildDocx(title, html), exportFileName(title, "docx"));
 }

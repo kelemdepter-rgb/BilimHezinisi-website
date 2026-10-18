@@ -72,6 +72,42 @@ export function ayaHref(sura: number, aya: number): string {
   return `/quran/${sura}?aya=${aya}`;
 }
 
+/** What `readerHref` and `ayaHref` write, and nothing else. */
+const CITATION_HREF = /^\/(?:books\/\d+\/read(?:\?[^#]*)?|quran\/\d+\?aya=\d+)$/;
+const ELEMENT_NODE = 1;
+const TEXT_NODE = 3;
+
+/**
+ * Is this the line under a citation — the paragraph `sourceInsertHtml` and
+ * `ayaInsertHtml` write after the quoted passage or verse: a `<p>` holding
+ * nothing but one link back to a book page or a verse?
+ *
+ * The exports use it to turn a citation into a footnote (PROMPT-50). Only the
+ * link's own shape is asked about, never the paragraph's style, which the
+ * writer may have changed since; and whitespace or the browser's trailing
+ * `<br>` beside the link do not count.
+ */
+export function isCitationParagraph(element: Element): boolean {
+  if (element.localName !== "p") return false;
+  let link: Element | null = null;
+  for (const child of Array.from(element.childNodes)) {
+    if (child.nodeType === TEXT_NODE) {
+      if ((child.textContent ?? "").trim()) return false;
+      continue;
+    }
+    if (child.nodeType !== ELEMENT_NODE) continue;
+    const tag = (child as Element).localName;
+    if (tag === "br") continue;
+    if (tag !== "a" || link) return false;
+    link = child as Element;
+  }
+  return (
+    link !== null &&
+    CITATION_HREF.test(link.getAttribute("href") ?? "") &&
+    (link.textContent ?? "").trim() !== ""
+  );
+}
+
 /**
  * A verse, exactly as the mushaf's copy action formats it, followed by its
  * reference. The reference is not decoration: a verse in a note that does not

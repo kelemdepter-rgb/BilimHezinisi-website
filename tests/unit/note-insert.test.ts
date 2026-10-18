@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { JSDOM } from "jsdom";
 import { sanitizeNoteHtml } from "@/lib/notes/sanitize";
 import { sanitizeNoteHtmlServer } from "@/lib/notes/sanitize-server";
-import { ayaInsertHtml, citationLabel, readerHref, sourceInsertHtml } from "@/lib/notes/insert";
+import {
+  ayaInsertHtml,
+  citationLabel,
+  isCitationParagraph,
+  readerHref,
+  sourceInsertHtml,
+} from "@/lib/notes/insert";
 import {
   keepAllowedDeclarations,
   safeFontFamily,
@@ -167,5 +173,51 @@ describe.each(both)("styles a note may carry (%s)", (_name, clean) => {
     expect(out).toContain("UKIJ Tuz Kitab");
     expect(out).not.toContain("<font");
     expect(out).not.toContain("face=");
+  });
+});
+
+/** The paragraphs of some HTML, in a document of their own. */
+function paragraphs(html: string): Element[] {
+  const doc = new JSDOM("").window.document;
+  const root = doc.createElement("div");
+  root.innerHTML = html;
+  return Array.from(root.querySelectorAll("p"));
+}
+
+describe("the line under a citation is recognised (PROMPT-50)", () => {
+  it("in what the source and verse inserts write", () => {
+    const source = paragraphs(sourceInsertHtml(CITATION));
+    expect(source.map(isCitationParagraph)).toEqual([true, false]);
+    const verse = paragraphs(ayaInsertHtml(AYA, "both", "بەقەرە"));
+    // The verse itself, its line, the empty paragraph after.
+    expect(verse.map(isCitationParagraph)).toEqual([false, true, false]);
+  });
+
+  it.each(both)("still, after a save and a reload (%s)", (_name, clean) => {
+    for (const html of [sourceInsertHtml(CITATION), ayaInsertHtml(AYA, "ar", "")]) {
+      expect(paragraphs(clean(html)).filter(isCitationParagraph)).toHaveLength(1);
+    }
+  });
+
+  it("with the browser's trailing <br> or spaces beside the link", () => {
+    const [line] = paragraphs(`<p> <a href="/quran/2?aya=255">قۇرئان كەرىم — 2:255</a><br></p>`);
+    expect(isCitationParagraph(line)).toBe(true);
+  });
+
+  it("but not a paragraph of the writer's own words with a link in it", () => {
+    for (const html of [
+      `<p>قاراڭ: <a href="/books/12/read?page=3">«كىتاب»</a></p>`,
+      `<p><a href="/books/12/read">بىر</a><a href="/books/13/read">ئىككى</a></p>`,
+      `<p><a href="https://example.com/books/12/read">«كىتاب»</a></p>`,
+      `<p><a href="/books/12">«كىتاب»</a></p>`,
+      `<p><a href="/quran/2">«سۈرە»</a></p>`,
+      `<p><a href="/books/12/read"> </a></p>`,
+      `<div><a href="/books/12/read">«كىتاب»</a></div>`,
+    ]) {
+      const doc = new JSDOM("").window.document;
+      const root = doc.createElement("div");
+      root.innerHTML = html;
+      expect(isCitationParagraph(root.firstElementChild!), html).toBe(false);
+    }
   });
 });

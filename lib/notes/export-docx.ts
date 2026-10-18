@@ -3,6 +3,7 @@ import {
   BorderStyle,
   Document,
   ExternalHyperlink,
+  FootnoteReferenceRun,
   HeadingLevel,
   LevelFormat,
   LineRuleType,
@@ -18,7 +19,16 @@ import {
   type ParagraphChild,
 } from "docx";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
-import { exportFileName, exportUrl, holdsVerse, parseNote, saveFile } from "@/lib/notes/export-shared";
+import {
+  FOOTNOTE_TAG,
+  exportFileName,
+  exportUrl,
+  holdsVerse,
+  parseNote,
+  saveFile,
+  takeCitations,
+  type FootnoteSource,
+} from "@/lib/notes/export-shared";
 import { DEFAULT_TYPOGRAPHY, NOTE_FONT_STACKS, type NoteTypography } from "@/lib/notes/typography";
 import { BLOCK_TAGS } from "@/lib/spellcheck/marks";
 
@@ -46,13 +56,16 @@ import { BLOCK_TAGS } from "@/lib/spellcheck/marks";
  * writers' machines. An inserted verse keeps its own Uthmani face.
  *
  * SOURCES. A citation stays a link back to the book, resolved to an absolute
- * address so it still opens from a file on somebody's desktop, and a note
- * that quotes the Qur'an carries the credit its sources require.
+ * address so it still opens from a file on somebody's desktop — or, when the
+ * writer asks for it, becomes a footnote. A note that quotes the Qur'an
+ * carries the credit its sources require either way.
  */
 
 export type DocxOptions = {
   /** The notebook's face, size and line height; its defaults when absent. */
   typography?: NoteTypography;
+  /** Citations as footnotes rather than inline links. */
+  footnotes?: boolean;
 };
 
 /** A4 with Word's one-inch margins (the docx defaults): the width text may use, in twips. */
@@ -119,7 +132,8 @@ const PLAIN: InlineStyle = {
 /** What a paragraph is made of before it becomes Word's runs. */
 type Segment =
   | { kind: "text"; text: string; style: InlineStyle; url: string | null }
-  | { kind: "break" };
+  | { kind: "break" }
+  | { kind: "footnote"; id: number };
 
 /** The list item a paragraph is in: its numbering, its depth, and whether it is numbered yet. */
 type ListItem = { reference: string; level: number; numbered: boolean };
@@ -263,6 +277,9 @@ function runsOf(segments: Segment[]): ParagraphChild[] {
     if (segment.kind === "break") {
       close();
       out.push(new TextRun({ break: 1, rightToLeft: true }));
+    } else if (segment.kind === "footnote") {
+      close();
+      out.push(new FootnoteReferenceRun(segment.id));
     } else if (segment.url) {
       const run = textRun(segment.text, segment.style);
       if (link && link.url === segment.url) link.children.push(run);
@@ -494,6 +511,7 @@ class DocxWalk {
 
     const tag = node.localName;
     if (tag === "br") return [{ kind: "break" }];
+    if (tag === FOOTNOTE_TAG) return [{ kind: "footnote", id: Number(node.getAttribute("data-n")) }];
 
     let own = inlineStyle(node, style);
     let link = url;
@@ -551,12 +569,28 @@ class DocxWalk {
   }
 }
 
+/** The footnote a citation becomes: its line's words, then the address. */
+function footnote(source: FootnoteSource): { children: Paragraph[] } {
+  const children: ParagraphChild[] = [new TextRun({ text: source.label, rightToLeft: true })];
+  if (source.url) {
+    children.push(
+      new TextRun({ text: " — ", rightToLeft: true }),
+      new ExternalHyperlink({
+        link: source.url,
+        children: [new TextRun({ text: source.url, style: "Hyperlink" })],
+      }),
+    );
+  }
+  return { children: [new Paragraph({ style: "FootnoteText", bidirectional: true, children })] };
+}
+
 /** Build the .docx bytes. Exported separately so a test can open the result. */
 export async function buildDocx(title: string, html: string, options: DocxOptions = {}): Promise<Blob> {
   const typography = options.typography ?? DEFAULT_TYPOGRAPHY;
   const base = window.location.href;
   const root = parseNote(html);
   const verse = holdsVerse(root);
+  const sources = options.footnotes ? takeCitations(root, base) : [];
 
   const face = firstFamily(NOTE_FONT_STACKS[typography.font]) ?? "UKIJ Ekran";
   const faces = { ascii: face, hAnsi: face, cs: face, eastAsia: face };
@@ -620,9 +654,14 @@ export async function buildDocx(title: string, html: string, options: DocxOption
         heading4: heading(1),
         heading5: heading(1),
         heading6: heading(1),
+        footnoteText: {
+          run: { size: scaled(0.8) },
+          paragraph: { spacing: { line: 240, lineRule: LineRuleType.AUTO } },
+        },
       },
     },
     numbering: { config: walk.numbering },
+    footnotes: Object.fromEntries(sources.map((source, index) => [index + 1, footnote(source)])),
     sections: [{ properties: {}, children }],
   });
 

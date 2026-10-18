@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { buildDocx, type DocxOptions } from "@/lib/notes/export-docx";
-import { ayaInsertHtml } from "@/lib/notes/insert";
+import { ayaInsertHtml, sourceInsertHtml } from "@/lib/notes/insert";
 
 /**
  * A .docx is a zip of XML. "Valid" here means the archive really opens, the
@@ -21,6 +21,9 @@ async function openDocx(title: string, html: string, options?: DocxOptions) {
     documentXml: await part("word/document.xml"),
     stylesXml: await part("word/styles.xml"),
     numberingXml: await part("word/numbering.xml"),
+    footnotesXml: await part("word/footnotes.xml"),
+    footnoteRels: await part("word/_rels/footnotes.xml.rels"),
+    rels: await part("word/_rels/document.xml.rels"),
   };
 }
 
@@ -392,5 +395,77 @@ describe("DOCX export uses the notebook's typography", () => {
     const html = ayaInsertHtml({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, "both", "سىناق");
     const { documentXml } = await openDocx("ف", html, { typography });
     expect(documentXml).toContain('w:cs="Uthmanic Hafs"');
+  });
+});
+
+describe("DOCX export: sources and credit", () => {
+  const source = sourceInsertHtml({
+    bookId: 12,
+    title: "سىناق كىتاب",
+    author: "ئويدۇرما ئاپتور",
+    pageNo: 3,
+    passage: "نەقىل قىلىنغان جۈملە.",
+    query: "",
+  });
+  const verse = ayaInsertHtml({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, "both", "سىناق");
+  const label = "«سىناق كىتاب» — ئويدۇرما ئاپتور — 3-بەت";
+
+  it("with footnotes off, a citation stays an inline link, as before", async () => {
+    const { documentXml, rels } = await openDocx("ف", `<p>مېنىڭ سۆزۈم.</p>${source}`);
+    expect(textOf(documentXml)).toContain(label);
+    expect(rels).toContain("http://localhost:3000/books/12/read?page=3");
+    expect(documentXml).not.toContain("w:footnoteReference");
+  });
+
+  it("with footnotes on, the citation is a footnote marked at the end of the passage", async () => {
+    const { documentXml, footnotesXml, footnoteRels } = await openDocx("ف", `<p>مېنىڭ سۆزۈم.</p>${source}${verse}`, {
+      footnotes: true,
+    });
+    // Not repeated in the body.
+    expect(textOf(documentXml)).not.toContain(label);
+    expect(textOf(documentXml)).not.toContain("قۇرئان كەرىم — سىناق — 1:2");
+
+    // The label and the absolute address, in the footnotes.
+    const notes = textOf(footnotesXml);
+    expect(notes).toContain(label);
+    expect(notes).toContain("قۇرئان كەرىم — سىناق — 1:2");
+    expect(notes).toContain("http://localhost:3000/books/12/read?page=3");
+    expect(notes).toContain("http://localhost:3000/quran/1?aya=2");
+    // Each footnote's link resolves in the footnotes' OWN relationships —
+    // an r:id Word cannot find there makes it call the file damaged.
+    const ids = [...footnotesXml.matchAll(/<w:hyperlink[^>]*r:id="([^"]+)"/g)].map((match) => match[1]);
+    expect(ids).toHaveLength(2);
+    for (const id of ids) expect(footnoteRels).toMatch(new RegExp(`Id="${id}"[^>]*Target="http://localhost:3000/`));
+    // And they are set as footnotes, small, not at the body's size.
+    expect(footnotesXml.match(/<w:pStyle w:val="FootnoteText"\/>/g)).toHaveLength(2);
+
+    // The marks sit in the passage's paragraph and in the verse's, at the end.
+    const paragraphs = bodyParagraphs(documentXml);
+    const marked = paragraphs.filter((paragraph) => paragraph.getElementsByTagNameNS(W, "footnoteReference").length > 0);
+    expect(marked.map(paragraphText)).toEqual([
+      "نەقىل قىلىنغان جۈملە.",
+      "﴿سىناق ئايىتى﴾«سىناق تەرجىمىسى»",
+    ]);
+    for (const paragraph of marked) {
+      const runs = Array.from(paragraph.getElementsByTagNameNS(W, "r"));
+      expect(runs.at(-1)!.getElementsByTagNameNS(W, "footnoteReference")).toHaveLength(1);
+    }
+  });
+
+  it("a citation with nothing quoted before it still gets its footnote", async () => {
+    const { documentXml, footnotesXml } = await openDocx("ف", source.replace(/^<blockquote[^>]*>.*?<\/blockquote>/, ""), {
+      footnotes: true,
+    });
+    expect(documentXml).toContain("w:footnoteReference");
+    expect(textOf(footnotesXml)).toContain(label);
+  });
+
+  it("appends the Qur'an's credit when a verse is in the note, and only then", async () => {
+    const withVerse = await openDocx("ف", `<p>سۆز</p>${verse}`);
+    expect(textOf(withVerse.documentXml)).toContain("Tanzil Project");
+    const withFootnotes = await openDocx("ف", `<p>سۆز</p>${verse}`, { footnotes: true });
+    expect(textOf(withFootnotes.documentXml)).toContain("Tanzil Project");
+    const without = await openDocx("ف", `<p>سۆز</p>${source}`);
+    expect(textOf(without.documentXml)).not.toContain("Tanzil Project");
   });
 });

@@ -432,7 +432,7 @@ test.describe("the toolbar on a phone", () => {
     "format-align-left",
     "format-eraser",
     "note-color",
-    "export-docx",
+    "export-open",
     "spell-nav-open-menu",
     "dictionary-open",
     "note-font",

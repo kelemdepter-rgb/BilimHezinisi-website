@@ -30,7 +30,7 @@ export default async function NotesPage() {
       </h1>
       <NotesUsage usage={usage} />
       <p className="mt-2 text-[13px] leading-7 text-ink2">
-        شەخسىي خاتىرىلىرىڭىز — پەقەت سىز كۆرەلەيسىز. Word ھۆججىتى قىلىپ چىقىرالايسىز.
+        شەخسىي خاتىرىلىرىڭىز — پەقەت سىز كۆرەلەيسىز. Word، PDF، Markdown ياكى تېكىست قىلىپ چىقىرالايسىز.
       </p>
 
       <NoteList

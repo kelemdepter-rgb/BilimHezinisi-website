@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
@@ -73,6 +73,7 @@ import { outlineHeadings } from "@/lib/notes/outline";
 import { PAINTER_NEEDS_SOURCE, PAINTER_TITLE, PainterBar } from "@/components/notes/painter-bar";
 import { captureFormat, paint, selectedTexts, type PaintFormat } from "@/lib/notes/painter";
 import { ToolMenu } from "@/components/notes/tool-menu";
+import type { ExportSource } from "@/components/notes/export-menu";
 import { useWideToolbar } from "@/components/notes/use-wide-toolbar";
 import { useAiState } from "@/lib/ai/use-ai-state";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
@@ -109,6 +110,14 @@ const PERSONAL_FULL = `شەخسىي لۇغەتتە ${MAX_PERSONAL_WORDS.toLocale
 const IGNORE_FULL = `بۇ خاتىرىدە ${MAX_IGNORED_PER_NOTE} سۆزگە سەل قارالدى — ئارتۇقىنى قوشقىلى بولمايدۇ. بۇ سۆزنى «لۇغەتكە قوش» ئارقىلىق قوبۇل قىلسىڭىز بولىدۇ.`;
 
 const BLOCK_ICON: Record<BlockStyle, IconName> = { normal: "type", heading: "heading", quote: "quote" };
+
+/**
+ * «چىقىرىش» (PROMPT-50) is not part of the editor's first load: the page
+ * fetches it once it is idle (below), so it is there — and in the service
+ * worker's cache, for printing offline — before anyone opens it.
+ */
+const loadExportMenu = () => import("@/components/notes/export-menu");
+const ExportMenu = lazy(loadExportMenu);
 /** A heading jumped to from the outline lands this far below the sticky header. */
 const HEADING_GAP = 8;
 
@@ -137,6 +146,14 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [dictionaryOpen, setDictionaryOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
+  /** «چىقىرىش» (PROMPT-50): Word, PDF, Markdown, text. */
+  const [exportOpen, setExportOpen] = useState(false);
+
+  useEffect(() => {
+    // After the page has settled, not with it.
+    const timer = window.setTimeout(() => void loadExportMenu().catch(() => {}), 3000);
+    return () => window.clearTimeout(timer);
+  }, []);
   /**
    * The format painter, holding the format it took (PROMPT-49); `needsTarget`
    * once «فورماتنى بېرىش» was pressed with nothing selected.
@@ -857,6 +874,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   const closeHistory = useCallback(() => setHistoryOpen(false), []);
   const closeDictionary = useCallback(() => setDictionaryOpen(false), []);
   const closeOutline = useCallback(() => setOutlineOpen(false), []);
+  const closeExport = useCallback(() => setExportOpen(false), []);
 
   /**
    * Go to the outline's `index`th heading (PROMPT-49): scrolled to just
@@ -1067,6 +1085,11 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
     markChanged();
   }
 
+  /** What «چىقىرىش» exports: the note as it stands on screen, read when a file is chosen. */
+  function noteForExport(): ExportSource {
+    return { title: titleRef.current, html: editorRef.current?.innerHTML ?? "", typography };
+  }
+
   const overLimit = counts.chars > MAX_NOTE_CHARS;
   const nearLimit = counts.chars > WARN_AT;
 
@@ -1091,7 +1114,10 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   );
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    // `data-note-page`: printed, only <main> is kept — the note, its title
+    // and its credit — and every bar, notice and panel around it goes
+    // (app/globals.css, @media print).
+    <div className="flex min-h-dvh flex-col" data-note-page="">
       {/*
         The toolbar sits at the TOP, and that is the whole answer to the mobile
         problem: an on-screen keyboard rises from the bottom, so a bar anchored
@@ -1284,6 +1310,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
             aria-expanded={overflowOpen}
             onClick={() => {
               setMenu(null);
+              setExportOpen(false);
               setOverflowOpen((open) => !open);
             }}
           >
@@ -1333,19 +1360,15 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               <button
                 type="button"
                 className="hbtn"
-                data-testid="export-docx"
-                onClick={() =>
-                  // The DOCX writer (docx + JSZip, ~340 KB) is fetched when a
-                  // note is actually exported, not on every visit to the editor.
-                  void import("@/lib/notes/export-docx")
-                    .then(({ downloadDocx }) =>
-                      downloadDocx(title, editorRef.current?.innerHTML ?? "", { typography }),
-                    )
-                    .catch(() => setNotice("ھۆججەتنى چىقارغىلى بولمىدى."))
-                }
+                data-testid="export-open"
+                onClick={() => {
+                  // The menu takes the overflow's place, as the find bar does.
+                  setOverflowOpen(false);
+                  setExportOpen(true);
+                }}
               >
                 <Icon name="download" />
-                Word
+                چىقىرىش
               </button>
               <button
                 type="button"
@@ -1495,6 +1518,16 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           onApply={applyPainter}
           onCancel={() => setPainter(null)}
         />
+
+        {exportOpen && (
+          <Suspense fallback={null}>
+            <ExportMenu
+              read={noteForExport}
+              onFailed={setNotice}
+              onClose={closeExport}
+            />
+          </Suspense>
+        )}
       </header>
 
       {/*
@@ -1633,6 +1666,14 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
       </div>
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-3 py-4 sm:px-5">
+        {/* On paper the title is the page's heading; on screen it is the field above. */}
+        <h1
+          className="mb-4 hidden text-[1.75em] font-bold leading-snug print:block"
+          data-testid="note-print-title"
+          style={{ fontFamily: NOTE_FONT_STACKS[typography.font] }}
+        >
+          {normalizeTitle(title)}
+        </h1>
         <div
           ref={attachEditor}
           // Held still until the note is in it, and while a conflict choice is

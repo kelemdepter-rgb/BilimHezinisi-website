@@ -402,6 +402,24 @@ export default defineConfig({
         },
       },
       {
+        /**
+         * «چىقىرىش» (PROMPT-50): Word, PDF / print, Markdown and text, all
+         * made in the browser, and the menu at every size. Runs in Firefox
+         * and WebKit too, below.
+         */
+        name: `notes-export-${viewport.name}`,
+        testMatch: /[\\/]notes-export\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         // Licence attribution, the legal pages, password recovery and the
         // account page. Anonymous by default — everything a reader without an
         // account must be able to reach — with the account block opting into
@@ -799,11 +817,12 @@ export default defineConfig({
       },
     ]),
     ...NOTEBOOK_ENGINES.map((engine) => ({
-      // The same nine specs, setup and signed-in state as the Chromium
+      // The same ten specs, setup and signed-in state as the Chromium
       // notes, notes-sources, notes-save, notes-editing, notes-history,
-      // notes-list, notes-spelling, notes-links and notes-ai projects above.
+      // notes-list, notes-spelling, notes-links, notes-export and notes-ai
+      // projects above.
       name: `notebook-${engine.name}`,
-      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-list|-spelling|-links|-ai)?\.spec\.ts$/,
+      testMatch: /[\\/]notes(-sources|-save|-editing|-history|-list|-spelling|-links|-export|-ai)?\.spec\.ts$/,
       dependencies: ["setup"],
       use: {
         browserName: engine.browser,

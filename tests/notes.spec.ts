@@ -167,12 +167,14 @@ test.describe("notebook", () => {
     await page.keyboard.type(BODY_TEXT);
     await page.getByTestId("note-title").fill("چىقىرىش سىنىقى");
 
+    // «باشقا ئىقتىدارلار» → «چىقىرىش» → «Word (.docx)».
     await page.getByTestId("toolbar-more").click();
+    await page.getByTestId("export-open").click();
     const download = page.waitForEvent("download", { timeout: 30_000 });
     await page.getByTestId("export-docx").click();
     const file = await download;
 
-    expect(file.suggestedFilename()).toMatch(/\.docx$/);
+    expect(file.suggestedFilename()).toBe("چىقىرىش سىنىقى.docx");
     const stream = await file.createReadStream();
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(chunk as Buffer);

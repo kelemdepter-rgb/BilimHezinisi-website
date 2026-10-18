@@ -40,6 +40,7 @@ async function openSourcePanel(page: Page) {
  */
 async function exportedDocx(page: Page): Promise<{ xml: string; rels: string }> {
   await page.getByTestId("toolbar-more").click();
+  await page.getByTestId("export-open").click();
   const download = page.waitForEvent("download", { timeout: 30_000 });
   await page.getByTestId("export-docx").click();
   const file = await download;
@@ -50,7 +51,8 @@ async function exportedDocx(page: Page): Promise<{ xml: string; rels: string }> 
   const zip = await JSZip.loadAsync(Buffer.concat(chunks));
   const xml = await zip.file("word/document.xml")!.async("string");
   const rels = (await zip.file("word/_rels/document.xml.rels")?.async("string")) ?? "";
-  await page.getByTestId("toolbar-more").click();
+  // Choosing a file closed the menu.
+  await expect(page.getByTestId("export-menu")).toHaveCount(0);
   return { xml, rels };
 }
 

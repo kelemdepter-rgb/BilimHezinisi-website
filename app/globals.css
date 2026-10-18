@@ -785,13 +785,26 @@
 
 /* ── Print / save-as-PDF: just the book, correct RTL, one page per book page ── */
 @media print {
-  :root {
+  /* Paper is white and ink is dark whatever the screen's theme: the theme
+     selectors (`:root[data-theme="dark"]`, and `:root:not([data-theme])`
+     under a dark system preference) outrank a bare :root, so these name
+     them too — or a note printed from the dark theme came out as pale ink. */
+  :root,
+  :root[data-theme],
+  :root:not([data-theme]) {
     --bg: #ffffff;
     --bg2: #ffffff;
+    --bg3: #f2f2f2;
     --paper: #ffffff;
+    --paper-bd: transparent;
     --text: #000000;
     --text2: #222222;
     --text3: #555555;
+    --am: #8a6421;
+    --ab: rgba(0, 0, 0, 0.05);
+    --ab2: rgba(0, 0, 0, 0.1);
+    --border: rgba(0, 0, 0, 0.18);
+    --border2: rgba(0, 0, 0, 0.3);
     --grain: none;
   }
   html,
@@ -808,6 +821,32 @@
   nav,
   .print\:hidden {
     display: none !important;
+  }
+  /* A note printed (PROMPT-50): the note itself and what is printed only —
+     its title and the Qur'an's credit — and nothing else: no toolbar,
+     notice, panel, count or spellchecker line; on the page, not on a card. */
+  [data-note-page] > :not(main),
+  [data-note-page] main > :not(.md-body):not(.print\:block) {
+    display: none !important;
+  }
+  [data-note-page] main {
+    max-width: none;
+    padding: 0;
+  }
+  [data-note-page] .md-body {
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  /* The spellchecker's and the find bar's marks are for the screen. */
+  ::highlight(bh-spell-error),
+  ::highlight(bh-find-hit),
+  ::highlight(bh-find-current) {
+    text-decoration: none;
+    background-color: transparent;
+    color: inherit;
   }
   .reader-page {
     break-after: page;

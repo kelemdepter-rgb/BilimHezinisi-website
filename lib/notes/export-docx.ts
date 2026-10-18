@@ -29,6 +29,7 @@ import {
   takeCitations,
   type FootnoteSource,
 } from "@/lib/notes/export-shared";
+import { normalizeTitle } from "@/lib/notes/save-protocol";
 import { DEFAULT_TYPOGRAPHY, NOTE_FONT_STACKS, type NoteTypography } from "@/lib/notes/typography";
 import { BLOCK_TAGS } from "@/lib/spellcheck/marks";
 
@@ -605,7 +606,7 @@ export async function buildDocx(title: string, html: string, options: DocxOption
     new Paragraph({
       bidirectional: true,
       heading: HeadingLevel.TITLE,
-      children: [new TextRun({ text: title, rightToLeft: true })],
+      children: [new TextRun({ text: normalizeTitle(title), rightToLeft: true })],
     }),
   ];
   walk.blocks(

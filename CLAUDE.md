@@ -665,9 +665,11 @@ here. The table is left in place because an applied migration is never edited ·
   «يۈكلىنىۋاتىدۇ…» after 250 ms, are the bottom bar's status line (8 s each)
   — the error line above the text is out of sight halfway down a contents
   page. Never a dialog.
-- `tests/reader-links.spec.ts` reads a seeded DRAFT (`e2eLinks` prefix, swept
-  by `removePrefixedBooks`; not `BATCH_PREFIX`, which the batch spec deletes
-  mid-run) and answers both functions itself.
+- `tests/reader-links.spec.ts` reads a seeded DRAFT (`e2eLinks` prefix) and
+  answers both functions itself. Only the setup and the teardown sweep that
+  prefix (`removePrefixedBooks(admin, ALL_PREFIXES)`): the batch and wizard
+  specs clear `BATCH_PREFIX` around their own tests, and a draft swept
+  mid-run is gone before the next viewport reads it.
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +

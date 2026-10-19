@@ -20,6 +20,7 @@ import {
   SEED_NEEDLE,
   SEED_NEEDLE_PAGE,
   SEED_NEEDLE_LATER_PAGE,
+  LINKS_PREFIX,
   SEED_LINKS_BOOK_HASH,
   SEED_LINKS_BOOK_TITLE,
   SEED_LINKS_PATH,
@@ -34,6 +35,7 @@ import {
   testEmail,
 } from "./env";
 import { sweepTestAccounts } from "./fixtures/accounts";
+import { removePrefixedBooks } from "./fixtures/books";
 import { linkedBookRows } from "./fixtures/linked-book";
 
 loadEnvLocal();
@@ -330,7 +332,9 @@ setup("seed a draft book with in-book links", async () => {
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
 
+  // A draft an interrupted run left behind, by its hash or by its prefix.
   await admin.from("books").delete().eq("file_hash", SEED_LINKS_BOOK_HASH);
+  await removePrefixedBooks(admin, [LINKS_PREFIX]);
 
   const rows = linkedBookRows();
   const { data: book, error } = await admin

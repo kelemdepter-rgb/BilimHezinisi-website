@@ -1,11 +1,18 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BATCH_PREFIX, LINKS_PREFIX } from "../env";
 
-/** Every prefix a spec's books are named with. */
-const PREFIXES = [BATCH_PREFIX, LINKS_PREFIX];
+/** Every prefix the suite's books are named with: what the setup and the teardown sweep. */
+export const ALL_PREFIXES = [BATCH_PREFIX, LINKS_PREFIX] as const;
 
 /**
- * Remove every book whose title carries one of PREFIXES, Storage objects first.
+ * Remove every book whose title carries one of `prefixes`, Storage objects
+ * first.
+ *
+ * BATCH_PREFIX unless told otherwise, because the upload-wizard spec calls
+ * this around every test to clear ITS books — and the in-book links draft
+ * (LINKS_PREFIX) is seeded once for the whole run: swept mid-run, it was gone
+ * before the second viewport read it. Only the setup and the teardown, which
+ * bracket the run, pass ALL_PREFIXES.
  *
  * The batch-import spec and the upload-wizard spec both write REAL books into
  * the owner's library, and the wizard spec gives some of them a cover. A row
@@ -13,8 +20,11 @@ const PREFIXES = [BATCH_PREFIX, LINKS_PREFIX];
  * not its objects in Storage — so those are looked up and removed before the
  * rows go, or every interrupted run would leave a cover behind for good.
  */
-export async function removePrefixedBooks(admin: SupabaseClient): Promise<void> {
-  for (const prefix of PREFIXES) {
+export async function removePrefixedBooks(
+  admin: SupabaseClient,
+  prefixes: readonly string[] = [BATCH_PREFIX],
+): Promise<void> {
+  for (const prefix of prefixes) {
     const { data } = await admin
       .from("books")
       .select("cover_path, original_file_path")

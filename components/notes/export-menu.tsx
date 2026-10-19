@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useLayoutEffect, useSyncExternalStore } from "react";
 import { Icon, type IconName } from "@/components/icons";
 import {
   getExportFootnotesServerSnapshot,
@@ -71,7 +71,9 @@ export default function ExportMenu({
     getExportFootnotesServerSnapshot,
   );
 
-  useEffect(() => {
+  // Before the menu is painted, not after: a passive effect can run a moment
+  // after a lazily loaded menu appears, and an Escape in that moment was lost.
+  useLayoutEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };

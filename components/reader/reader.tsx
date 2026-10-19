@@ -23,6 +23,7 @@ import { readSelection } from "@/lib/ai/book-context";
 import { MarkdownContent } from "@/components/reader/markdown-content";
 import { useAiState } from "@/lib/ai/use-ai-state";
 import {
+  countOccurrences,
   toSegments,
   ACTIVE_MATCH_CLASS,
   MATCH_CLASS,
@@ -31,6 +32,7 @@ import { flattenMatches, positionOf, stepPosition } from "@/lib/reader/matches";
 import type { ContentFormat } from "@/lib/books/types";
 import { rememberOfflineBook } from "@/lib/pwa/offline-books";
 import { SEARCH_BUSY_TEXT, isSearchBusy } from "@/lib/search/busy";
+import type { LinkHost, LinkSession } from "@/lib/reader/link-session";
 import {
   addBookmark,
   addNote,
@@ -67,6 +69,8 @@ import {
 import type { Theme } from "@/lib/theme";
 
 const WINDOW_SIZE = 8;
+/** A page that would not load — or the link code that would not, for a link. */
+const PAGE_FAILED = "بۇ بەتنى ئاچقىلى بولمىدى.";
 const FETCH_AHEAD_PX = 1200;
 /** What the reader is told when a bookmark or a note could not be saved. */
 const SAVE_FAILED = { bookmark: "خەتكۈچ قوشۇلمىدى.", note: "خاتىرە قوشۇلمىدى." } as const;
@@ -82,6 +86,11 @@ const SAVE_FAILED = { bookmark: "خەتكۈچ قوشۇلمىدى.", note: "خا�
 /** Whether the browser currently believes it has no connection. */
 function offline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/** A link to a place inside this book, from the rendered Markdown. */
+function internalLink(target: EventTarget | null): HTMLAnchorElement | null {
+  return (target as Element | null)?.closest?.<HTMLAnchorElement>('.md-body a[href^="#"]') ?? null;
 }
 
 function requestedPageFromLocation(): number | null {
@@ -161,8 +170,18 @@ export function Reader({
   const [findIndex, setFindIndex] = useState(0);
   const [activeTerm, setActiveTerm] = useState(highlight);
   const [error, setError] = useState<string | null>(null);
+  /** «يۈكلىنىۋاتىدۇ…» while a link is followed, or why it could not be — the session says which. */
+  const [linkStatus, setLinkStatus] = useState<string | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  /** The link session, loaded on first use (lib/reader/link-session.ts). */
+  const linkSessionRef = useRef<Promise<LinkSession> | null>(null);
+  /** What the session reads from the reader: refreshed after every render. */
+  const linkHostRef = useRef<LinkHost | null>(null);
+  /** Set while a link's landing is held in place: pages loaded above must not move it. */
+  const pinnedRef = useRef(false);
+  /** Set while loadAround is fetching; see there. */
+  const loadingAroundRef = useRef(false);
   const findInputRef = useRef<HTMLInputElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreDone = useRef(false);
@@ -290,7 +309,10 @@ export function Reader({
 
   const loadAround = useCallback(
     async (direction: "before" | "after") => {
-      if (loading) return;
+      // The ref as well as the state: two scroll events can arrive before the
+      // re-render that carries `loading`, and both would fetch — and add — the
+      // same pages twice.
+      if (loading || loadingAroundRef.current) return;
       const from =
         direction === "after"
           ? lastPage + 1
@@ -306,18 +328,26 @@ export function Reader({
       ) {
         return;
       }
+      loadingAroundRef.current = true;
       setLoading(true);
       try {
         const more = await fetchPages(bookId, from, to, published);
         if (more.length === 0) return;
+        // Added only to the window they were fetched for: a jump may have
+        // replaced it meanwhile, and these would then sit beside the wrong pages.
         if (direction === "after") {
-          setPages((previous) => [...previous, ...more]);
+          setPages((previous) =>
+            previous[previous.length - 1]?.page_no === lastPage ? [...previous, ...more] : previous,
+          );
         } else {
           // Keep the viewport anchored while inserting above.
           const container = containerRef.current;
           const previousHeight = container?.scrollHeight ?? 0;
-          setPages((previous) => [...more, ...previous]);
+          setPages((previous) => (previous[0]?.page_no === firstPage ? [...more, ...previous] : previous));
           requestAnimationFrame(() => {
+            // A followed link's landing is held by its own observer, which
+            // corrects before paint; adding this on top would move it twice.
+            if (pinnedRef.current) return;
             const grown = (container?.scrollHeight ?? 0) - previousHeight;
             if (grown > 0) window.scrollBy(0, grown);
           });
@@ -329,6 +359,7 @@ export function Reader({
             : "بەتلەرنى يۈكلىگىلى بولمىدى. ئۇلىنىشىڭىزنى تەكشۈرۈڭ.",
         );
       } finally {
+        loadingAroundRef.current = false;
         setLoading(false);
       }
     },
@@ -469,8 +500,15 @@ export function Reader({
       });
   }, [bookId, highlight, jumpToMatch, jumpToPage]);
 
+  /**
+   * Go to a page, loading a window around it when it is not on screen.
+   *
+   * With `find`, an element ON that page is wanted instead: it is handed back
+   * unscrolled, for an in-book link to place itself (lib/reader/link-session.ts),
+   * and a failure is that caller's to report.
+   */
   const goToPage = useCallback(
-    async (pageNo: number) => {
+    async (pageNo: number, find?: (page: HTMLElement) => HTMLElement | null) => {
       const target = Math.min(
         Math.max(1, Math.floor(pageNo)),
         Math.max(1, pageCount),
@@ -500,13 +538,15 @@ export function Reader({
               `[data-page-no="${target}"]`,
             ) ?? undefined;
         } catch {
-          setError("بۇ بەتنى ئاچقىلى بولمىدى.");
+          if (!find) setError(PAGE_FAILED);
         } finally {
           setLoading(false);
         }
       }
+      if (find) return node ? find(node) : null;
       if (node)
         window.scrollTo({ top: node.offsetTop - 80, behavior: "smooth" });
+      return node;
     },
     [bookId, pageCount, published],
   );
@@ -636,6 +676,68 @@ export function Reader({
             : "كىتاب ئىچىدىن ئىزدىگىلى بولمىدى.",
       );
     }
+  }
+
+  /**
+   * In-book links (PROMPT-51): a Word table of contents and its notes point at
+   * bookmarks the import could not keep, so every such link is followed here,
+   * from the book's own text, by the lazily loaded link session. The address
+   * bar never changes: no hash, no history entry.
+   */
+  const linkSession = useCallback(() => {
+    linkSessionRef.current ??= import("@/lib/reader/link-session").then((module) =>
+      module.createLinkSession(() => linkHostRef.current!),
+    );
+    return linkSessionRef.current;
+  }, []);
+
+  /** What the session reads, current as of the last render. */
+  useEffect(() => {
+    linkHostRef.current = {
+      bookId,
+      published,
+      container: containerRef.current,
+      loadedPages: pages,
+      reveal: goToPage,
+      search: (phrase) =>
+        fetchBookMatchPages(bookId, phrase).then(
+          (found) => ({ ...found, all: flattenMatches(found.pages) }),
+          (cause: Error) => {
+            if (isSearchBusy(cause)) return SEARCH_BUSY_TEXT;
+            throw cause;
+          },
+        ),
+      count: countOccurrences,
+      showMatches: (term, found, capped, position) => {
+        setFindTerm(term);
+        setActiveTerm(term);
+        setMatchPages(found);
+        setMatchesCapped(capped);
+        setFindRan(true);
+        setFindIndex(position);
+      },
+      loading,
+      setPinned: (pinned) => {
+        pinnedRef.current = pinned;
+      },
+      say: setLinkStatus,
+    };
+  }, [bookId, published, pages, goToPage, loading]);
+
+  /** Load the session as the finger comes down, so the click finds it ready. */
+  function prepareLink(event: React.SyntheticEvent) {
+    if (internalLink(event.target)) void linkSession().then((session) => session.prefetch());
+  }
+
+  function followLink(event: React.MouseEvent) {
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const anchor = internalLink(event.target);
+    if (!anchor) return;
+    event.preventDefault();
+    void linkSession()
+      .then((session) => session.follow(anchor))
+      .catch(() => setLinkStatus(PAGE_FAILED));
   }
 
   async function stepFind(delta: 1 | -1) {
@@ -942,6 +1044,9 @@ export function Reader({
       <div
         ref={containerRef}
         data-testid="reader-content"
+        onClick={followLink}
+        onPointerDown={prepareLink}
+        onFocus={prepareLink}
         className="mx-auto w-full max-w-3xl px-4 py-6 print:max-w-none print:px-0"
         style={{
           fontFamily: FONT_STACKS[settings.font],
@@ -1018,9 +1123,19 @@ export function Reader({
         )}
       </div>
 
-      {/* Bottom bar: page jump and quick navigation. Content above reserves
-          space with pb-24 so this never covers the last line. */}
-      <div className="safe-bottom safe-x sticky bottom-0 z-20 border-t border-bd bg-bg2/95 backdrop-blur print:hidden">
+      {/* Bottom bar: page jump and quick navigation. Sticky, so it sits in
+          the flow after the text and never covers the last line, however tall
+          the link message below makes it. */}
+      <div
+        data-testid="reader-bottom-bar"
+        className="safe-bottom safe-x sticky bottom-0 z-20 border-t border-bd bg-bg2/95 backdrop-blur print:hidden"
+      >
+        {/* About an in-book link: loading, or why it could not be followed.
+            Here rather than above the text, where a reader halfway down the
+            contents would never see it. Empty, it takes no room. */}
+        <p role="status" className={linkStatus ? "px-3 pt-2 text-center text-[12.5px]" : undefined}>
+          {linkStatus}
+        </p>
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-center gap-2 px-3 py-2">
           <button
             type="button"

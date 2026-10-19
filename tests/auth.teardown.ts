@@ -26,9 +26,9 @@ teardown("remove the test accounts and seeded book", async () => {
   await admin.from("books").delete().eq("file_hash", SEED_BOOK_HASH);
   await admin.from("books").delete().eq("file_hash", SEED_MD_BOOK_HASH);
 
-  // Books the batch-import and upload-wizard specs wrote, covers included.
-  // They remove their own, but a run cut short partway through would
-  // otherwise leave real rows in the library.
+  // Books the batch-import and upload-wizard specs wrote, covers included,
+  // and the in-book links draft. The specs remove their own, but a run cut
+  // short partway through would otherwise leave real rows in the library.
   await removePrefixedBooks(admin);
 
   const removed = await sweepTestAccounts(admin);

@@ -618,6 +618,56 @@ here. The table is left in place because an applied migration is never edited ·
   name `:root[data-theme]` and `:root:not([data-theme])` too, or the dark
   theme's ink outranks them.
 
+## In-book links (PROMPT-51 — a Word contents page and its notes, followed)
+- **A `#fragment` link in a book is followed by the reader, never by the
+  browser**: one delegated click on `reader-content` (`.md-body a[href^="#"]`,
+  primary button, no modifier keys), `preventDefault`, no hash and no history
+  entry. Everything else is `lib/reader/link-session.ts`, loaded on the first
+  touch of such a link; the reader keeps the click, `goToPage(page, find)`
+  and the bottom bar's status line. The session borrows the reader's search and matcher through
+  `LinkHost` instead of importing them: a module shared with the lazy chunk
+  stops being folded into the reader's and costs ~0.8 KB of wrappers.
+- **Targets are worked out from the stored text, at click time.** mammoth
+  writes a Word bookmark as an empty `<a id>` that turndown drops, so no
+  stored book has its targets. `public.book_outline(p_book_id)` (migration
+  0032) lists a book's headings, `#`-links and code fences — SECURITY
+  INVOKER, RLS-bound, ONE jsonb value (anon's answers stop at 1,000 rows),
+  ≤ 5,000 entries, no search slot (one book's pages by primary key).
+  `lib/reader/outline.ts` is its twin; `tests/unit/book-outline-sql.test.ts`
+  holds the two equal. `lib/reader/internal-links.ts` resolves: a note by the
+  link carrying its reciprocal fragment (`footnote-N` ↔ `footnote-ref-N`,
+  `endnote-…` likewise), then a GitHub-style slug, then the label aligned
+  with the headings — exact, enumeration stripped, or a word-boundary prefix
+  of ≥ 8 characters — forward from each link with a cursor that only moves on
+  an exact hit, then from the start of the book (a contents page at the end),
+  then each on its own (a back-reference).
+- **Never** add markers to `book_pages.content`, ids to markdown-it's output
+  or a stored anchor table, and never change the import for this: every
+  consumer of the text would have to learn to strip them. The printed Word
+  page numbers after the links are the book's text and stay.
+- **A landing is held where it was put** until the layout has been quiet for
+  1.5 s, the reader takes over (wheel, touch, key, press) or 12 s have passed:
+  corrected in a ResizeObserver, before paint, while `loadAround("before")`
+  skips its own scroll compensation (`pinnedRef`) — both would move it
+  twice. `loadAround` adds pages only to the window it fetched them for and
+  never runs twice at once (`loadingAroundRef`): two scroll events before
+  the re-render used to add the same pages twice. A heading lands 8 px below
+  the toolbar's measured bottom, a note in the middle of the free space; both
+  flash and take focus.
+- **When the book does not say**: the function missing (404 / PGRST202,
+  remembered for the visit) or nothing resolved → the label, without its
+  number and page, is searched with `book_match_pages` and the first
+  occurrence after the link is shown as the find bar shows it; busy →
+  `SEARCH_BUSY_TEXT`; offline → the loaded pages' own outline, else
+  «تور ئۈزۈلدى — بۇ ئورۇنغا ھازىر بارغىلى بولمايدۇ.»; nothing →
+  «بۇ ئۇلانما كۆرسەتكەن ئورۇن كىتابتىن تېپىلمىدى.». These, and
+  «يۈكلىنىۋاتىدۇ…» after 250 ms, are the bottom bar's status line (8 s each)
+  — the error line above the text is out of sight halfway down a contents
+  page. Never a dialog.
+- `tests/reader-links.spec.ts` reads a seeded DRAFT (`e2eLinks` prefix, swept
+  by `removePrefixedBooks`; not `BATCH_PREFIX`, which the batch spec deletes
+  mid-run) and answers both functions itself.
+
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
 `npm run lint` + `npm run build` → Playwright smoke (mobile + desktop viewports) →

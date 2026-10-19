@@ -20,6 +20,9 @@ import {
   SEED_NEEDLE,
   SEED_NEEDLE_PAGE,
   SEED_NEEDLE_LATER_PAGE,
+  SEED_LINKS_BOOK_HASH,
+  SEED_LINKS_BOOK_TITLE,
+  SEED_LINKS_PATH,
   SEED_PAGE_COUNT,
   SEED_PATH,
   SEED_STRETCHED,
@@ -31,6 +34,7 @@ import {
   testEmail,
 } from "./env";
 import { sweepTestAccounts } from "./fixtures/accounts";
+import { linkedBookRows } from "./fixtures/linked-book";
 
 loadEnvLocal();
 
@@ -310,6 +314,49 @@ setup("seed a published Markdown book", async () => {
 
   mkdirSync(dirname(SEED_MD_PATH), { recursive: true });
   writeFileSync(SEED_MD_PATH, JSON.stringify({ bookId: book.id }), "utf8");
+});
+
+/**
+ * The in-book links book (PROMPT-51): a Word-style contents page whose links
+ * have no targets, chapters, notes — all invented. A DRAFT, so it can never
+ * appear on the public site; reader-links.spec.ts reads it as staff.
+ */
+setup("seed a draft book with in-book links", async () => {
+  setup.skip(!hasStaffTestEnv(), "Supabase env not configured");
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } },
+  );
+
+  await admin.from("books").delete().eq("file_hash", SEED_LINKS_BOOK_HASH);
+
+  const rows = linkedBookRows();
+  const { data: book, error } = await admin
+    .from("books")
+    .insert({
+      title: SEED_LINKS_BOOK_TITLE,
+      author: SEED_AUTHOR,
+      status: "draft",
+      file_hash: SEED_LINKS_BOOK_HASH,
+      format: "DOCX",
+      content_format: "markdown",
+      language: "ug",
+      page_count: rows.length,
+      description: "Playwright سىنىقى ئۈچۈن ۋاقىتلىق، ئېلان قىلىنمىغان كىتاب.",
+    })
+    .select("id")
+    .single();
+  if (error || !book) throw new Error(`could not seed the links book: ${error?.message}`);
+
+  const { error: pageError } = await admin
+    .from("book_pages")
+    .insert(rows.map((row) => ({ book_id: book.id, ...row })));
+  if (pageError) throw new Error(`could not seed the links pages: ${pageError.message}`);
+
+  mkdirSync(dirname(SEED_LINKS_PATH), { recursive: true });
+  writeFileSync(SEED_LINKS_PATH, JSON.stringify({ bookId: book.id }), "utf8");
 });
 
 /**

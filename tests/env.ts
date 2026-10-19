@@ -186,6 +186,28 @@ export const SEED_MD_PAGE_COUNT = 6;
 /** The needle sits on this page, once inside bold markup and once in plain prose. */
 export const SEED_MD_NEEDLE_PAGE = 2;
 
+/**
+ * The in-book links book (PROMPT-51): a Word-style contents page, chapters,
+ * notes, all invented (tests/fixtures/linked-book.ts). Seeded as a DRAFT, read
+ * with the staff session, so it never shows on the public site; named with
+ * its own prefix — not BATCH_PREFIX, which the batch-import spec deletes
+ * wholesale mid-run — and swept by removePrefixedBooks all the same.
+ */
+export const LINKS_PREFIX = "e2eLinks";
+export const SEED_LINKS_BOOK_TITLE = `${LINKS_PREFIX} مۇندەرىجە سىنىقى`;
+export const SEED_LINKS_BOOK_HASH = `${LINKS_PREFIX}-hash`;
+export const SEED_LINKS_PATH = "tests/.auth/seed-links.json";
+
+export function readLinksSeed(): { bookId: number } | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    return JSON.parse(readFileSync(SEED_LINKS_PATH, "utf8")) as { bookId: number };
+  } catch {
+    return null;
+  }
+}
+
 export function readMarkdownSeed(): { bookId: number } | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports

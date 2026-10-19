@@ -108,6 +108,69 @@ export const DOCX_BOLD = "ناھايىتى مۇھىم";
 export const DOCX_TABLE_CELL = "بىرىنچى";
 export const DOCX_NEEDLE = "ئالتۇنكۆۋرۈك";
 
+/**
+ * A table of contents the way Word writes one: each entry a hyperlink to a
+ * bookmark (`w:hyperlink w:anchor`, or a HYPERLINK \l field), the bookmark a
+ * `w:bookmarkStart` on the chapter's heading, the printed page number inside
+ * the link after a tab or outside it, and a footnote. Invented text; enough
+ * of it that the chapters land on different pages once chunked.
+ */
+export const TOC_DOCX_CHAPTERS = [
+  { anchor: "_Toc101", heading: "كىرىش سۆز", entry: "1. كىرىش سۆز", page: "3", placement: "inside" },
+  { anchor: "_Toc102", heading: "تاغ ۋە دەريا", entry: "2. تاغ ۋە دەريا", page: "5", placement: "outside" },
+  { anchor: "_Toc103", heading: "ئاخىرقى سۆز", entry: "3. ئاخىرقى سۆز", page: "9", placement: "field" },
+] as const;
+
+export function buildTocDocx(): Buffer {
+  const run = (text: string) => `<w:r><w:t xml:space="preserve">${text}</w:t></w:r>`;
+  const tab = "<w:r><w:tab/></w:r>";
+  const entries = TOC_DOCX_CHAPTERS.map((chapter) => {
+    if (chapter.placement === "inside") {
+      return `<w:p><w:hyperlink w:anchor="${chapter.anchor}">${run(chapter.entry)}${tab}${run(chapter.page)}</w:hyperlink></w:p>`;
+    }
+    if (chapter.placement === "outside") {
+      return `<w:p><w:hyperlink w:anchor="${chapter.anchor}">${run(chapter.entry)}</w:hyperlink>${run(` ${chapter.page}`)}</w:p>`;
+    }
+    return (
+      `<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r>` +
+      `<w:r><w:instrText xml:space="preserve"> HYPERLINK \\l "${chapter.anchor}" </w:instrText></w:r>` +
+      `<w:r><w:fldChar w:fldCharType="separate"/></w:r>${run(chapter.entry)}${tab}${run(chapter.page)}` +
+      `<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`
+    );
+  });
+
+  const filler = paragraph("بۇ پاراگراف پەقەت سىناق ئۈچۈن يېزىلغان ئويدۇرما تېكىست، ھېچقانداق كىتابتىن ئېلىنمىغان. ".repeat(6));
+  const chapters = TOC_DOCX_CHAPTERS.map((chapter, index) => {
+    const heading =
+      `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>` +
+      `<w:bookmarkStart w:id="${index}" w:name="${chapter.anchor}"/>${run(chapter.heading)}<w:bookmarkEnd w:id="${index}"/></w:p>`;
+    const note =
+      index === 1
+        ? `<w:p>${run("دەريا بويىدا بىر كونا تېرەك بار ئىدى")}<w:r><w:footnoteReference w:id="1"/></w:r>${run(".")}</w:p>`
+        : "";
+    return heading + note + filler.repeat(8);
+  });
+
+  const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>${paragraph("مۇندەرىجە")}${entries.join("")}${chapters.join("")}</w:body>
+</w:document>`;
+
+  const footnotes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:footnotes xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>
+  <w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>
+  <w:footnote w:id="1">${paragraph("بۇ تېرەكنىڭ يېشى توغرىسىدىكى ئويدۇرما ئىزاھات.")}</w:footnote>
+</w:footnotes>`;
+
+  return zip([
+    { name: "[Content_Types].xml", data: Buffer.from(CONTENT_TYPES, "utf8") },
+    { name: "_rels/.rels", data: Buffer.from(RELS, "utf8") },
+    { name: "word/document.xml", data: Buffer.from(document, "utf8") },
+    { name: "word/footnotes.xml", data: Buffer.from(footnotes, "utf8") },
+  ]);
+}
+
 export function buildTestDocx(): Buffer {
   const body = [
     paragraph(DOCX_HEADING, "Heading1"),

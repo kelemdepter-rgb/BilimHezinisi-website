@@ -191,6 +191,20 @@ export default defineConfig({
         },
       },
       {
+        // In-book links (PROMPT-51): the seeded draft, read as staff.
+        name: `reader-links-${viewport.name}`,
+        testMatch: /[\\/]reader-links\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
         /**
          * The domain move: the old address redirecting, the hosts that must
          * NOT be redirected, and the daily cron's route still answering.
@@ -816,6 +830,22 @@ export default defineConfig({
         },
       },
     ]),
+    {
+      // In-book links on iPhone Safari's engine: scroll anchoring is
+      // Chromium's and Firefox's, not WebKit's, so a landing held in place
+      // while pages load above it is proved here too.
+      name: "reader-links-webkit-mobile-390x844",
+      testMatch: /[\\/]reader-links\.spec\.ts$/,
+      dependencies: ["setup"],
+      use: {
+        browserName: "webkit" as const,
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+        deviceScaleFactor: 3,
+        storageState: STAFF_STATE_PATH,
+      },
+    },
     ...NOTEBOOK_ENGINES.map((engine) => ({
       // The same ten specs, setup and signed-in state as the Chromium
       // notes, notes-sources, notes-save, notes-editing, notes-history,

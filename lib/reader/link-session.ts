@@ -21,7 +21,7 @@ import {
 
 /**
  * Following a link inside a book (PROMPT-51) — everything but the React state,
- * so the reader's own bundle carries only the click and the status line.
+ * so the reader's own bundle carries only the click and the «قايتىش» button.
  * Loaded the first time a reader touches an in-book link.
  *
  * A link is resolved from the book's outline (migration 0032, resolved by
@@ -39,6 +39,9 @@ import {
  * the reader would stop being folded into the reader's own and cost the
  * reader's first load its wrapper — about 0.8 KB in all, measured.
  */
+
+/** Where a followed link was clicked: its page, its fragment, and which such link on the page. */
+type ReturnPoint = { page: number; fragment: string; nth: number };
 
 /** What the reader lends the session. Read fresh on every call. */
 export type LinkHost = {
@@ -67,8 +70,10 @@ export type LinkHost = {
 export type LinkSession = {
   /** Start loading the outline before the click lands. */
   prefetch: () => void;
-  /** Follow an in-book link. True when the reader moved. */
+  /** Follow an in-book link. True when the reader moved — there is then a link to go back to. */
   follow: (anchor: HTMLAnchorElement) => Promise<boolean>;
+  /** Bring the last followed link back into view, once. */
+  goBack: () => Promise<void>;
 };
 
 /** The reader's own loading words, shown when following a link takes a moment. */
@@ -142,6 +147,8 @@ export function createLinkSession(host: () => LinkHost): LinkSession {
   let missing = false;
   let hold: (() => void) | null = null;
   let busy = false;
+  /** Where the last link that moved the reader was clicked: «قايتىش» goes there. */
+  let returnPoint: ReturnPoint | null = null;
   let showing: string | null = null;
   let slow: number | undefined;
   let fade: number | undefined;
@@ -323,7 +330,10 @@ export function createLinkSession(host: () => LinkHost): LinkSession {
       host().say(LOADING_TEXT);
     }, SLOW_MS);
     try {
-      return await followLink(anchor);
+      const from = await followLink(anchor);
+      // One level only: a new jump replaces the way back.
+      if (from) returnPoint = from;
+      return from !== null;
     } finally {
       busy = false;
       window.clearTimeout(slow);
@@ -331,37 +341,49 @@ export function createLinkSession(host: () => LinkHost): LinkSession {
     }
   }
 
-  async function followLink(anchor: HTMLAnchorElement): Promise<boolean> {
+  async function followLink(anchor: HTMLAnchorElement): Promise<ReturnPoint | null> {
     const pageNode = anchor.closest<HTMLElement>("[data-page-no]");
     const page = Number(pageNode?.dataset.pageNo);
-    if (!pageNode || !Number.isInteger(page)) return false;
+    if (!pageNode || !Number.isInteger(page)) return null;
     const fragment = (anchor.getAttribute("href") ?? "").slice(1);
+    const key = fragmentKey(fragment);
+    const from: ReturnPoint = { page, fragment: key, nth: Math.max(0, linksOn(pageNode, key).indexOf(anchor)) };
     const clicked = { fragment, label: anchor.textContent ?? "", page };
 
     const loaded = await load();
     if ("index" in loaded) {
       const target = resolveInternalLink(loaded.index, clicked);
       if (target) {
-        if (await land(target.page, finderFor(target), target.kind === "heading" ? "top" : "center")) return true;
+        if (await land(target.page, finderFor(target), target.kind === "heading" ? "top" : "center")) return from;
         say(offline() ? LINK_OFFLINE_TEXT : PAGE_FAILED_TEXT);
-        return false;
+        return null;
       }
     } else if (offline()) {
       // No database to ask: the pages already here may still hold the target.
       const reader = host();
       const target = resolveInternalLink(buildLinkIndex(outlineFromPages(reader.loadedPages)), clicked);
       if (target && reader.loadedPages.some((loadedPage) => loadedPage.page_no === target.page)) {
-        if (await land(target.page, finderFor(target), target.kind === "heading" ? "top" : "center")) return true;
+        if (await land(target.page, finderFor(target), target.kind === "heading" ? "top" : "center")) return from;
       }
       say(LINK_OFFLINE_TEXT);
-      return false;
+      return null;
     }
 
-    return searchFor(anchor, page);
+    return (await searchFor(anchor, page)) ? from : null;
+  }
+
+  async function goBack(): Promise<void> {
+    const point = returnPoint;
+    returnPoint = null;
+    if (!point) return;
+    say(null);
+    const landed = await land(point.page, (page) => linksOn(page, point.fragment)[point.nth] ?? null, "center");
+    if (!landed) say(offline() ? LINK_OFFLINE_TEXT : PAGE_FAILED_TEXT);
   }
 
   return {
     prefetch: () => void load(),
     follow,
+    goBack,
   };
 }

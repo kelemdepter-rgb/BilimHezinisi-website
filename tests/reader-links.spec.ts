@@ -181,6 +181,50 @@ test.describe("table of contents", () => {
     await expectChapter(page, "QBH6");
   });
 
+  test("«قايتىش» brings the entry back, and the bar stays whole", async ({ page }) => {
+    await open(page);
+    const link = tocLink(page, "QBH2");
+    await expectChapter(page, "QBH2");
+
+    const back = page.getByTestId("link-return");
+    await expect(back).toBeVisible();
+    await expect(back).toHaveAccessibleName("ئۇلانمىنى باسقان ئورۇنغا قايتىش");
+
+    // Every control in the bottom bar is there and is what a tap would hit,
+    // after a scroll to the end and back.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(250);
+    const controls = page.getByTestId("reader-bottom-bar").locator("button, input, a");
+    for (let index = 0; index < (await controls.count()); index++) {
+      const control = controls.nth(index);
+      await expect(control).toBeVisible();
+      const box = (await control.boundingBox())!;
+      expect(box.height, "a 44 px target").toBeGreaterThanOrEqual(43.5);
+      const onTop = await control.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        return Boolean(hit && (hit === element || element.contains(hit)));
+      });
+      expect(onTop, "nothing covers it").toBe(true);
+    }
+
+    await back.click();
+    await expect(link).toBeInViewport();
+    await expectClear(page, link);
+    await expect(link).toHaveClass(/match-flash/);
+    await expect(back).toHaveCount(0);
+  });
+
+  test("at 360 px the return button fits without a horizontal scroll", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 740 });
+    await open(page);
+    await expectChapter(page, "QBH2");
+    await expect(page.getByTestId("link-return")).toBeVisible();
+    await expectNoOverflow(page);
+  });
+
   test("the keyboard follows an entry and puts focus on the chapter", async ({ page, browserName }) => {
     await open(page);
     await tocLink(page, "QBH1").focus();
@@ -224,6 +268,7 @@ test.describe("when the book does not say", () => {
     await expect(active).toBeVisible({ timeout: 20_000 });
     await expect(active).toHaveText(LINKED_BODY_PHRASE);
     await expectClear(page, active);
+    await expect(page.getByTestId("link-return")).toBeVisible();
   });
 
   test("an entry that leads nowhere says so and leaves the reader where it was", async ({ page }) => {
@@ -235,6 +280,7 @@ test.describe("when the book does not say", () => {
     await expect(linkStatus(page)).toHaveText(LINK_NOT_FOUND_TEXT, { timeout: 20_000 });
     await expect(linkStatus(page)).toBeInViewport();
     expect(Math.abs((await page.evaluate(() => window.scrollY)) - before)).toBeLessThanOrEqual(1);
+    await expect(page.getByTestId("link-return")).toHaveCount(0);
   });
 
   test("before the migration, an entry still reaches its chapter by its words", async ({ page }) => {

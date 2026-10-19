@@ -170,6 +170,8 @@ export function Reader({
   const [findIndex, setFindIndex] = useState(0);
   const [activeTerm, setActiveTerm] = useState(highlight);
   const [error, setError] = useState<string | null>(null);
+  /** Whether «قايتىش» has a followed link to go back to (the session keeps where). */
+  const [canReturn, setCanReturn] = useState(false);
   /** «يۈكلىنىۋاتىدۇ…» while a link is followed, or why it could not be — the session says which. */
   const [linkStatus, setLinkStatus] = useState<string | null>(null);
 
@@ -737,7 +739,14 @@ export function Reader({
     event.preventDefault();
     void linkSession()
       .then((session) => session.follow(anchor))
+      .then((moved) => moved && setCanReturn(true))
       .catch(() => setLinkStatus(PAGE_FAILED));
+  }
+
+  /** «قايتىش»: back to the link that was followed, once. */
+  function returnToLink() {
+    setCanReturn(false);
+    void linkSession().then((session) => session.goBack());
   }
 
   async function stepFind(delta: 1 | -1) {
@@ -1137,6 +1146,21 @@ export function Reader({
           {linkStatus}
         </p>
         <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-center gap-2 px-3 py-2">
+          {/* Back to the link just followed. Icon only on a phone, so the bar
+              keeps its height; hidden in print with the whole bar. */}
+          {canReturn && (
+            <button
+              type="button"
+              className="hbtn"
+              data-testid="link-return"
+              aria-label="ئۇلانمىنى باسقان ئورۇنغا قايتىش"
+              onClick={returnToLink}
+            >
+              {/* Back, the way the notebook's back link points in RTL. */}
+              <Icon name="arrow-right" />
+              <span className="hidden sm:inline">قايتىش</span>
+            </button>
+          )}
           <button
             type="button"
             className="ibtn"

@@ -623,8 +623,9 @@ here. The table is left in place because an applied migration is never edited ·
   browser**: one delegated click on `reader-content` (`.md-body a[href^="#"]`,
   primary button, no modifier keys), `preventDefault`, no hash and no history
   entry. Everything else is `lib/reader/link-session.ts`, loaded on the first
-  touch of such a link; the reader keeps the click, `goToPage(page, find)`
-  and the bottom bar's status line. The session borrows the reader's search and matcher through
+  touch of such a link; the reader keeps the click, `goToPage(page, find)`,
+  the bottom bar's status line and «قايتىش» — +1,983 B first-load (gzip
+  +645). The session borrows the reader's search and matcher through
   `LinkHost` instead of importing them: a module shared with the lazy chunk
   stops being folded into the reader's and costs ~0.8 KB of wrappers.
 - **Targets are worked out from the stored text, at click time.** mammoth

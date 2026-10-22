@@ -2,10 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
 import { AccountSecurityCard } from "@/components/admin/account-security-card";
+import { CountryVisitsCard } from "@/components/admin/country-visits-card";
 import { UsagePanel } from "@/components/admin/usage-panel";
 import { getAccountSecurityReport } from "@/lib/auth/account-security";
 import { getAdminCounts, getSessionInfo } from "@/lib/data";
 import { getUsageReport } from "@/lib/usage";
+import { getCountryVisitReport } from "@/lib/visits/data";
 import type { Role } from "@/lib/types";
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -19,10 +21,10 @@ export default async function AdminDashboardPage() {
   if (!session) redirect("/login");
 
   const counts = await getAdminCounts();
-  const [usage, security] =
+  const [usage, security, visits] =
     session.role === "admin"
-      ? await Promise.all([getUsageReport(), getAccountSecurityReport()])
-      : [null, null];
+      ? await Promise.all([getUsageReport(), getAccountSecurityReport(), getCountryVisitReport()])
+      : [null, null, null];
 
   return (
     <>
@@ -42,6 +44,9 @@ export default async function AdminDashboardPage() {
 
       {/* Free-tier gauge is admin-only: an uploader manages books, not limits. */}
       {session.role === "admin" && usage && <UsagePanel report={usage} />}
+
+      {/* Where the library is opened from — a tally by country, nothing personal. Admin-only. */}
+      {session.role === "admin" && visits && <CountryVisitsCard report={visits} />}
 
       {/* Who may open an account, and what an attack looks like: admin-only too. */}
       {session.role === "admin" && security && (

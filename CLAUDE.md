@@ -219,6 +219,26 @@ here. The table is left in place because an applied migration is never edited ·
 - Sanitize all rendered book/note HTML (port `sanitize.js` approach; DOMPurify).
 - Do not weaken CSP; no third-party scripts/CDNs at runtime.
 - **Never load-test production**: no bursts at bilimhezinisi.com or the live Supabase project, ever — floods run only against the local stack in `scripts/flood/`.
+- **Where the library is opened from: a tally, never a trace** (2026-10-22,
+  migration 0033). `proxy.ts` reduces a page opening to the two-letter country
+  code Vercel puts on the request (`x-vercel-ip-country`) and adds one to
+  `public.country_visits (day, country, visits)`. **Nothing else may ever be
+  stored or logged for it** — no IP, cookie, user agent, path, referrer, user
+  id or session; no new column, no per-visit row, no analytics script. It
+  counts a browser's full navigation (`Sec-Fetch-Dest: document`) on the
+  production deployment only — not prefetches, the app's own fetches, bots,
+  `/api`, `/auth`, `/admin`, previews or localhost (`lib/visits/count.ts`,
+  unit-tested). It is page OPENINGS, not people, and /admin says so. Writes
+  are batched per server instance (≤ 1 call per 5 s) and sent inside
+  `event.waitUntil`, so no reader waits and a failure changes nothing they
+  see; `lib/visits/record.ts` is deliberately a plain `fetch` RPC with the
+  shared `fetchWithTimeout`, because `lib/supabase/admin.ts` is `server-only`
+  and the proxy bundle is not known to honour that. The table and its three
+  functions are service-role ONLY; the admin card (`CountryVisitsCard`,
+  admin role only) reads through `lib/visits/data.ts`; the daily /api/health
+  sweeps days past 366. The privacy page (summary + section 3), About and
+  `tests/trust.spec.ts` say this in the owner's words — **change one, change
+  all**, and move the privacy page's date.
 - **Nothing waits for Supabase for minutes** (PROMPT-40, after the 2026-10-05
   outage): every Supabase client carries a fetch timeout through `global.fetch`
   (`lib/supabase/timeouts.ts` — 10 s on the server, 30 s in the browser, 10 min

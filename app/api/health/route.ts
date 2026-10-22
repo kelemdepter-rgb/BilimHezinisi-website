@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sweepUnconfirmedAccounts } from "@/lib/auth/account-security";
 import { sweepAttempts } from "@/lib/auth/attempts";
+import { sweepCountryVisits } from "@/lib/visits/data";
 import { purgeNoteTrash } from "@/lib/notes/trash-purge";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
@@ -50,7 +51,8 @@ const TRASH_PURGE_STARTS_BEFORE_MS = 45_000;
  * this is what notices next time, without a second cron.
  *
  * And it sweeps: the failed-attempt counter (lib/auth/attempts.ts), rows a
- * day past their window and lock; and — on the production deployment only,
+ * day past their window and lock; the per-country page tally past its year
+ * (lib/visits/data.ts); and — on the production deployment only,
  * once the owner has switched it on in /admin — accounts never confirmed
  * after 7 days (lib/auth/account-security.ts, at most 200 a day). Then, on
  * the production deployment only, the notebook's trash: notes in it longer
@@ -106,6 +108,7 @@ export async function GET(request: Request) {
   // delete anyone.
   const production = process.env.VERCEL_ENV === "production";
   const sweptAttempts = await sweepAttempts();
+  const sweptVisits = await sweepCountryVisits();
   const sweptAccounts = production ? await sweepUnconfirmedAccounts() : null;
   const purgedNotes =
     production && Date.now() - started < TRASH_PURGE_STARTS_BEFORE_MS ? await purgeNoteTrash() : null;
@@ -115,6 +118,7 @@ export async function GET(request: Request) {
       ok: true,
       at: new Date().toISOString(),
       sweptAttempts,
+      sweptVisits,
       sweptAccounts,
       purgedNotes,
       search:

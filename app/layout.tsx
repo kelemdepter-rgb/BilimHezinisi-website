@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { getCategories, getCategoryCounts, getSessionInfo } from "@/lib/data";
 import { THEME_COLOR } from "./manifest";
 import { OfflineBridge } from "@/components/pwa/offline-bridge";
+import { VisitBeacon } from "@/components/visit-beacon";
 import { SITE_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/seo";
 import { THEME_COOKIE, isTheme } from "@/lib/theme";
 
@@ -174,6 +175,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {/* Registers the service worker and carries the update toast. Renders
             nothing at all until there is something to say. */}
         <OfflineBridge />
+        {/* «This device came today», once per UTC day — nothing else (lib/visits/beacon.ts). */}
+        <VisitBeacon />
       </body>
     </html>
   );

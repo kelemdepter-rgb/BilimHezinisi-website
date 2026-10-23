@@ -19,7 +19,7 @@ const CONTACT = "kelemdepter@gmail.com";
  * The owner's date format, spaces and all. Moved on only when the policy
  * itself changes, because section 6 promises readers exactly that: last on
  * 2026-10-23, when section 3 said East Turkistan is counted apart from
- * China. The per-country tally itself came on 2026-10-22 (migration 0033);
+ * China and how devices are counted (migration 0034). The per-country tally itself came on 2026-10-22 (migration 0033);
  * before that, 2026-09-25, when he approved the sign-in and Gmail sentences
  * (PROMPT-38).
  */
@@ -145,6 +145,13 @@ export default function PrivacyPage() {
           جۇڭگودىن ئايرىم سانىلىدۇ) بويىچە كۈنلۈك بىر ساناققا بىر قوشۇلىدۇ. بۇ ساناققا IP ئادرېسىڭىز، cookie، تور كۆرگۈچ ئۇچۇرى، كۆرگەن
           بېتىڭىز ۋە ھېساباتىڭىز يېزىلمايدۇ؛ پەقەت «بۈگۈن مەلۇم دۆلەتتىن قانچە قېتىم كىرىلدى»
           دېگەن سان ساقلىنىدۇ. ئۇنى پەقەت باشقۇرغۇچى كۆرەلەيدۇ ۋە بىر يىلدىن كېيىن ئۆچۈرۈلىدۇ.
+        </p>
+        {/* Added 2026-10-23 with the daily device count (migration 0034, lib/visits/beacon.ts). */}
+        <p>
+          بىر كۈندە نەچچە ئۈسكۈنىدىن كىرىلگەنلىكىنى بىلىش ئۈچۈن، تور كۆرگۈچىڭىز كۈنىگە بىرلا قېتىم
+          «بۈگۈن كەلدىم» دېگەن ئىسىمسىز بىر بەلگە ئەۋەتىدۇ ۋە قايتا ئەۋەتمەسلىك ئۈچۈن ئۆز localStorage
+          قىسمىغا پەقەت بۈگۈنكى چېسلانىلا يازىدۇ. مۇلازىمېتىردا بۇنىڭ ئۈچۈنمۇ دۆلەت بويىچە بىر ساندىن
+          باشقا ھېچنەرسە ساقلانمايدۇ.
         </p>
 
         <h2>

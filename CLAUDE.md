@@ -226,9 +226,20 @@ here. The table is left in place because an applied migration is never edited ·
   apart from China (owner, 2026-10-23): a `CN` request whose
   `x-vercel-ip-country-region` is `XJ` (or the old `65`) is stored as `XJ`,
   a code from ISO's user-assigned range, named «شەرقىي تۈركىستان» in
-  `lib/visits/report.ts`; the region header is read, never stored. **Nothing else may ever be
+  `lib/visits/report.ts`; the region header is read, never stored.
+  **Devices** (migration 0034, column `devices` on the same rows): the root
+  layout's `VisitBeacon` sends one empty `sendBeacon` POST to `/api/visit`
+  the first time a browser opens the library on a UTC day, remembering only
+  that date in its own localStorage (`bh-visit-day`, `lib/visits/beacon.ts`);
+  the route adds one to the country's device count (same-origin, not a
+  program, per-instance `VISIT_BEACON_RULE`) and always answers 204.
+  **Staff are not counted**: the admin layout's `NoCountMark` sets the
+  script-readable flag cookie `bh_nocount=1` in staff browsers, and both the
+  proxy and the beacon skip a browser carrying it. It grants nothing. **Nothing else may ever be
   stored or logged for it** — no IP, cookie, user agent, path, referrer, user
-  id or session; no new column, no per-visit row, no analytics script. It
+  id or session; no column beyond tallies, no per-visit row, no analytics
+  script, no browser fingerprint (time zone, language, screen) — above all
+  not for readers in East Turkistan, whose safety is this rule's point. It
   counts a browser's full navigation (`Sec-Fetch-Dest: document`) on the
   production deployment only — not prefetches, the app's own fetches, bots,
   `/api`, `/auth`, `/admin`, previews or localhost (`lib/visits/count.ts`,

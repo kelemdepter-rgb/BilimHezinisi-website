@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { EAST_TURKISTAN, countedVisitCountry, createVisitBatcher, type VisitBatch } from "@/lib/visits/count";
+import {
+  EAST_TURKISTAN,
+  countedDeviceCountry,
+  countedVisitCountry,
+  createVisitBatcher,
+  hasNoCountCookie,
+  type VisitBatch,
+} from "@/lib/visits/count";
 
 /**
  * The rules for «which countries is the library opened from» (migration 0033):
@@ -104,6 +111,70 @@ describe("which requests count", () => {
     for (const value of [null, "", "tr", "T1", "XXX", "T", "<script>", "T R"]) {
       expect(countedVisitCountry(request({ headers: { "x-vercel-ip-country": value } }))).toBeNull();
     }
+  });
+});
+
+describe("staff are not counted", () => {
+  it("skips a browser carrying the no-count flag", () => {
+    expect(countedVisitCountry(request({ headers: { cookie: "bh_nocount=1" } }))).toBeNull();
+    expect(countedVisitCountry(request({ headers: { cookie: "theme=sepia; bh_nocount=1; x=y" } }))).toBeNull();
+  });
+
+  it("counts everyone else, whatever other cookies they carry", () => {
+    expect(countedVisitCountry(request({ headers: { cookie: "theme=dark; bh_nocount=0; bh_nocountx=1" } }))).toBe("TR");
+    expect(hasNoCountCookie(new Headers())).toBe(false);
+  });
+});
+
+describe("the daily device signal", () => {
+  function signal(overrides: { method?: string; environment?: string | undefined; headers?: Record<string, string | null> } = {}) {
+    const headers = new Headers();
+    const given: Record<string, string | null> = {
+      "sec-fetch-site": "same-origin",
+      "sec-fetch-mode": "no-cors",
+      "sec-fetch-dest": "empty",
+      "user-agent": BROWSER,
+      "x-vercel-ip-country": "TR",
+      ...overrides.headers,
+    };
+    for (const [name, value] of Object.entries(given)) if (value !== null) headers.set(name, value);
+    return {
+      method: overrides.method ?? "POST",
+      headers,
+      environment: "environment" in overrides ? overrides.environment : "production",
+    };
+  }
+
+  it("counts the beacon from the site's own page", () => {
+    expect(countedDeviceCountry(signal())).toBe("TR");
+  });
+
+  it("splits East Turkistan from China the same way", () => {
+    expect(
+      countedDeviceCountry(signal({ headers: { "x-vercel-ip-country": "CN", "x-vercel-ip-country-region": "XJ" } })),
+    ).toBe(EAST_TURKISTAN);
+  });
+
+  it("counts only a POST, only in production", () => {
+    expect(countedDeviceCountry(signal({ method: "GET" }))).toBeNull();
+    expect(countedDeviceCountry(signal({ environment: "preview" }))).toBeNull();
+    expect(countedDeviceCountry(signal({ environment: undefined }))).toBeNull();
+  });
+
+  it("refuses a signal from another site, or with no origin information", () => {
+    expect(countedDeviceCountry(signal({ headers: { "sec-fetch-site": "cross-site" } }))).toBeNull();
+    expect(countedDeviceCountry(signal({ headers: { "sec-fetch-site": "same-site" } }))).toBeNull();
+    expect(countedDeviceCountry(signal({ headers: { "sec-fetch-site": null } }))).toBeNull();
+  });
+
+  it("refuses programs and staff browsers", () => {
+    expect(countedDeviceCountry(signal({ headers: { "user-agent": "curl/8.5.0" } }))).toBeNull();
+    expect(countedDeviceCountry(signal({ headers: { "user-agent": null } }))).toBeNull();
+    expect(countedDeviceCountry(signal({ headers: { cookie: "bh_nocount=1" } }))).toBeNull();
+  });
+
+  it("needs a country", () => {
+    expect(countedDeviceCountry(signal({ headers: { "x-vercel-ip-country": null } }))).toBeNull();
   });
 });
 

@@ -12,7 +12,16 @@ export type CountryVisitRow = {
   d30: number;
   /** Everything kept — a year at most. */
   total: number;
+  /** First-of-the-day devices (migration 0034): sums of daily counts. */
+  dev7: number;
+  dev30: number;
+  devtotal: number;
 };
+
+/** One UTC day of the last 30, every country together. */
+export type VisitDay = { day: string; visits: number; devices: number };
+
+type Totals = { d7: number; d30: number; total: number; dev7: number; dev30: number; devtotal: number };
 
 export type CountryVisitReport =
   | { available: false }
@@ -23,8 +32,14 @@ export type CountryVisitReport =
       /** Busiest over 30 days first. */
       rows: CountryVisitRow[];
       /** Sum over every country, for the headline numbers and the bars' shares. */
-      totals: { d7: number; d30: number; total: number };
+      totals: Totals;
+      /** The last 30 UTC days, oldest first. Empty before migration 0034. */
+      days: VisitDay[];
+      /** Whether migration 0034 (devices, days) is in place. */
+      devicesAvailable: boolean;
     };
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 const numeric = (value: unknown): number => {
   const n = Number(value);
@@ -38,26 +53,54 @@ const numeric = (value: unknown): number => {
  */
 export function parseCountryVisitReport(data: unknown): CountryVisitReport {
   if (!data || typeof data !== "object") return { available: false };
-  const { since, rows } = data as { since?: unknown; rows?: unknown };
+  const { since, rows, days } = data as { since?: unknown; rows?: unknown; days?: unknown };
   if (!Array.isArray(rows)) return { available: false };
 
   const parsed: CountryVisitRow[] = [];
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
-    const { country, d7, d30, total } = row as Record<string, unknown>;
+    const { country, d7, d30, total, dev7, dev30, devtotal } = row as Record<string, unknown>;
     if (typeof country !== "string" || !/^[A-Z]{2}$/.test(country)) continue;
-    parsed.push({ country, d7: numeric(d7), d30: numeric(d30), total: numeric(total) });
+    parsed.push({
+      country,
+      d7: numeric(d7),
+      d30: numeric(d30),
+      total: numeric(total),
+      dev7: numeric(dev7),
+      dev30: numeric(dev30),
+      devtotal: numeric(devtotal),
+    });
   }
 
-  const totals = parsed.reduce(
-    (sum, row) => ({ d7: sum.d7 + row.d7, d30: sum.d30 + row.d30, total: sum.total + row.total }),
-    { d7: 0, d30: 0, total: 0 },
+  const totals = parsed.reduce<Totals>(
+    (sum, row) => ({
+      d7: sum.d7 + row.d7,
+      d30: sum.d30 + row.d30,
+      total: sum.total + row.total,
+      dev7: sum.dev7 + row.dev7,
+      dev30: sum.dev30 + row.dev30,
+      devtotal: sum.devtotal + row.devtotal,
+    }),
+    { d7: 0, d30: 0, total: 0, dev7: 0, dev30: 0, devtotal: 0 },
   );
+
+  const series: VisitDay[] = [];
+  if (Array.isArray(days)) {
+    for (const entry of days) {
+      if (!entry || typeof entry !== "object") continue;
+      const { day, visits, devices } = entry as Record<string, unknown>;
+      if (typeof day !== "string" || !ISO_DAY.test(day)) continue;
+      series.push({ day, visits: numeric(visits), devices: numeric(devices) });
+    }
+  }
+
   return {
     available: true,
-    since: typeof since === "string" && /^\d{4}-\d{2}-\d{2}$/.test(since) ? since : null,
+    since: typeof since === "string" && ISO_DAY.test(since) ? since : null,
     rows: parsed,
     totals,
+    days: series,
+    devicesAvailable: Array.isArray(days),
   };
 }
 

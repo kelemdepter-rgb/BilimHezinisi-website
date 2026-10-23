@@ -152,6 +152,14 @@ export const NOTE_SEARCH_RULE: RateLimitRule = { limit: 60, windowMs: 60_000 };
 export const SEARCH_RULE: RateLimitRule = { limit: 60, windowMs: 60_000 };
 
 /**
+ * «This device came today» (app/api/visit). An honest browser sends ONE a
+ * day; thirty an hour per address leaves room for a whole household — or a
+ * mobile carrier's shared address — while stopping a script from inflating a
+ * country's device count. Counted per instance, like the rest.
+ */
+export const VISIT_BEACON_RULE: RateLimitRule = { limit: 30, windowMs: 60 * 60_000 };
+
+/**
  * The caller's address, from the proxy header Vercel sets. Falls back to a
  * single shared bucket, which is the safe direction: unknown callers share a
  * limit rather than escaping it.

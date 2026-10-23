@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { AdminNav } from "@/components/admin/admin-nav";
+import { NoCountMark } from "@/components/admin/no-count-mark";
 import { hasSupabaseEnv } from "@/lib/env";
 import { getSessionInfo } from "@/lib/data";
 
@@ -31,6 +32,8 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   return (
     <div className="px-3 py-5 sm:px-6 sm:py-7 lg:px-8">
       <AdminNav role={session.role} />
+      {/* Staff browsers leave the library's tallies (lib/visits/count.ts). */}
+      <NoCountMark />
       {children}
     </div>
   );

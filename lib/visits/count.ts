@@ -45,6 +45,39 @@ const SKIPPED = ["/api", "/auth", "/admin"];
 const NOT_A_READER =
   /bot\b|crawl|spider|slurp|preview|facebookexternalhit|headless|lighthouse|pingdom|uptime|monitor|curl|wget|python|axios|node-fetch|go-http|java\/|libwww|httpclient/i;
 
+/**
+ * Set by the admin area in a staff member's own browser
+ * (components/admin/no-count-mark.tsx), so the owner and the uploaders do not
+ * count their own visits. A flag and nothing else — "1" — readable by script
+ * on purpose: setting it only ever takes a browser OUT of the tally.
+ */
+export const NO_COUNT_COOKIE = "bh_nocount";
+
+/** Whether the request carries the staff no-count flag. */
+export function hasNoCountCookie(headers: Headers): boolean {
+  return (headers.get("cookie") ?? "").split(";").some((part) => part.trim() === `${NO_COUNT_COOKIE}=1`);
+}
+
+/** A program rather than a person's browser — or no user agent at all. */
+function isProgram(headers: Headers): boolean {
+  const agent = headers.get("user-agent") ?? "";
+  return !agent || NOT_A_READER.test(agent);
+}
+
+/**
+ * The code to tally for where this request comes from: Vercel's country code,
+ * or EAST_TURKISTAN for a Chinese address in that region. Null when Vercel
+ * could not place it.
+ */
+function placeOf(headers: Headers): string | null {
+  const country = headers.get(VISIT_COUNTRY_HEADER) ?? "";
+  if (!/^[A-Z]{2}$/.test(country)) return null;
+  if (country === "CN" && EAST_TURKISTAN_REGIONS.has((headers.get(VISIT_REGION_HEADER) ?? "").toUpperCase())) {
+    return EAST_TURKISTAN;
+  }
+  return country;
+}
+
 function isSkippedPath(pathname: string): boolean {
   return SKIPPED.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
@@ -69,7 +102,8 @@ export type VisitRequest = {
  * could not place in a country. Note this is page OPENINGS, not people.
  *
  * A Chinese address whose region is East Turkistan is counted as
- * EAST_TURKISTAN, not as CN.
+ * EAST_TURKISTAN, not as CN. A browser carrying the staff no-count flag is
+ * not counted.
  */
 export function countedVisitCountry({ method, pathname, headers, environment }: VisitRequest): string | null {
   if (environment !== "production") return null;
@@ -80,15 +114,29 @@ export function countedVisitCountry({ method, pathname, headers, environment }: 
   const purpose = `${headers.get("sec-purpose") ?? ""} ${headers.get("purpose") ?? ""}`;
   if (/prefetch|prerender/i.test(purpose)) return null;
 
-  const agent = headers.get("user-agent") ?? "";
-  if (!agent || NOT_A_READER.test(agent)) return null;
+  if (isProgram(headers) || hasNoCountCookie(headers)) return null;
+  return placeOf(headers);
+}
 
-  const country = headers.get(VISIT_COUNTRY_HEADER) ?? "";
-  if (!/^[A-Z]{2}$/.test(country)) return null;
-  if (country === "CN" && EAST_TURKISTAN_REGIONS.has((headers.get(VISIT_REGION_HEADER) ?? "").toUpperCase())) {
-    return EAST_TURKISTAN;
-  }
-  return country;
+export type DeviceRequest = Omit<VisitRequest, "pathname">;
+
+/**
+ * The code to tally for a «one device, once a day» signal, or null.
+ *
+ * The signal is the POST components/visit-beacon.tsx sends with
+ * `navigator.sendBeacon` the first time a browser opens the library on a UTC
+ * day; the browser remembers the day in its own localStorage, and nothing is
+ * remembered here. Counted on the production deployment only, from the site's
+ * own pages (`Sec-Fetch-Site: same-origin`), never from a program or a staff
+ * browser. The route in front of it also brakes bursts per address
+ * (app/api/visit/route.ts).
+ */
+export function countedDeviceCountry({ method, headers, environment }: DeviceRequest): string | null {
+  if (environment !== "production") return null;
+  if (method !== "POST") return null;
+  if (headers.get("sec-fetch-site") !== "same-origin") return null;
+  if (isProgram(headers) || hasNoCountCookie(headers)) return null;
+  return placeOf(headers);
 }
 
 /** Openings waiting to be sent: country code → how many. */

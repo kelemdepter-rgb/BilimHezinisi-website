@@ -9,7 +9,7 @@ import { createVisitBatcher, type VisitBatch } from "./count";
  * Deliberately NOT lib/supabase/admin.ts: that module is `server-only`, a
  * guard the proxy bundle is not known to honour, and this file needs the
  * service-role key for exactly one RPC. It reads the key from the same
- * environment, is imported by nothing but proxy.ts, goes through the same
+ * environment, is imported by nothing but proxy.ts and app/api/visit, goes through the same
  * `fetchWithTimeout` as every Supabase client (PROMPT-40), and never logs a
  * header, a key or a body.
  *
@@ -23,13 +23,14 @@ const timedFetch = fetchWithTimeout({ timeoutMs: SERVER_FETCH_TIMEOUT_MS });
 
 let reported = false;
 
-async function sendBatch(batch: VisitBatch): Promise<void> {
+/** One batch to one of the two tally functions: page openings (0033) or devices (0034). */
+async function sendBatch(rpc: "country_visits_add" | "country_devices_add", batch: VisitBatch): Promise<void> {
   if (!hasServiceRole()) return;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
   const countries = Object.keys(batch);
   if (countries.length === 0) return;
 
-  const response = await timedFetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/country_visits_add`, {
+  const response = await timedFetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/rpc/${rpc}`, {
     method: "POST",
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({ p_countries: countries, p_counts: countries.map((country) => batch[country]) }),
@@ -38,13 +39,19 @@ async function sendBatch(batch: VisitBatch): Promise<void> {
   await response.arrayBuffer().catch(() => undefined);
   if (!response.ok && !reported) {
     reported = true;
-    console.error(`[bh] visits.record — the tally was refused (HTTP ${response.status}); is migration 0033 applied?`);
+    console.error(`[bh] visits.record — ${rpc} was refused (HTTP ${response.status}); are migrations 0033 and 0034 applied?`);
   }
 }
 
-const batcher = createVisitBatcher({ send: sendBatch });
+const openings = createVisitBatcher({ send: (batch) => sendBatch("country_visits_add", batch) });
+const devices = createVisitBatcher({ send: (batch) => sendBatch("country_devices_add", batch) });
 
 /** Count one page opening from `country`. Returns the send to hand to `waitUntil`, if any. */
 export function recordVisit(country: string): Promise<void> | null {
-  return batcher.add(country);
+  return openings.add(country);
+}
+
+/** Count one device's first opening of the day from `country` (app/api/visit/route.ts). */
+export function recordDevice(country: string): Promise<void> | null {
+  return devices.add(country);
 }

@@ -1,41 +1,14 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Icon, type IconName } from "@/components/icons";
+import "server-only";
+import { AdminNavLinks } from "@/components/admin/admin-nav-links";
+import { adminNavLinksFor } from "@/lib/admin/nav";
 import type { Role } from "@/lib/types";
 
-const LINKS: { href: string; label: string; icon: IconName; adminOnly?: boolean }[] = [
-  { href: "/admin", label: "باشلىنىش", icon: "chart" },
-  { href: "/admin/books", label: "كىتابلار", icon: "book" },
-  { href: "/admin/categories", label: "تۈرلەر", icon: "layers" },
-  { href: "/admin/users", label: "ئەزالار", icon: "user", adminOnly: true },
-  { href: "/admin/visits", label: "دۆلەتلەر بويىچە كىرىش", icon: "globe", adminOnly: true },
-];
-
+/**
+ * The admin navigation. A server component on purpose: it chooses the
+ * entries for the verified role here (lib/admin/nav.ts), and only those
+ * reach the browser — the admin-only «ئەزالار» and «دۆلەتلەر بويىچە كىرىش»
+ * are absent from an uploader's page altogether, not merely hidden.
+ */
 export function AdminNav({ role }: { role: Role }) {
-  const pathname = usePathname();
-  const links = LINKS.filter((link) => !link.adminOnly || role === "admin");
-
-  return (
-    <nav
-      aria-label="باشقۇرۇش تىزىملىكى"
-      className="safe-x -mx-3 mb-5 overflow-x-auto overscroll-x-contain px-3 sm:mx-0 sm:px-0"
-    >
-      <ul className="flex w-max min-w-full gap-2">
-        {links.map((link) => {
-          const active =
-            link.href === "/admin" ? pathname === "/admin" : pathname.startsWith(link.href);
-          return (
-            <li key={link.href}>
-              <Link href={link.href} className={active ? "hbtn on" : "hbtn"} aria-current={active ? "page" : undefined}>
-                <Icon name={link.icon} />
-                {link.label}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-  );
+  return <AdminNavLinks links={adminNavLinksFor(role)} />;
 }

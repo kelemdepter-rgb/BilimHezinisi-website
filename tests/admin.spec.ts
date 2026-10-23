@@ -41,6 +41,9 @@ test.describe("admin access", () => {
     const nav = page.getByRole("navigation", { name: "باشقۇرۇش تىزىملىكى" });
     await expect(nav.getByRole("link", { name: "دۆلەتلەر بويىچە كىرىش" })).toHaveCount(0);
     await expect(page.getByTestId("country-visits-card")).toHaveCount(0);
+    // Absent, not hidden: neither the markup nor the page's data names it.
+    expect(await page.content()).not.toContain("/admin/visits");
+    expect(await page.content()).not.toContain("دۆلەتلەر بويىچە كىرىش");
   });
 
   test("anonymous visitors are redirected away from every admin page", async ({ browser }) => {

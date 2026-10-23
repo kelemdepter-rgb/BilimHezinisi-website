@@ -70,6 +70,20 @@ describe("the device signal route", () => {
     expect(state.recorded).toEqual([]);
   });
 
+  it("counts an old iPhone that sends no Sec-Fetch headers, by its Origin", async () => {
+    const request = new Request("https://bilimhezinisi.com/api/visit", {
+      method: "POST",
+      headers: {
+        origin: "https://bilimhezinisi.com",
+        "user-agent":
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 15_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1",
+        "x-vercel-ip-country": "KZ",
+      },
+    });
+    expect((await POST(request)).status).toBe(204);
+    expect(state.recorded).toEqual(["KZ"]);
+  });
+
   it("counts East Turkistan as East Turkistan", async () => {
     await POST(beacon({ "x-vercel-ip-country": "CN", "x-vercel-ip-country-region": "XJ" }));
     expect(state.recorded).toEqual(["XJ"]);

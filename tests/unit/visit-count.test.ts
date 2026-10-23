@@ -5,6 +5,7 @@ import {
   countedVisitCountry,
   createVisitBatcher,
   hasNoCountCookie,
+  isPreFetchMetadataWebKit,
   type VisitBatch,
 } from "@/lib/visits/count";
 
@@ -142,6 +143,7 @@ describe("the daily device signal", () => {
       method: overrides.method ?? "POST",
       headers,
       environment: "environment" in overrides ? overrides.environment : "production",
+      url: "https://bilimhezinisi.com/api/visit",
     };
   }
 
@@ -175,6 +177,100 @@ describe("the daily device signal", () => {
 
   it("needs a country", () => {
     expect(countedDeviceCountry(signal({ headers: { "x-vercel-ip-country": null } }))).toBeNull();
+  });
+});
+
+describe("Safari before 16.4, which sends no Sec-Fetch headers", () => {
+  const IPHONE_15 =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 15_7_9 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6.6 Mobile/15E148 Safari/604.1";
+  const IPHONE_16_3_CHROME =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/112.0 Mobile/15E148 Safari/604.1";
+  const IPAD_14 = "Mozilla/5.0 (iPad; CPU OS 14_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.2 Mobile/15E148 Safari/604.1";
+  const MAC_SAFARI_15 =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Safari/605.1.15";
+  const IPHONE_16_4 =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Mobile/15E148 Safari/604.1";
+  const IPHONE_18 =
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1";
+  const MAC_CHROME_OLD =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0 Safari/537.36";
+  const NAVIGATION_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+  const NO_METADATA = { "sec-fetch-dest": null, "sec-fetch-mode": null, "sec-fetch-site": null };
+
+  it("recognises exactly the browsers that predate Fetch Metadata", () => {
+    for (const agent of [IPHONE_15, IPHONE_16_3_CHROME, IPAD_14, MAC_SAFARI_15]) expect(isPreFetchMetadataWebKit(agent)).toBe(true);
+    for (const agent of [IPHONE_16_4, IPHONE_18, MAC_CHROME_OLD, BROWSER, ""]) expect(isPreFetchMetadataWebKit(agent)).toBe(false);
+  });
+
+  it("counts an old iPhone opening a page", () => {
+    for (const agent of [IPHONE_15, IPHONE_16_3_CHROME, IPAD_14, MAC_SAFARI_15]) {
+      expect(
+        countedVisitCountry(request({ headers: { ...NO_METADATA, "user-agent": agent, accept: NAVIGATION_ACCEPT } })),
+      ).toBe("TR");
+    }
+  });
+
+  it("does not count the service worker's background copy, page data or a prefetch", () => {
+    const old = { ...NO_METADATA, "user-agent": IPHONE_15 };
+    expect(countedVisitCountry(request({ headers: { ...old, accept: "text/html" } }))).toBeNull();
+    expect(countedVisitCountry(request({ headers: { ...old, accept: "*/*", rsc: "1" } }))).toBeNull();
+    expect(countedVisitCountry(request({ headers: { ...old, accept: NAVIGATION_ACCEPT, rsc: "1" } }))).toBeNull();
+    expect(countedVisitCountry(request({ headers: { ...old, accept: NAVIGATION_ACCEPT, "next-router-prefetch": "1" } }))).toBeNull();
+    expect(countedVisitCountry(request({ headers: { ...old, accept: NAVIGATION_ACCEPT, purpose: "prefetch" } }))).toBeNull();
+  });
+
+  it("still refuses everyone else who arrives without Sec-Fetch headers", () => {
+    for (const agent of [IPHONE_16_4, IPHONE_18, BROWSER, MAC_CHROME_OLD]) {
+      expect(
+        countedVisitCountry(request({ headers: { ...NO_METADATA, "user-agent": agent, accept: NAVIGATION_ACCEPT } })),
+      ).toBeNull();
+    }
+  });
+
+  it("does not fall back when some Sec-Fetch header is there", () => {
+    expect(
+      countedVisitCountry(
+        request({ headers: { ...NO_METADATA, "sec-fetch-site": "none", "user-agent": IPHONE_15, accept: NAVIGATION_ACCEPT } }),
+      ),
+    ).toBeNull();
+  });
+
+  it("still skips staff and the admin area on an old iPhone", () => {
+    const old = { ...NO_METADATA, "user-agent": IPHONE_15, accept: NAVIGATION_ACCEPT };
+    expect(countedVisitCountry(request({ headers: { ...old, cookie: "bh_nocount=1" } }))).toBeNull();
+    expect(countedVisitCountry(request({ pathname: "/admin", headers: old }))).toBeNull();
+  });
+
+  describe("the device signal from an old iPhone", () => {
+    function oldSignal(headers: Record<string, string>, agent = IPHONE_15) {
+      return {
+        method: "POST",
+        headers: new Headers({ "user-agent": agent, "x-vercel-ip-country": "TR", ...headers }),
+        environment: "production",
+        url: "https://bilimhezinisi.com/api/visit",
+      };
+    }
+
+    it("is counted when its Origin is this site", () => {
+      expect(countedDeviceCountry(oldSignal({ origin: "https://bilimhezinisi.com" }))).toBe("TR");
+    });
+
+    it("is counted by its Referer when it sends no Origin", () => {
+      expect(countedDeviceCountry(oldSignal({ referer: "https://bilimhezinisi.com/books/12" }))).toBe("TR");
+    });
+
+    it("is refused from another site, or with nothing to show where it came from", () => {
+      expect(countedDeviceCountry(oldSignal({ origin: "https://example.com" }))).toBeNull();
+      expect(countedDeviceCountry(oldSignal({ origin: "https://example.com", referer: "https://bilimhezinisi.com/" }))).toBeNull();
+      expect(countedDeviceCountry(oldSignal({ referer: "https://bilimhezinisi.com.example.com/" }))).toBeNull();
+      expect(countedDeviceCountry(oldSignal({ referer: "not a url" }))).toBeNull();
+      expect(countedDeviceCountry(oldSignal({}))).toBeNull();
+    });
+
+    it("is refused for a modern browser that leaves Sec-Fetch-Site out", () => {
+      expect(countedDeviceCountry(oldSignal({ origin: "https://bilimhezinisi.com" }, IPHONE_18))).toBeNull();
+      expect(countedDeviceCountry(oldSignal({ origin: "https://bilimhezinisi.com" }, BROWSER))).toBeNull();
+    });
   });
 });
 

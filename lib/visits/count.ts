@@ -78,6 +78,76 @@ function placeOf(headers: Headers): string | null {
   return country;
 }
 
+/**
+ * Fetch Metadata (`Sec-Fetch-Dest`, `-Mode`, `-Site`) reached Safari only in
+ * 16.4 (March 2023). iPhones that cannot update past it — the 6s, the 7, the
+ * first SE, a real share of this audience — and Safari on Macs before 16.4
+ * send none of it, so the Sec-Fetch checks alone never counted them at all,
+ * neither as page openings nor as devices (found 2026-10-23).
+ *
+ * For exactly those browsers, and only when a request carries NO Fetch
+ * Metadata whatsoever, older signals stand in (see `looksLikeNavigation` and
+ * `fromThisSite`). Any other browser that arrives without Fetch Metadata is
+ * imitating one, and stays uncounted.
+ */
+const FETCH_METADATA = ["sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site"];
+
+const before164 = (major: number, minor: number) => major < 16 || (major === 16 && minor < 4);
+
+/** Safari or any iOS browser (all WebKit underneath) from before Fetch Metadata. */
+export function isPreFetchMetadataWebKit(agent: string): boolean {
+  // iPhone, iPod, and iPad in mobile mode: the iOS version decides the WebKit.
+  const ios = /\((?:iPhone|iPad|iPod)[^)]*\bOS (\d+)_(\d+)/.exec(agent);
+  if (ios) return before164(Number(ios[1]), Number(ios[2]));
+  // Safari on a Mac — and an iPad asking for the desktop site, which says the same.
+  if (/Macintosh/.test(agent) && !/Chrome|Chromium|Firefox|Edg|OPR/.test(agent)) {
+    const safari = /Version\/(\d+)\.(\d+)(?:\.\d+)? Safari\//.exec(agent);
+    if (safari) return before164(Number(safari[1]), Number(safari[2]));
+  }
+  return false;
+}
+
+/** A browser that predates Fetch Metadata, on a request that indeed has none. */
+function isOldBrowserWithoutMetadata(headers: Headers): boolean {
+  return FETCH_METADATA.every((name) => !headers.has(name)) && isPreFetchMetadataWebKit(headers.get("user-agent") ?? "");
+}
+
+/**
+ * What a full page load looks like without Fetch Metadata. Every browser's
+ * navigation asks for `text/html` AND `application/xhtml+xml`; the service
+ * worker's background copy of a page asks for `text/html` alone
+ * (public/sw.js), and the app's own page-data fetches carry `RSC` or a
+ * prefetch header.
+ */
+function looksLikeNavigation(headers: Headers): boolean {
+  const accept = headers.get("accept") ?? "";
+  return (
+    accept.includes("text/html") &&
+    accept.includes("application/xhtml+xml") &&
+    !headers.has("rsc") &&
+    !headers.has("next-router-prefetch")
+  );
+}
+
+/** The request came from a page of this site, by its Origin or, failing that, its Referer. */
+function fromThisSite(headers: Headers, url: string): boolean {
+  let origin: string;
+  try {
+    origin = new URL(url).origin;
+  } catch {
+    return false;
+  }
+  const declared = headers.get("origin");
+  if (declared) return declared === origin;
+  const referer = headers.get("referer");
+  if (!referer) return false;
+  try {
+    return new URL(referer).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
 function isSkippedPath(pathname: string): boolean {
   return SKIPPED.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
@@ -100,6 +170,8 @@ export type VisitRequest = {
  * has opened, scripts and crawlers, the admin area, the API and the auth
  * callbacks, a local server or a preview deployment, and a request Vercel
  * could not place in a country. Note this is page OPENINGS, not people.
+ * Safari before 16.4, which sends no Sec-Fetch headers, is recognised by its
+ * Accept header instead (`isPreFetchMetadataWebKit`).
  *
  * A Chinese address whose region is East Turkistan is counted as
  * EAST_TURKISTAN, not as CN. A browser carrying the staff no-count flag is
@@ -110,7 +182,9 @@ export function countedVisitCountry({ method, pathname, headers, environment }: 
   if (method !== "GET") return null;
   if (isSkippedPath(pathname)) return null;
 
-  if (headers.get("sec-fetch-dest") !== "document" || headers.get("sec-fetch-mode") !== "navigate") return null;
+  const navigation = headers.get("sec-fetch-dest") === "document" && headers.get("sec-fetch-mode") === "navigate";
+  const oldNavigation = isOldBrowserWithoutMetadata(headers) && looksLikeNavigation(headers);
+  if (!navigation && !oldNavigation) return null;
   const purpose = `${headers.get("sec-purpose") ?? ""} ${headers.get("purpose") ?? ""}`;
   if (/prefetch|prerender/i.test(purpose)) return null;
 
@@ -118,7 +192,10 @@ export function countedVisitCountry({ method, pathname, headers, environment }: 
   return placeOf(headers);
 }
 
-export type DeviceRequest = Omit<VisitRequest, "pathname">;
+export type DeviceRequest = Omit<VisitRequest, "pathname"> & {
+  /** The request's own URL, for the Origin check old Safari needs. */
+  url: string;
+};
 
 /**
  * The code to tally for a «one device, once a day» signal, or null.
@@ -127,14 +204,17 @@ export type DeviceRequest = Omit<VisitRequest, "pathname">;
  * `navigator.sendBeacon` the first time a browser opens the library on a UTC
  * day; the browser remembers the day in its own localStorage, and nothing is
  * remembered here. Counted on the production deployment only, from the site's
- * own pages (`Sec-Fetch-Site: same-origin`), never from a program or a staff
+ * own pages (`Sec-Fetch-Site: same-origin`; for Safari before 16.4, which
+ * sends no such header, a matching Origin or Referer), never from a program or a staff
  * browser. The route in front of it also brakes bursts per address
  * (app/api/visit/route.ts).
  */
-export function countedDeviceCountry({ method, headers, environment }: DeviceRequest): string | null {
+export function countedDeviceCountry({ method, headers, environment, url }: DeviceRequest): string | null {
   if (environment !== "production") return null;
   if (method !== "POST") return null;
-  if (headers.get("sec-fetch-site") !== "same-origin") return null;
+  const sameOrigin =
+    headers.get("sec-fetch-site") === "same-origin" || (isOldBrowserWithoutMetadata(headers) && fromThisSite(headers, url));
+  if (!sameOrigin) return null;
   if (isProgram(headers) || hasNoCountCookie(headers)) return null;
   return placeOf(headers);
 }

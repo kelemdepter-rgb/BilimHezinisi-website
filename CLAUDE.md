@@ -233,6 +233,13 @@ here. The table is left in place because an applied migration is never edited ·
   that date in its own localStorage (`bh-visit-day`, `lib/visits/beacon.ts`);
   the route adds one to the country's device count (same-origin, not a
   program, per-instance `VISIT_BEACON_RULE`) and always answers 204.
+  **Safari before 16.4** (iPhone 6s/7/SE-1 stuck on iOS 15) sends no
+  `Sec-Fetch-*` at all; for those browsers only, and only when every
+  `Sec-Fetch-*` header is absent, a navigation is recognised by an Accept of
+  `text/html` + `application/xhtml+xml` (not the service worker's bare
+  `text/html`, not `RSC`/prefetch), and the device signal by a matching
+  Origin or Referer (`isPreFetchMetadataWebKit`). Never widen this to "any
+  request without Sec-Fetch": that is what scripts look like.
   **Staff are not counted**: the admin layout's `NoCountMark` sets the
   script-readable flag cookie `bh_nocount=1` in staff browsers, and both the
   proxy and the beacon skip a browser carrying it. It grants nothing. **Nothing else may ever be

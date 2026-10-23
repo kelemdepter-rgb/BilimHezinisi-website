@@ -21,6 +21,7 @@ export async function POST(request: Request) {
     method: request.method,
     headers: request.headers,
     environment: process.env.VERCEL_ENV,
+    url: request.url,
   });
   if (country && !isRateLimited(`visit:${await callerKey()}`, VISIT_BEACON_RULE)) {
     const sent = recordDevice(country);

@@ -34,10 +34,19 @@ test.describe("admin access", () => {
     await expect(page).toHaveURL(/\/admin$/);
   });
 
+  test("uploader cannot reach the country tally, and is not offered it", async ({ page }) => {
+    // /admin/visits is admin-only too (lib/visits); the seeded staff account is an uploader.
+    await page.goto("/admin/visits");
+    await expect(page).toHaveURL(/\/admin$/);
+    const nav = page.getByRole("navigation", { name: "باشقۇرۇش تىزىملىكى" });
+    await expect(nav.getByRole("link", { name: "دۆلەتلەر بويىچە كىرىش" })).toHaveCount(0);
+    await expect(page.getByTestId("country-visits-card")).toHaveCount(0);
+  });
+
   test("anonymous visitors are redirected away from every admin page", async ({ browser }) => {
     const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     const page = await context.newPage();
-    for (const path of ["/admin", "/admin/books", "/admin/categories", "/admin/books/new"]) {
+    for (const path of ["/admin", "/admin/books", "/admin/categories", "/admin/books/new", "/admin/visits"]) {
       await page.goto(path);
       await expect(page, `${path} must not render for anonymous visitors`).toHaveURL(/\/login/);
     }

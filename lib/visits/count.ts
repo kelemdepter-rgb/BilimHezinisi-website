@@ -1,5 +1,6 @@
 /**
- * Which countries the library is opened from — the counting rules (2026-10-22).
+ * Which countries the library is opened from — the counting rules (2026-10-22;
+ * East Turkistan counted apart from China since 2026-10-23).
  *
  * The owner wants to know where the site is used, and nothing more. So a
  * visit is reduced, in proxy.ts, to ONE thing — the two-letter country code
@@ -14,6 +15,25 @@
 
 /** The header Vercel sets on every request: ISO 3166-1 alpha-2, capitals. */
 export const VISIT_COUNTRY_HEADER = "x-vercel-ip-country";
+
+/**
+ * The region part of the ISO 3166-2 code for the request's first-level
+ * region (e.g. "XJ" of CN-XJ). Read ONLY to tell East Turkistan apart from
+ * China, never stored — the tally still keeps one two-letter code.
+ */
+export const VISIT_REGION_HEADER = "x-vercel-ip-country-region";
+
+/**
+ * East Turkistan, counted apart from China (the owner's decision,
+ * 2026-10-23). "XJ" lies in ISO 3166-1's user-assigned range (XA–XZ), which
+ * is never given to a country, so it cannot collide with a code Vercel sends;
+ * it also matches the region code ISO 3166-2 uses there (CN-XJ). The table's
+ * two-capital-letters check accepts it, so no migration is needed.
+ */
+export const EAST_TURKISTAN = "XJ";
+
+/** CN-XJ since 2017; the older numeric form CN-65 is still seen in IP databases. */
+const EAST_TURKISTAN_REGIONS = new Set(["XJ", "65"]);
 
 /** Never counted: not a reader opening a page of the library. */
 const SKIPPED = ["/api", "/auth", "/admin"];
@@ -47,6 +67,9 @@ export type VisitRequest = {
  * has opened, scripts and crawlers, the admin area, the API and the auth
  * callbacks, a local server or a preview deployment, and a request Vercel
  * could not place in a country. Note this is page OPENINGS, not people.
+ *
+ * A Chinese address whose region is East Turkistan is counted as
+ * EAST_TURKISTAN, not as CN.
  */
 export function countedVisitCountry({ method, pathname, headers, environment }: VisitRequest): string | null {
   if (environment !== "production") return null;
@@ -61,7 +84,11 @@ export function countedVisitCountry({ method, pathname, headers, environment }: 
   if (!agent || NOT_A_READER.test(agent)) return null;
 
   const country = headers.get(VISIT_COUNTRY_HEADER) ?? "";
-  return /^[A-Z]{2}$/.test(country) ? country : null;
+  if (!/^[A-Z]{2}$/.test(country)) return null;
+  if (country === "CN" && EAST_TURKISTAN_REGIONS.has((headers.get(VISIT_REGION_HEADER) ?? "").toUpperCase())) {
+    return EAST_TURKISTAN;
+  }
+  return country;
 }
 
 /** Openings waiting to be sent: country code → how many. */

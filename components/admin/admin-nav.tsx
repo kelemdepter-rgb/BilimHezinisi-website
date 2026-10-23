@@ -10,6 +10,7 @@ const LINKS: { href: string; label: string; icon: IconName; adminOnly?: boolean 
   { href: "/admin/books", label: "كىتابلار", icon: "book" },
   { href: "/admin/categories", label: "تۈرلەر", icon: "layers" },
   { href: "/admin/users", label: "ئەزالار", icon: "user", adminOnly: true },
+  { href: "/admin/visits", label: "دۆلەتلەر بويىچە كىرىش", icon: "globe", adminOnly: true },
 ];
 
 export function AdminNav({ role }: { role: Role }) {

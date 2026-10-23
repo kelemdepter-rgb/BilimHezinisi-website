@@ -64,11 +64,24 @@ export function parseCountryVisitReport(data: unknown): CountryVisitReport {
 let regionNames: Intl.DisplayNames | null | undefined;
 
 /**
- * The country's name in Uyghur, e.g. TR → «تۈركىيە». Falls back to the code
+ * Names the platform does not know, or that the owner names himself. The
+ * key is lib/visits/count.ts EAST_TURKISTAN, written out because this module
+ * is imported by components and stays free of the counting code.
+ */
+const OWN_NAMES: Record<string, string> = { XJ: "شەرقىي تۈركىستان" };
+
+/** Whether a code is a real ISO 3166-1 country rather than one of ours. */
+export function isOwnCode(code: string): boolean {
+  return code in OWN_NAMES;
+}
+
+/**
+ * The country's name in Uyghur, e.g. TR → «تۈركىيە», XJ → «شەرقىي تۈركىستان». Falls back to the code
  * itself when the platform's locale data has no name for it (Intl answers
  * with the code, or throws on an unknown locale).
  */
 export function countryName(code: string): string {
+  if (code in OWN_NAMES) return OWN_NAMES[code];
   if (regionNames === undefined) {
     try {
       regionNames = new Intl.DisplayNames(["ug"], { type: "region", fallback: "code" });

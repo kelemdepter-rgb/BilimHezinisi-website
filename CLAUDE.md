@@ -222,7 +222,11 @@ here. The table is left in place because an applied migration is never edited ·
 - **Where the library is opened from: a tally, never a trace** (2026-10-22,
   migration 0033). `proxy.ts` reduces a page opening to the two-letter country
   code Vercel puts on the request (`x-vercel-ip-country`) and adds one to
-  `public.country_visits (day, country, visits)`. **Nothing else may ever be
+  `public.country_visits (day, country, visits)`. East Turkistan is counted
+  apart from China (owner, 2026-10-23): a `CN` request whose
+  `x-vercel-ip-country-region` is `XJ` (or the old `65`) is stored as `XJ`,
+  a code from ISO's user-assigned range, named «شەرقىي تۈركىستان» in
+  `lib/visits/report.ts`; the region header is read, never stored. **Nothing else may ever be
   stored or logged for it** — no IP, cookie, user agent, path, referrer, user
   id or session; no new column, no per-visit row, no analytics script. It
   counts a browser's full navigation (`Sec-Fetch-Dest: document`) on the
@@ -234,8 +238,9 @@ here. The table is left in place because an applied migration is never edited ·
   see; `lib/visits/record.ts` is deliberately a plain `fetch` RPC with the
   shared `fetchWithTimeout`, because `lib/supabase/admin.ts` is `server-only`
   and the proxy bundle is not known to honour that. The table and its three
-  functions are service-role ONLY; the admin card (`CountryVisitsCard`,
-  admin role only) reads through `lib/visits/data.ts`; the daily /api/health
+  functions are service-role ONLY; its own admin-only tab
+  `/admin/visits` («دۆلەتلەر بويىچە كىرىش», not on the dashboard) reads
+  through `lib/visits/data.ts`; the daily /api/health
   sweeps days past 366. The privacy page (summary + section 3), About and
   `tests/trust.spec.ts` say this in the owner's words — **change one, change
   all**, and move the privacy page's date.

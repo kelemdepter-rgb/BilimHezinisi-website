@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { countryName, parseCountryVisitReport, shareOf } from "@/lib/visits/report";
+import { EAST_TURKISTAN } from "@/lib/visits/count";
+import { countryName, isOwnCode, parseCountryVisitReport, shareOf } from "@/lib/visits/report";
 
 describe("reading the database's answer", () => {
   it("turns the jsonb into rows and totals", () => {
@@ -54,6 +55,13 @@ describe("naming a country", () => {
   it("names it in Uyghur", () => {
     expect(countryName("TR")).toBe("تۈركىيە");
     expect(countryName("DE")).toBe("گېرمانىيە");
+  });
+
+  it("names East Turkistan, and marks it as one of ours", () => {
+    expect(countryName(EAST_TURKISTAN)).toBe("شەرقىي تۈركىستان");
+    expect(isOwnCode(EAST_TURKISTAN)).toBe(true);
+    expect(isOwnCode("CN")).toBe(false);
+    expect(countryName("CN")).not.toBe("شەرقىي تۈركىستان");
   });
 
   it("falls back to the code rather than to nothing", () => {

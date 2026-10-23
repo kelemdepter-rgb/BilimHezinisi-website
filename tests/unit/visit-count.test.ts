@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countedVisitCountry, createVisitBatcher, type VisitBatch } from "@/lib/visits/count";
+import { EAST_TURKISTAN, countedVisitCountry, createVisitBatcher, type VisitBatch } from "@/lib/visits/count";
 
 /**
  * The rules for «which countries is the library opened from» (migration 0033):
@@ -104,6 +104,34 @@ describe("which requests count", () => {
     for (const value of [null, "", "tr", "T1", "XXX", "T", "<script>", "T R"]) {
       expect(countedVisitCountry(request({ headers: { "x-vercel-ip-country": value } }))).toBeNull();
     }
+  });
+});
+
+describe("East Turkistan, apart from China", () => {
+  it.each(["XJ", "xj", "65"])("counts a Chinese address in region %s as East Turkistan", (region) => {
+    const counted = countedVisitCountry(
+      request({ headers: { "x-vercel-ip-country": "CN", "x-vercel-ip-country-region": region } }),
+    );
+    expect(counted).toBe(EAST_TURKISTAN);
+    expect(counted).toBe("XJ");
+  });
+
+  it.each([null, "", "BJ", "GD", "XZ", "11"])("keeps the rest of China as CN (region %j)", (region) => {
+    expect(
+      countedVisitCountry(request({ headers: { "x-vercel-ip-country": "CN", "x-vercel-ip-country-region": region } })),
+    ).toBe("CN");
+  });
+
+  it("looks at the region only for China", () => {
+    expect(
+      countedVisitCountry(request({ headers: { "x-vercel-ip-country": "KZ", "x-vercel-ip-country-region": "XJ" } })),
+    ).toBe("KZ");
+  });
+
+  it("is a code the tally accepts, and one Vercel never sends for a country", () => {
+    expect(EAST_TURKISTAN).toMatch(/^[A-Z]{2}$/);
+    // ISO 3166-1 user-assigned range: XA–XZ.
+    expect(EAST_TURKISTAN).toMatch(/^X[A-Z]$/);
   });
 });
 

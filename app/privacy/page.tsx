@@ -18,11 +18,12 @@ const CONTACT = "kelemdepter@gmail.com";
 /**
  * The owner's date format, spaces and all. Moved on only when the policy
  * itself changes, because section 6 promises readers exactly that: last on
- * 2026-10-22, when the per-country page tally was added (migration 0033) and
- * the summary and section 3 said so. Before that, 2026-09-25, when he
- * approved the sign-in and Gmail sentences (PROMPT-38).
+ * 2026-10-23, when section 3 said East Turkistan is counted apart from
+ * China. The per-country tally itself came on 2026-10-22 (migration 0033);
+ * before that, 2026-09-25, when he approved the sign-in and Gmail sentences
+ * (PROMPT-38).
  */
-const UPDATED = "2026-يىلى 10- ئاينىڭ 22- كۈنى";
+const UPDATED = "2026-يىلى 10- ئاينىڭ 23- كۈنى";
 
 /**
  * The owner wrote this page himself; the wording below is his, pasted rather
@@ -140,8 +141,8 @@ export default function PrivacyPage() {
         {/* Added 2026-10-22 with the country tally (migration 0033, lib/visits). */}
         <p>
           دۆلەت بويىچە كىرىش سانى: تور بېكەتنىڭ قايسى دۆلەتلەردە ئوقۇلىدىغانلىقىنى بىلىش ئۈچۈن،
-          بەت ئېچىلغاندا Vercel ئۆزى بىلدۈرگەن دۆلەت بەلگىسى (مەسىلەن «TR») بويىچە كۈنلۈك بىر
-          ساناققا بىر قوشۇلىدۇ. بۇ ساناققا IP ئادرېسىڭىز، cookie، تور كۆرگۈچ ئۇچۇرى، كۆرگەن
+          بەت ئېچىلغاندا Vercel ئۆزى بىلدۈرگەن دۆلەت بەلگىسى (مەسىلەن «TR»؛ شەرقىي تۈركىستان
+          جۇڭگودىن ئايرىم سانىلىدۇ) بويىچە كۈنلۈك بىر ساناققا بىر قوشۇلىدۇ. بۇ ساناققا IP ئادرېسىڭىز، cookie، تور كۆرگۈچ ئۇچۇرى، كۆرگەن
           بېتىڭىز ۋە ھېساباتىڭىز يېزىلمايدۇ؛ پەقەت «بۈگۈن مەلۇم دۆلەتتىن قانچە قېتىم كىرىلدى»
           دېگەن سان ساقلىنىدۇ. ئۇنى پەقەت باشقۇرغۇچى كۆرەلەيدۇ ۋە بىر يىلدىن كېيىن ئۆچۈرۈلىدۇ.
         </p>

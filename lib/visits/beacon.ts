@@ -25,6 +25,8 @@ export type BeaconEnvironment = {
   today: string;
   /** `document.cookie`. */
   cookie: string;
+  /** `location.pathname` of the page that was opened. */
+  path: string;
   online: boolean;
   /** `navigator.sendBeacon`, bound; false when the browser refused to queue it. */
   send: (url: string) => boolean;
@@ -34,8 +36,14 @@ export type BeaconEnvironment = {
  * Send today's signal if this browser has not yet. Returns whether it sent.
  * Never throws: any storage failure means «not counted».
  */
-export function sendDailySignal({ storage, today, cookie, online, send }: BeaconEnvironment): boolean {
+export function sendDailySignal({ storage, today, cookie, path, online, send }: BeaconEnvironment): boolean {
   if (!online) return false;
+  // Never from the admin area. Its no-count flag (components/admin/no-count-mark.tsx)
+  // is set by a part of the page that hydrates AFTER this runs — the admin
+  // loading boundary streams it in — so on a staff browser's first visit the
+  // flag was not there yet and the owner was counted as a device
+  // (2026-10-23: Türkiye, 1 device, 0 page openings).
+  if (path === "/admin" || path.startsWith("/admin/")) return false;
   if (cookie.split(";").some((part) => part.trim() === `${NO_COUNT_COOKIE}=1`)) return false;
   try {
     const last = storage.getItem(VISIT_DAY_KEY);

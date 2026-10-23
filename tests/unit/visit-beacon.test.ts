@@ -24,6 +24,7 @@ function setup(overrides: Partial<BeaconEnvironment> = {}, accept = true) {
     storage,
     today: "2026-10-23",
     cookie: "",
+    path: "/",
     online: true,
     send: (url) => {
       sent.push(url);
@@ -67,6 +68,19 @@ describe("the daily signal", () => {
     const { env, sent } = setup({ cookie: "theme=dark; bh_nocount=1" });
     expect(sendDailySignal(env)).toBe(false);
     expect(sent).toHaveLength(0);
+  });
+
+  it.each(["/admin", "/admin/visits", "/admin/books/new"])("is not sent from the admin area (%s), nor marks the day", (path) => {
+    const { env, sent, storage } = setup({ path });
+    expect(sendDailySignal(env)).toBe(false);
+    expect(sent).toHaveLength(0);
+    expect(storage.data.has("bh-visit-day")).toBe(false);
+  });
+
+  it("is sent from a reader's page whose name merely starts like it", () => {
+    const { env, sent } = setup({ path: "/administration" });
+    expect(sendDailySignal(env)).toBe(true);
+    expect(sent).toHaveLength(1);
   });
 
   it("is not sent offline, and is tried again once online", () => {

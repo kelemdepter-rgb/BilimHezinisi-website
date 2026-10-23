@@ -129,6 +129,18 @@ function looksLikeNavigation(headers: Headers): boolean {
   );
 }
 
+/** Whether the Referer is a page of the admin area — never a reader's page. */
+function fromAdminArea(headers: Headers): boolean {
+  const referer = headers.get("referer");
+  if (!referer) return false;
+  try {
+    const path = new URL(referer).pathname;
+    return path === "/admin" || path.startsWith("/admin/");
+  } catch {
+    return false;
+  }
+}
+
 /** The request came from a page of this site, by its Origin or, failing that, its Referer. */
 function fromThisSite(headers: Headers, url: string): boolean {
   let origin: string;
@@ -215,6 +227,10 @@ export function countedDeviceCountry({ method, headers, environment, url }: Devi
   const sameOrigin =
     headers.get("sec-fetch-site") === "same-origin" || (isOldBrowserWithoutMetadata(headers) && fromThisSite(headers, url));
   if (!sameOrigin) return null;
+  // The browser skips the admin area itself (lib/visits/beacon.ts); this holds
+  // for a page still running yesterday's script. The site's Referrer-Policy
+  // sends the full same-origin page address with the signal.
+  if (fromAdminArea(headers)) return null;
   if (isProgram(headers) || hasNoCountCookie(headers)) return null;
   return placeOf(headers);
 }

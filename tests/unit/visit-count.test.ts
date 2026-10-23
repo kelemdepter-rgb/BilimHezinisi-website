@@ -178,6 +178,14 @@ describe("the daily device signal", () => {
   it("needs a country", () => {
     expect(countedDeviceCountry(signal({ headers: { "x-vercel-ip-country": null } }))).toBeNull();
   });
+
+  it("refuses a signal sent from the admin area, and counts one from a reader's page", () => {
+    for (const referer of ["https://bilimhezinisi.com/admin", "https://bilimhezinisi.com/admin/visits?x=1"]) {
+      expect(countedDeviceCountry(signal({ headers: { referer } }))).toBeNull();
+    }
+    expect(countedDeviceCountry(signal({ headers: { referer: "https://bilimhezinisi.com/books/12" } }))).toBe("TR");
+    expect(countedDeviceCountry(signal({ headers: { referer: "https://bilimhezinisi.com/administration" } }))).toBe("TR");
+  });
 });
 
 describe("Safari before 16.4, which sends no Sec-Fetch headers", () => {

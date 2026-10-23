@@ -16,6 +16,7 @@ export function VisitBeacon() {
         storage: window.localStorage,
         today: new Date().toISOString().slice(0, 10),
         cookie: document.cookie,
+        path: window.location.pathname,
         online: navigator.onLine,
         send: (url) => (typeof navigator.sendBeacon === "function" ? navigator.sendBeacon(url) : false),
       });

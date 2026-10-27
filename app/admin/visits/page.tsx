@@ -4,6 +4,7 @@ import { Icon } from "@/components/icons";
 import { CountryVisitsReport } from "@/components/admin/country-visits-card";
 import { getServerRole } from "@/lib/admin/guards";
 import { getCountryVisitReport } from "@/lib/visits/data";
+import { OPENINGS_FROM_BROWSER_SINCE } from "@/lib/visits/report";
 
 export const metadata: Metadata = { title: "دۆلەتلەر بويىچە كىرىش" };
 
@@ -19,6 +20,7 @@ export default async function AdminVisitsPage() {
   if (session.role !== "admin") redirect("/admin");
 
   const report = await getCountryVisitReport();
+  const reachesBack = report.available && report.since !== null && report.since < OPENINGS_FROM_BROWSER_SINCE;
 
   return (
     <>
@@ -28,9 +30,15 @@ export default async function AdminVisitsPage() {
       </h1>
       <p className="mt-1.5 max-w-3xl text-[13px] leading-6 text-ink3">
         قايسى دۆلەتتىن قانچە قېتىم بەت ئېچىلغانلىقى. بۇ <strong>ئادەم سانى ئەمەس</strong>، بەت ئېچىلىش
-        سانى: بىر ئادەم نەچچە بەت ئاچسا شۇنچە سانىلىدۇ. IP ئادرېس ۋە شەخسىي ئۇچۇر ساقلانمايدۇ.
-        شەرقىي تۈركىستان جۇڭگودىن ئايرىم سانىلىدۇ.
+        سانى: بىر ئادەم تور بەتنى نەچچە قېتىم ئاچسا شۇنچە سانىلىدۇ؛ تور بەت ئىچىدە بەتتىن بەتكە ئۆتۈش
+        سانالمايدۇ. IP ئادرېس ۋە شەخسىي ئۇچۇر ساقلانمايدۇ. شەرقىي تۈركىستان جۇڭگودىن ئايرىم سانىلىدۇ.
       </p>
+      {reachesBack && (
+        <p className="mt-1 max-w-3xl text-[13px] leading-6 text-ink3" data-testid="openings-history-note">
+          {OPENINGS_FROM_BROWSER_SINCE} دىن باشلاپ بەت ئېچىلىش تور كۆرگۈچتىن سانىلىدۇ، شۇڭا بەتنى ئېلىپلا
+          كېتىدىغان ماشىنىلار سانالمايدۇ. ئۇنىڭدىن بۇرۇنقى بەت ئېچىلىش سانىدا ماشىنىلارمۇ بار.
+        </p>
+      )}
       <p className="mt-1 max-w-3xl text-[13px] leading-6 text-ink3">
         «ئۈسكۈنە» ئادەم سانىغا يېقىنراق: ھەر بىر تېلېفون ياكى كومپيۇتېر كۈنىگە بىرلا قېتىم سانىلىدۇ. 7 ۋە 30
         كۈنلۈك ئۈسكۈنە سانى كۈنلۈك سانلارنىڭ يىغىندىسى؛ بىر ئادەمنىڭ تېلېفونى بىلەن كومپيۇتېرى ئىككى بولىدۇ.

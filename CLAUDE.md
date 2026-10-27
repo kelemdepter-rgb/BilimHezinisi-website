@@ -220,48 +220,48 @@ here. The table is left in place because an applied migration is never edited ·
 - Do not weaken CSP; no third-party scripts/CDNs at runtime.
 - **Never load-test production**: no bursts at bilimhezinisi.com or the live Supabase project, ever — floods run only against the local stack in `scripts/flood/`.
 - **Where the library is opened from: a tally, never a trace** (2026-10-22,
-  migration 0033). `proxy.ts` reduces a page opening to the two-letter country
-  code Vercel puts on the request (`x-vercel-ip-country`) and adds one to
-  `public.country_visits (day, country, visits)`. East Turkistan is counted
-  apart from China (owner, 2026-10-23): a `CN` request whose
-  `x-vercel-ip-country-region` is `XJ` (or the old `65`) is stored as `XJ`,
-  a code from ISO's user-assigned range, named «شەرقىي تۈركىستان» in
-  `lib/visits/report.ts`; the region header is read, never stored.
-  **Devices** (migration 0034, column `devices` on the same rows): the root
-  layout's `VisitBeacon` sends one empty `sendBeacon` POST to `/api/visit`
-  the first time a browser opens the library on a UTC day, remembering only
-  that date in its own localStorage (`bh-visit-day`, `lib/visits/beacon.ts`);
-  the route adds one to the country's device count (same-origin, not a
-  program, per-instance `VISIT_BEACON_RULE`) and always answers 204.
-  **Safari before 16.4** (iPhone 6s/7/SE-1 stuck on iOS 15) sends no
-  `Sec-Fetch-*` at all; for those browsers only, and only when every
-  `Sec-Fetch-*` header is absent, a navigation is recognised by an Accept of
-  `text/html` + `application/xhtml+xml` (not the service worker's bare
-  `text/html`, not `RSC`/prefetch), and the device signal by a matching
-  Origin or Referer (`isPreFetchMetadataWebKit`). Never widen this to "any
-  request without Sec-Fetch": that is what scripts look like.
+  migrations 0033 + 0034; counted from the browser since 2026-10-27). The
+  root layout's `VisitBeacon` sends ONE empty `sendBeacon` POST to
+  `/api/visit` per full page load (in-site navigation sends none); the first
+  of a UTC day carries `?d=1`, which the browser decides by keeping only that
+  date in its own localStorage (`bh-visit-day`, `lib/visits/beacon.ts`). The
+  route reduces the signal to the two-letter code Vercel puts on the request
+  (`x-vercel-ip-country`) and adds one to `public.country_visits (day,
+  country, visits, devices)` — `visits` always, `devices` on `?d=1` — and
+  always answers 204. **Do not move the counting back into `proxy.ts`**: it
+  counted pages fetched by programs that never run them (2026-10-22…26:
+  Brazil 33 openings, 0 devices, and a dozen countries like it).
+  East Turkistan is counted apart from China (owner, 2026-10-23): a `CN`
+  request whose `x-vercel-ip-country-region` is `XJ` (or the old `65`) is
+  stored as `XJ`, a code from ISO's user-assigned range, named
+  «شەرقىي تۈركىستان» in `lib/visits/report.ts`; the region header is read,
+  never stored. A signal counts only on the production deployment, from the
+  site's own pages (`Sec-Fetch-Site: same-origin`), never from a program, a
+  staff browser or an `/admin` page (`countedSignalCountry`, unit-tested),
+  and per-instance brakes cap an address (`VISIT_OPENING_RULE` 120/h,
+  `VISIT_DEVICE_RULE` 30/h). **Safari before 16.4** (iPhone 6s/7/SE-1 stuck
+  on iOS 15) sends no `Sec-Fetch-*` at all; for those browsers only, and only
+  when every `Sec-Fetch-*` header is absent, a matching Origin or Referer
+  stands in (`isPreFetchMetadataWebKit`). Never widen this to "any request
+  without Sec-Fetch": that is what scripts look like.
   **Staff are not counted**: the admin layout's `NoCountMark` sets the
-  script-readable flag cookie `bh_nocount=1` in staff browsers, and both the
-  proxy and the beacon skip a browser carrying it. It grants nothing. **Nothing else may ever be
-  stored or logged for it** — no IP, cookie, user agent, path, referrer, user
-  id or session; no column beyond tallies, no per-visit row, no analytics
-  script, no browser fingerprint (time zone, language, screen) — above all
-  not for readers in East Turkistan, whose safety is this rule's point. It
-  counts a browser's full navigation (`Sec-Fetch-Dest: document`) on the
-  production deployment only — not prefetches, the app's own fetches, bots,
-  `/api`, `/auth`, `/admin`, previews or localhost (`lib/visits/count.ts`,
-  unit-tested). It is page OPENINGS, not people, and /admin says so. Writes
-  are batched per server instance (≤ 1 call per 5 s) and sent inside
-  `event.waitUntil`, so no reader waits and a failure changes nothing they
-  see; `lib/visits/record.ts` is deliberately a plain `fetch` RPC with the
-  shared `fetchWithTimeout`, because `lib/supabase/admin.ts` is `server-only`
-  and the proxy bundle is not known to honour that. The table and its three
-  functions are service-role ONLY; its own admin-only tab
-  `/admin/visits` («دۆلەتلەر بويىچە كىرىش», not on the dashboard) reads
-  through `lib/visits/data.ts`; the daily /api/health
-  sweeps days past 366. The privacy page (summary + section 3), About and
-  `tests/trust.spec.ts` say this in the owner's words — **change one, change
-  all**, and move the privacy page's date.
+  script-readable flag cookie `bh_nocount=1` in staff browsers; the beacon and
+  the route skip a browser carrying it, and the beacon never runs on
+  `/admin` (the flag hydrates after it there). It grants nothing.
+  **Nothing else may ever be stored or logged for it** — no IP, cookie, user
+  agent, path, referrer, user id or session; no column beyond tallies, no
+  per-visit row, no analytics script, no browser fingerprint (time zone,
+  language, screen) — above all not for readers in East Turkistan, whose
+  safety is this rule's point. Openings are page loads, not people; devices
+  are counted once a day each; /admin says both. Writes are batched per
+  server instance (≤ 1 call per 5 s, `lib/visits/record.ts`, service role).
+  The table and its functions are service-role ONLY; the admin-only tab
+  `/admin/visits` («دۆلەتلەر بويىچە كىرىش», not on the dashboard, absent from
+  an uploader's page — `lib/admin/nav.ts`) reads through
+  `lib/visits/data.ts`; the daily /api/health sweeps days past 366. The
+  privacy page (summary + section 3), About and `tests/trust.spec.ts` say
+  this in the owner's words — **change one, change all**, and move the
+  privacy page's date.
 - **Nothing waits for Supabase for minutes** (PROMPT-40, after the 2026-10-05
   outage): every Supabase client carries a fetch timeout through `global.fetch`
   (`lib/supabase/timeouts.ts` — 10 s on the server, 30 s in the browser, 10 min

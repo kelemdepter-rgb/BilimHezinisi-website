@@ -1,11 +1,9 @@
-import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 import { legacyHostRedirect } from "@/lib/legacy-host";
 import { CACHEABLE_HEADER } from "@/lib/pwa/constants";
 import { buildContentSecurityPolicy } from "@/lib/security/csp";
 import { markRequest, timed } from "@/lib/perf/timing";
-import { countedVisitCountry } from "@/lib/visits/count";
-import { recordVisit } from "@/lib/visits/record";
 
 /**
  * Runs on every page and API request: refreshes the Supabase session and
@@ -16,7 +14,7 @@ import { recordVisit } from "@/lib/visits/record";
  * incoming request and applies the nonce to its own scripts. `x-nonce` is
  * the copy our own JSON-LD blocks read through `headers()`.
  */
-export default async function proxy(request: NextRequest, event: NextFetchEvent) {
+export default async function proxy(request: NextRequest) {
   /**
    * The old address, answered permanently at the new one.
    *
@@ -29,23 +27,6 @@ export default async function proxy(request: NextRequest, event: NextFetchEvent)
    */
   const moved = legacyHostRedirect(request.headers, request.nextUrl);
   if (moved) return NextResponse.redirect(moved, 308);
-
-  /**
-   * Which country the library is opened from: one more on a daily tally, and
-   * nothing else kept (lib/visits/count.ts, migration 0033). It sits after
-   * the redirect so a request that is only passing through the old address is
-   * not counted twice, and runs in `waitUntil` so no reader ever waits for it.
-   */
-  const country = countedVisitCountry({
-    method: request.method,
-    pathname: request.nextUrl.pathname,
-    headers: request.headers,
-    environment: process.env.VERCEL_ENV,
-  });
-  if (country) {
-    const sent = recordVisit(country);
-    if (sent) event.waitUntil(sent);
-  }
 
   markRequest(request.nextUrl.pathname + request.nextUrl.search);
   const nonce = crypto.randomUUID().replace(/-/g, "");

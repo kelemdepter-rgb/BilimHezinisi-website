@@ -152,12 +152,20 @@ export const NOTE_SEARCH_RULE: RateLimitRule = { limit: 60, windowMs: 60_000 };
 export const SEARCH_RULE: RateLimitRule = { limit: 60, windowMs: 60_000 };
 
 /**
- * «This device came today» (app/api/visit). An honest browser sends ONE a
- * day; thirty an hour per address leaves room for a whole household — or a
- * mobile carrier's shared address — while stopping a script from inflating a
- * country's device count. Counted per instance, like the rest.
+ * The library's tally (app/api/visit). An honest browser sends one signal per
+ * full page load — moving between pages inside the site sends none — so 120
+ * an hour per address leaves room for a household or a mobile carrier's
+ * shared address, while stopping a script from inflating a country's page
+ * openings. Counted per instance, like the rest.
  */
-export const VISIT_BEACON_RULE: RateLimitRule = { limit: 30, windowMs: 60 * 60_000 };
+export const VISIT_OPENING_RULE: RateLimitRule = { limit: 120, windowMs: 60 * 60_000 };
+
+/**
+ * The same signal marked as a browser's first page of the day — a device. An
+ * honest browser sends ONE a day; thirty an hour per address is room for a
+ * whole household or a carrier's shared address, and a ceiling on a script.
+ */
+export const VISIT_DEVICE_RULE: RateLimitRule = { limit: 30, windowMs: 60 * 60_000 };
 
 /**
  * The caller's address, from the proxy header Vercel sets. Falls back to a

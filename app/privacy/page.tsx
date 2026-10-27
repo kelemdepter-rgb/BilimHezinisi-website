@@ -18,12 +18,13 @@ const CONTACT = "kelemdepter@gmail.com";
 /**
  * The owner's date format, spaces and all. Moved on only when the policy
  * itself changes, because section 6 promises readers exactly that: last on
- * 2026-10-23, when section 3 said East Turkistan is counted apart from
- * China and how devices are counted (migration 0034). The per-country tally itself came on 2026-10-22 (migration 0033);
+ * 2026-10-27, when section 3 said the browser sends the signal on every page
+ * load (lib/visits/beacon.ts). Before that 2026-10-23 (East Turkistan apart
+ * from China, devices — migration 0034); the per-country tally itself came on 2026-10-22 (migration 0033);
  * before that, 2026-09-25, when he approved the sign-in and Gmail sentences
  * (PROMPT-38).
  */
-const UPDATED = "2026-يىلى 10- ئاينىڭ 23- كۈنى";
+const UPDATED = "2026-يىلى 10- ئاينىڭ 27- كۈنى";
 
 /**
  * The owner wrote this page himself; the wording below is his, pasted rather
@@ -146,12 +147,13 @@ export default function PrivacyPage() {
           بېتىڭىز ۋە ھېساباتىڭىز يېزىلمايدۇ؛ پەقەت «بۈگۈن مەلۇم دۆلەتتىن قانچە قېتىم كىرىلدى»
           دېگەن سان ساقلىنىدۇ. ئۇنى پەقەت باشقۇرغۇچى كۆرەلەيدۇ ۋە بىر يىلدىن كېيىن ئۆچۈرۈلىدۇ.
         </p>
-        {/* Added 2026-10-23 with the daily device count (migration 0034, lib/visits/beacon.ts). */}
+        {/* Added 2026-10-23 with the device count (migration 0034); since 2026-10-27 the
+            browser sends the signal on every page load (lib/visits/beacon.ts). */}
         <p>
-          بىر كۈندە نەچچە ئۈسكۈنىدىن كىرىلگەنلىكىنى بىلىش ئۈچۈن، تور كۆرگۈچىڭىز كۈنىگە بىرلا قېتىم
-          «بۈگۈن كەلدىم» دېگەن ئىسىمسىز بىر بەلگە ئەۋەتىدۇ ۋە قايتا ئەۋەتمەسلىك ئۈچۈن ئۆز localStorage
-          قىسمىغا پەقەت بۈگۈنكى چېسلانىلا يازىدۇ. مۇلازىمېتىردا بۇنىڭ ئۈچۈنمۇ دۆلەت بويىچە بىر ساندىن
-          باشقا ھېچنەرسە ساقلانمايدۇ.
+          بۇ سان ئۈچۈن تور بەت ھەر قېتىم ئېچىلغاندا تور كۆرگۈچىڭىز ئىسىمسىز بىر بەلگە ئەۋەتىدۇ. بىر كۈندە
+          نەچچە ئۈسكۈنىدىن كىرىلگەنلىكىنى بىلىش ئۈچۈن، شۇ كۈننىڭ بىرىنچى بەلگىسىگە «بۈگۈن كەلدىم» دېگەن
+          بەلگە قوشۇلىدۇ؛ قايتا قوشماسلىق ئۈچۈن تور كۆرگۈچىڭىز ئۆز localStorage قىسمىغا پەقەت بۈگۈنكى
+          چېسلانىلا يازىدۇ. مۇلازىمېتىردا بۇنىڭ ئۈچۈنمۇ دۆلەت بويىچە سانلاردىن باشقا ھېچنەرسە ساقلانمايدۇ.
         </p>
 
         <h2>

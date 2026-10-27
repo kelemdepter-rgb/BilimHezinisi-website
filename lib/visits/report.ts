@@ -41,6 +41,13 @@ export type CountryVisitReport =
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * The day page openings started to be counted from the browser instead of
+ * the proxy (lib/visits/count.ts). Openings before it include pages fetched
+ * by programs; /admin/visits says so while the kept history reaches back past it.
+ */
+export const OPENINGS_FROM_BROWSER_SINCE = "2026-10-27";
+
 const numeric = (value: unknown): number => {
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : 0;

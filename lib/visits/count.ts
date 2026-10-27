@@ -1,16 +1,24 @@
 /**
  * Which countries the library is opened from — the counting rules (2026-10-22;
- * East Turkistan counted apart from China since 2026-10-23).
+ * East Turkistan apart from China since 2026-10-23; counted from the browser
+ * since 2026-10-27).
  *
- * The owner wants to know where the site is used, and nothing more. So a
- * visit is reduced, in proxy.ts, to ONE thing — the two-letter country code
- * Vercel puts on the request — and added to a tally in the database
- * (supabase/migrations/0033_country_visits.sql). The IP address, the user
- * agent, the page, the cookies and the session are looked at here only to
- * decide whether to count, and are never stored or logged.
+ * The owner wants to know where the site is used, and nothing more. Every
+ * full page load of the library sends ONE empty signal from the reader's own
+ * browser to /api/visit (lib/visits/beacon.ts). The server reduces it to the
+ * two-letter country code Vercel puts on the request and adds one to a daily
+ * tally (migrations 0033, 0034). The IP address, the user agent, the page, the
+ * cookies and the session are looked at here only to decide whether to count,
+ * and are never stored or logged.
  *
- * A plain module — no server-only import — because proxy.ts uses it and the
- * unit tests drive it with fake headers and a fake clock.
+ * Why from the browser and not, as at first, in proxy.ts: a page fetched by a
+ * program that never runs it was counted as an opening — from 2026-10-22 to
+ * 10-26 Brazil, Argentina, Colombia and a dozen more countries showed tens of
+ * openings and not one device. A signal the page itself sends exists only
+ * when the page really ran in a browser.
+ *
+ * A plain module — no server-only import — so the browser half can share its
+ * constants and the unit tests can drive it with fake headers and a fake clock.
  */
 
 /** The header Vercel sets on every request: ISO 3166-1 alpha-2, capitals. */
@@ -35,12 +43,9 @@ export const EAST_TURKISTAN = "XJ";
 /** CN-XJ since 2017; the older numeric form CN-65 is still seen in IP databases. */
 const EAST_TURKISTAN_REGIONS = new Set(["XJ", "65"]);
 
-/** Never counted: not a reader opening a page of the library. */
-const SKIPPED = ["/api", "/auth", "/admin"];
-
 /**
- * Programs, not readers. Real browsers also fail the Sec-Fetch test below, so
- * this list only has to catch the headless and scripted ones that imitate them.
+ * Programs, not readers. A program that runs pages in a real browser engine
+ * would send the signal, so this list catches the ones that say what they are.
  */
 const NOT_A_READER =
   /bot\b|crawl|spider|slurp|preview|facebookexternalhit|headless|lighthouse|pingdom|uptime|monitor|curl|wget|python|axios|node-fetch|go-http|java\/|libwww|httpclient/i;
@@ -79,16 +84,13 @@ function placeOf(headers: Headers): string | null {
 }
 
 /**
- * Fetch Metadata (`Sec-Fetch-Dest`, `-Mode`, `-Site`) reached Safari only in
+ * Fetch Metadata (`Sec-Fetch-Site` and its siblings) reached Safari only in
  * 16.4 (March 2023). iPhones that cannot update past it — the 6s, the 7, the
  * first SE, a real share of this audience — and Safari on Macs before 16.4
- * send none of it, so the Sec-Fetch checks alone never counted them at all,
- * neither as page openings nor as devices (found 2026-10-23).
- *
- * For exactly those browsers, and only when a request carries NO Fetch
- * Metadata whatsoever, older signals stand in (see `looksLikeNavigation` and
- * `fromThisSite`). Any other browser that arrives without Fetch Metadata is
- * imitating one, and stays uncounted.
+ * send none of it (found 2026-10-23). For exactly those browsers, and only
+ * when a request carries NO Fetch Metadata whatsoever, the Origin or Referer
+ * stands in (`fromThisSite`). Any other browser that arrives without Fetch
+ * Metadata is imitating one, and stays uncounted.
  */
 const FETCH_METADATA = ["sec-fetch-dest", "sec-fetch-mode", "sec-fetch-site"];
 
@@ -110,23 +112,6 @@ export function isPreFetchMetadataWebKit(agent: string): boolean {
 /** A browser that predates Fetch Metadata, on a request that indeed has none. */
 function isOldBrowserWithoutMetadata(headers: Headers): boolean {
   return FETCH_METADATA.every((name) => !headers.has(name)) && isPreFetchMetadataWebKit(headers.get("user-agent") ?? "");
-}
-
-/**
- * What a full page load looks like without Fetch Metadata. Every browser's
- * navigation asks for `text/html` AND `application/xhtml+xml`; the service
- * worker's background copy of a page asks for `text/html` alone
- * (public/sw.js), and the app's own page-data fetches carry `RSC` or a
- * prefetch header.
- */
-function looksLikeNavigation(headers: Headers): boolean {
-  const accept = headers.get("accept") ?? "";
-  return (
-    accept.includes("text/html") &&
-    accept.includes("application/xhtml+xml") &&
-    !headers.has("rsc") &&
-    !headers.has("next-router-prefetch")
-  );
 }
 
 /** Whether the Referer is a page of the admin area — never a reader's page. */
@@ -160,79 +145,48 @@ function fromThisSite(headers: Headers, url: string): boolean {
   }
 }
 
-function isSkippedPath(pathname: string): boolean {
-  return SKIPPED.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
-}
-
-export type VisitRequest = {
+export type SignalRequest = {
   method: string;
-  pathname: string;
   headers: Headers;
   /** `process.env.VERCEL_ENV` — only the production site is counted. */
   environment: string | undefined;
-};
-
-/**
- * The country to count for this request, or null when it is not to be counted.
- *
- * Counted: a person's browser opening a page — a full navigation
- * (`Sec-Fetch-Dest: document`, `Sec-Fetch-Mode: navigate`) on the production
- * deployment. Not counted: the app's own background fetches (page data,
- * prefetches, the service worker's), a browser pre-rendering a page nobody
- * has opened, scripts and crawlers, the admin area, the API and the auth
- * callbacks, a local server or a preview deployment, and a request Vercel
- * could not place in a country. Note this is page OPENINGS, not people.
- * Safari before 16.4, which sends no Sec-Fetch headers, is recognised by its
- * Accept header instead (`isPreFetchMetadataWebKit`).
- *
- * A Chinese address whose region is East Turkistan is counted as
- * EAST_TURKISTAN, not as CN. A browser carrying the staff no-count flag is
- * not counted.
- */
-export function countedVisitCountry({ method, pathname, headers, environment }: VisitRequest): string | null {
-  if (environment !== "production") return null;
-  if (method !== "GET") return null;
-  if (isSkippedPath(pathname)) return null;
-
-  const navigation = headers.get("sec-fetch-dest") === "document" && headers.get("sec-fetch-mode") === "navigate";
-  const oldNavigation = isOldBrowserWithoutMetadata(headers) && looksLikeNavigation(headers);
-  if (!navigation && !oldNavigation) return null;
-  const purpose = `${headers.get("sec-purpose") ?? ""} ${headers.get("purpose") ?? ""}`;
-  if (/prefetch|prerender/i.test(purpose)) return null;
-
-  if (isProgram(headers) || hasNoCountCookie(headers)) return null;
-  return placeOf(headers);
-}
-
-export type DeviceRequest = Omit<VisitRequest, "pathname"> & {
   /** The request's own URL, for the Origin check old Safari needs. */
   url: string;
 };
 
 /**
- * The code to tally for a «one device, once a day» signal, or null.
+ * The code to tally for a page-load signal, or null when it is not counted.
  *
- * The signal is the POST components/visit-beacon.tsx sends with
- * `navigator.sendBeacon` the first time a browser opens the library on a UTC
- * day; the browser remembers the day in its own localStorage, and nothing is
- * remembered here. Counted on the production deployment only, from the site's
- * own pages (`Sec-Fetch-Site: same-origin`; for Safari before 16.4, which
- * sends no such header, a matching Origin or Referer), never from a program or a staff
- * browser. The route in front of it also brakes bursts per address
- * (app/api/visit/route.ts).
+ * The signal is the empty POST components/visit-beacon.tsx sends with
+ * `navigator.sendBeacon` each time a page of the library fully loads (marked
+ * `?d=1` the first time that browser does so on a UTC day — the device). It
+ * is counted on the production deployment only, from the site's own pages
+ * (`Sec-Fetch-Site: same-origin`; for Safari before 16.4, which sends no such
+ * header, a matching Origin or Referer), never from a program, a staff browser
+ * or a page of the admin area. The route in front of it also brakes bursts
+ * per address (app/api/visit/route.ts).
  */
-export function countedDeviceCountry({ method, headers, environment, url }: DeviceRequest): string | null {
+export function countedSignalCountry({ method, headers, environment, url }: SignalRequest): string | null {
   if (environment !== "production") return null;
   if (method !== "POST") return null;
   const sameOrigin =
     headers.get("sec-fetch-site") === "same-origin" || (isOldBrowserWithoutMetadata(headers) && fromThisSite(headers, url));
   if (!sameOrigin) return null;
   // The browser skips the admin area itself (lib/visits/beacon.ts); this holds
-  // for a page still running yesterday's script. The site's Referrer-Policy
+  // for a page still running an older script. The site's Referrer-Policy
   // sends the full same-origin page address with the signal.
   if (fromAdminArea(headers)) return null;
   if (isProgram(headers) || hasNoCountCookie(headers)) return null;
   return placeOf(headers);
+}
+
+/** Whether a signal says it is this browser's first page load of the UTC day. */
+export function isFirstOfDay(url: string): boolean {
+  try {
+    return new URL(url).searchParams.get("d") === "1";
+  } catch {
+    return false;
+  }
 }
 
 /** Openings waiting to be sent: country code → how many. */
@@ -270,8 +224,8 @@ export function createVisitBatcher({
 
   return {
     /**
-     * Count one opening. Returns the send to wait for (`event.waitUntil`)
-     * when this opening triggered one, and null when it is waiting its turn.
+     * Count one. Returns the send to wait for when this one triggered it,
+     * and null when it is waiting its turn.
      */
     add(country: string): Promise<void> | null {
       pending[country] = (pending[country] ?? 0) + 1;

@@ -665,6 +665,8 @@
     padding-block-start: 10px;
     border-block-start: 0.5px dashed var(--border);
     overflow-wrap: anywhere;
+    /* A group's pointer scrolls here: clear of the sticky toolbar. */
+    scroll-margin-block-start: 84px;
   }
   /* Translation-only mode drops the Arabic line, and with it the divider. */
   .quran-aya-ug:first-child {
@@ -673,28 +675,57 @@
     border-block-start: 0;
   }
 
-  /* Aya medallion — also the button that opens the verse actions, so it keeps
-     a 44px touch target however small the surrounding type is. */
+  /* Aya number — the Uthmani font's OWN verse-end medallion: it draws
+     Arabic-Indic digits inside it through `liga` (digits 0.27 em, medallion
+     0.89 em, measured on the desktop's identical font file). At 1.75 em of the
+     verse text the digits are about 0.47 of it. Never turn `liga` off here, and
+     draw no circle of our own around it (desktop 3.6, PROMPT-53).
+     Also the button that opens the verse actions, so it keeps a 44px touch
+     target; its state shows with aria-expanded, not on hover alone. */
   .quran-aya-num {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 1.55em;
-    height: 1.55em;
     min-width: 44px;
     min-height: 44px;
-    margin-inline: 7px;
+    margin-inline: 0.1em;
+    padding: 0;
     vertical-align: middle;
     font-family: "Uthmanic Hafs", var(--jf), serif;
-    font-size: 0.5em;
+    font-size: 1.75em;
+    line-height: 1;
     color: var(--am);
-    background: var(--ab);
-    border: 1.5px solid var(--ab2);
-    border-radius: 50%;
-    box-shadow: inset 0 0 0 2px var(--bg);
+    background: transparent;
+    border: 0;
+    border-radius: var(--radius);
     cursor: pointer;
   }
-  .quran-aya-num:hover { background: var(--ab2); }
+  .quran-aya-num:hover,
+  .quran-aya-num:active,
+  .quran-aya-num[aria-expanded="true"] { color: var(--at); background: var(--ab); }
+  .quran-aya-num:focus-visible { outline: 2px solid var(--am); outline-offset: 2px; }
+
+  /* «[4]» / «[4 _ 6]» after a translation: plain text in the right-to-left
+     line (no isolation), kept on one line. */
+  .quran-aya-label { color: var(--am); white-space: nowrap; }
+
+  /* A verse of a group: its translation is under the group's last verse. */
+  .quran-aya-ug-ref {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    min-height: 44px;
+    padding-inline: 4px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--text3);
+    text-align: start;
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .quran-aya-ug-ref:hover,
+  .quran-aya-ug-ref:active { color: var(--am); background: var(--ab); }
+  .quran-aya-ug-ref:focus-visible { outline: 2px solid var(--am); outline-offset: 2px; }
 
   /* Sura number chip in the 114-sura list. */
   .quran-sura-num {

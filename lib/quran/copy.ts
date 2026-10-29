@@ -2,6 +2,11 @@
  * Aya rendering and clipboard, ported from desktop src/quran.js
  * `copyAyaToClipboard`.
  *
+ * Every translation is written with its label, «[7]» or «[4 _ 6]», and a
+ * group's translation once per unit (lib/quran/verse-label.ts); this module
+ * takes units ready-made and imports only their type, so the notebook does
+ * not carry the group table.
+ *
  * Writes rich text and plain text together, so pasting into Word keeps the
  * Uthmani face and the ornate brackets, while a plain-text target still gets
  * readable output. Falls back to writeText, then to a hidden textarea, so an
@@ -12,7 +17,7 @@
  * inserted into a note are the same markup — and so the note sanitizer only
  * ever has to admit one shape (lib/notes/style-allow.ts).
  */
-import type { Aya } from "@/lib/quran/types";
+import type { VerseUnit } from "@/lib/quran/verse-label";
 
 const FONT_STACK_AR = "'Uthmanic Hafs','KFGQPC Uthmanic Script HAFS','Traditional Arabic','Amiri',serif";
 const FONT_STACK_UG = "'UKIJ Ekran','UKIJ Tuz','Microsoft Uighur','Arial',sans-serif";
@@ -34,57 +39,70 @@ export function escapeHtml(value: string): string {
   );
 }
 
-/** The Arabic, in the Uthmani face, inside its ornate brackets. */
-function arabicSpan(aya: Aya): string {
+/** Each verse's Arabic, in the Uthmani face, inside its ornate brackets. */
+function arabicSpan(unit: VerseUnit): string {
   return (
     `<span style="font-family:${FONT_STACK_AR};font-size:20pt;line-height:1.9">` +
-    `${OPEN_AYA}${escapeHtml(aya.text_ar)}${CLOSE_AYA}</span>`
-  );
-}
-
-/** The Uyghur translation, in the reading face, inside guillemets. */
-function uyghurSpan(aya: Aya): string {
-  return (
-    `<span style="font-family:${FONT_STACK_UG};font-size:13pt;line-height:1.7;color:#333">` +
-    `${OPEN_QUOTE}${escapeHtml(aya.text_ug)}${CLOSE_QUOTE}</span>`
+    unit.ayas.map((aya) => `${OPEN_AYA}${escapeHtml(aya.text_ar)}${CLOSE_AYA}`).join(" ") +
+    `</span>`
   );
 }
 
 /**
- * One verse as a single RTL paragraph. `mode` falls back to the Arabic when a
- * translation was asked for and the verse carries none, which is the desktop's
- * behaviour and better than emitting an empty quotation.
+ * The Uyghur translation, in the reading face, inside guillemets and followed
+ * by its label: «…» [4 _ 6] (lib/quran/verse-label.ts).
  */
-export function ayaHtml(aya: Aya, mode: AyaRenderMode): string {
-  const hasTranslation = Boolean(aya.text_ug);
-  const wanted: AyaRenderMode = mode !== "ar" && !hasTranslation ? "ar" : mode;
+function uyghurSpan(unit: VerseUnit): string {
+  return (
+    `<span style="font-family:${FONT_STACK_UG};font-size:13pt;line-height:1.7;color:#333">` +
+    `${OPEN_QUOTE}${escapeHtml(unit.text)}${CLOSE_QUOTE} ${escapeHtml(unit.label)}</span>`
+  );
+}
 
+/** `mode`, falling back to the Arabic when the unit carries no translation. */
+function effectiveMode(unit: VerseUnit, mode: AyaRenderMode): AyaRenderMode {
+  return mode !== "ar" && !unit.text ? "ar" : mode;
+}
+
+/**
+ * One unit — a verse, or the verses of a group in a run — as a single RTL
+ * paragraph: each verse's Arabic, then the translation once. `mode` falls
+ * back to the Arabic when a translation was asked for and the verse carries
+ * none, which is the desktop's behaviour and better than emitting an empty
+ * quotation.
+ */
+export function unitHtml(unit: VerseUnit, mode: AyaRenderMode): string {
+  const wanted = effectiveMode(unit, mode);
   const parts: string[] = [];
-  if (wanted !== "ug") parts.push(arabicSpan(aya));
-  if (wanted !== "ar") parts.push(uyghurSpan(aya));
-
+  if (wanted !== "ug") parts.push(arabicSpan(unit));
+  if (wanted !== "ar") parts.push(uyghurSpan(unit));
   return `<p dir="rtl" style="text-align:right;margin:0 0 12pt 0;">${parts.join("<br>")}</p>`;
 }
 
-/** The same verse as plain text, for a plain-text clipboard target. */
-export function ayaText(aya: Aya, mode: AyaRenderMode): string {
-  const hasTranslation = Boolean(aya.text_ug);
-  const wanted: AyaRenderMode = mode !== "ar" && !hasTranslation ? "ar" : mode;
-
+/** The same unit as plain text, for a plain-text clipboard target. */
+export function unitText(unit: VerseUnit, mode: AyaRenderMode): string {
+  const wanted = effectiveMode(unit, mode);
   const parts: string[] = [];
-  if (wanted !== "ug") parts.push(`${OPEN_AYA}${aya.text_ar}${CLOSE_AYA}`);
-  if (wanted !== "ar") parts.push(`${OPEN_QUOTE}${aya.text_ug}${CLOSE_QUOTE}`);
+  if (wanted !== "ug") parts.push(unit.ayas.map((aya) => `${OPEN_AYA}${aya.text_ar}${CLOSE_AYA}`).join(" "));
+  if (wanted !== "ar") parts.push(`${OPEN_QUOTE}${unit.text}${CLOSE_QUOTE} ${unit.label}`);
   return parts.join(" ");
 }
 
-export async function copyAyas(ayas: Aya[], withTranslation: boolean): Promise<boolean> {
-  if (ayas.length === 0) return false;
+/**
+ * Copy these units. Without the translation every verse is its own
+ * paragraph, so a group's verses are not run together.
+ */
+export async function copyUnits(units: VerseUnit[], withTranslation: boolean): Promise<boolean> {
+  if (units.length === 0) return false;
 
   const mode: AyaRenderMode = withTranslation ? "both" : "ar";
-  const html = `<html><head><meta charset="utf-8"></head><body>${ayas
-    .map((aya) => ayaHtml(aya, mode))
+  const parts = withTranslation
+    ? units
+    : units.flatMap((unit) => unit.ayas.map((aya) => ({ ...unit, ayas: [aya] })));
+  const html = `<html><head><meta charset="utf-8"></head><body>${parts
+    .map((unit) => unitHtml(unit, mode))
     .join("\n")}</body></html>`;
-  const text = ayas.map((aya) => ayaText(aya, mode)).join("\n\n");
+  const text = parts.map((unit) => unitText(unit, mode)).join("\n\n");
 
   try {
     if (navigator.clipboard && typeof window.ClipboardItem === "function") {

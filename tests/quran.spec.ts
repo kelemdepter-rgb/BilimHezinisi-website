@@ -225,7 +225,8 @@ test.describe("mushaf", () => {
     // string: Arabic has several encodings for the same-looking word.
     const aya = page.locator('[data-testid="aya"][data-aya="1"]');
     const arabicOnPage = (await aya.getByTestId("aya-arabic").innerText()).replace(/١\s*$/, "").trim();
-    const uyghurOnPage = (await aya.getByTestId("aya-uyghur").innerText()).trim();
+    // The translation as shown, without the label «[1]» that ends it (PROMPT-53).
+    const uyghurOnPage = (await aya.getByTestId("aya-uyghur").innerText()).trim().replace(/ \[1\]$/, "");
 
     await actions.getByTestId("copy-arabic").click();
     await expect(page.getByTestId("quran-toast")).toHaveText("ئايەت كۆچۈرۈلدى");
@@ -240,7 +241,7 @@ test.describe("mushaf", () => {
     await expect(page.getByTestId("quran-toast")).toHaveText("ئايەت تەرجىمىسى بىلەن كۆچۈرۈلدى");
     const withTranslation = await page.evaluate(() => navigator.clipboard.readText());
     expect(withTranslation).toContain(arabicOnPage);
-    expect(withTranslation).toContain(`«${uyghurOnPage}»`);
+    expect(withTranslation).toContain(`«${uyghurOnPage}» [1]`);
   });
 
   test("anonymous visitors get everything except the bookmark button", async ({ page }) => {

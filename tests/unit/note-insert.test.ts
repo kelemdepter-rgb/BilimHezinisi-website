@@ -16,6 +16,7 @@ import {
   safeLineHeight,
 } from "@/lib/notes/style-allow";
 import type { Aya } from "@/lib/quran/types";
+import { unitOf } from "@/lib/quran/verse-label";
 
 /**
  * A citation is worth nothing if it does not survive being saved.
@@ -39,6 +40,10 @@ const AYA: Aya = {
   text_ar: "ٱللَّهُ لَآ إِلَٰهَ إِلَّا هُوَ ٱلۡحَىُّ ٱلۡقَيُّومُ",
   text_ug: "اﷲ دىن باشقا ھېچ ئىلاھ يوقتۇر، ئۇ ھەمىشە تىرىكتۇر",
 };
+const VERSE = unitOf(AYA, [AYA]);
+/** 4:160–161 share one translation: 160 inserted alone carries the group's. */
+const GROUP_TEXT = "يەھۇدىيلارنىڭ زۇلمى تۈپەيلىدىن… قاتتىق ئازاب ھازىرلىدۇق.";
+const GROUP_VERSE = unitOf({ sura: 4, aya: 160, text_ar: "فَبِظُلۡمٖ", text_ug: GROUP_TEXT }, []);
 
 const CITATION = {
   bookId: 12,
@@ -101,24 +106,30 @@ describe.each(both)("the note sanitizer keeps an inserted source (%s)", (_name, 
 
 describe.each(both)("the note sanitizer keeps an inserted aya (%s)", (_name, clean) => {
   it("keeps the Uthmani face, the brackets and the reference", () => {
-    const out = clean(ayaInsertHtml(AYA, "both", "بەقەرە"));
+    const out = clean(ayaInsertHtml(VERSE, "both", "بەقەرە"));
     expect(out).toContain("Uthmanic Hafs");
     expect(out).toContain("﴿");
     expect(out).toContain("﴾");
     expect(out).toContain("قۇرئان كەرىم — بەقەرە — 2:255");
     expect(out).toContain('href="/quran/2?aya=255"');
-    expect(out).toContain(AYA.text_ug);
+    expect(out).toContain(`«${AYA.text_ug}» [255]`);
+  });
+
+  it("keeps a group's label, underscore and all (PROMPT-53)", () => {
+    const out = clean(ayaInsertHtml(GROUP_VERSE, "both", "نىسا"));
+    expect(out).toContain(`«${GROUP_TEXT}» [160 _ 161]`);
+    expect(out).toContain("قۇرئان كەرىم — نىسا — 4:160");
   });
 
   it("renders Arabic only, translation only, or both, on request", () => {
-    expect(clean(ayaInsertHtml(AYA, "ar", "بەقەرە"))).not.toContain(AYA.text_ug);
-    const uyghurOnly = clean(ayaInsertHtml(AYA, "ug", "بەقەرە"));
+    expect(clean(ayaInsertHtml(VERSE, "ar", "بەقەرە"))).not.toContain(AYA.text_ug);
+    const uyghurOnly = clean(ayaInsertHtml(VERSE, "ug", "بەقەرە"));
     expect(uyghurOnly).toContain(AYA.text_ug);
     expect(uyghurOnly).not.toContain("﴿");
   });
 
   it("falls back to the Arabic when a verse carries no translation", () => {
-    const out = clean(ayaInsertHtml({ ...AYA, text_ug: "" }, "both", "بەقەرە"));
+    const out = clean(ayaInsertHtml(unitOf({ ...AYA, text_ug: "" }, []), "both", "بەقەرە"));
     expect(out).toContain("﴿");
     expect(out).not.toContain("«»");
   });
@@ -188,13 +199,13 @@ describe("the line under a citation is recognised (PROMPT-50)", () => {
   it("in what the source and verse inserts write", () => {
     const source = paragraphs(sourceInsertHtml(CITATION));
     expect(source.map(isCitationParagraph)).toEqual([true, false]);
-    const verse = paragraphs(ayaInsertHtml(AYA, "both", "بەقەرە"));
+    const verse = paragraphs(ayaInsertHtml(VERSE, "both", "بەقەرە"));
     // The verse itself, its line, the empty paragraph after.
     expect(verse.map(isCitationParagraph)).toEqual([false, true, false]);
   });
 
   it.each(both)("still, after a save and a reload (%s)", (_name, clean) => {
-    for (const html of [sourceInsertHtml(CITATION), ayaInsertHtml(AYA, "ar", "")]) {
+    for (const html of [sourceInsertHtml(CITATION), ayaInsertHtml(VERSE, "ar", "")]) {
       expect(paragraphs(clean(html)).filter(isCitationParagraph)).toHaveLength(1);
     }
   });

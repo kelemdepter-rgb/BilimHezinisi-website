@@ -211,9 +211,27 @@ export function stripBasmalaPrefix(text) {
     .replace(/^[\s‏‎  ۚۖۗۘۙۛ]+/, '');
 }
 
+// ── Verse markers and translation groups (desktop 3.6) ──────────────────────
+// Each translation in the QuranEnc file ends with its verse number in
+// parentheses: «…ئىگىسىدۇر(4).». Runs of consecutive verses that the
+// translator rendered as one sentence carry the same text under each verse
+// and a range marker: «(160ـ161)», separated by a tatweel (U+0640) in most,
+// by a hyphen in a few, sometimes backwards («(56- 55)»), with stray
+// separators or a zero-width joiner in some single markers («(54 ـ )»,
+// «(‍88)»). Parentheses that hold words are translation text and stay
+// (58:4 «(60 مىسكىنگە بىر ۋاخ تاماق بېرىشى لازىم)»).
+
+/** A parenthesised group of digits and separators only, with the space before it. */
+export const VERSE_MARKER = /\s*\(([\s0-9٠-٩\-–ـ،,‌‍]*)\)/g;
+export const MARKER_DIGIT = /[0-9٠-٩]/;
+// After a removed marker, a space is kept only before more words: never
+// before punctuation, and never at the end.
+export const NO_SPACE_BEFORE = /[\s.،؛:!?؟»)\]]/;
+
 /**
- * Remove the tafsir citation markers — (1), (2،3), [12] — that the Saleh
- * translation carries inline.
+ * The translation without its verse markers. Nothing else is removed or
+ * changed — not a letter, not a punctuation mark; only the whitespace is
+ * collapsed, as before.
  */
 /**
  * @param {string | null | undefined} text
@@ -222,10 +240,130 @@ export function stripBasmalaPrefix(text) {
 export function cleanUyghurTranslation(text) {
   if (!text) return '';
   return String(text)
-    .replace(/\([\d،,\s\-]+\)/g, '')
-    .replace(/\[[\d،,\s\-]+\]/g, '')
+    .replace(VERSE_MARKER, function (m, inner, at, s) {
+      if (!MARKER_DIGIT.test(inner)) return m;
+      const after = s.charAt(at + m.length);
+      return at > 0 && after && !NO_SPACE_BEFORE.test(after) ? ' ' : '';
+    })
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/** @param {string} s */
+function westernDigits(s) {
+  return s.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660));
+}
+
+/**
+ * The verses a translation's marker names, if one of its markers holds this
+ * verse: { from, to } in order («56- 55» is 55–56). 6:5 carries «(4)» from a
+ * copy of 6:4's sentence before its own «(5)», so only a marker that holds
+ * the verse counts.
+ */
+/**
+ * @param {string} text
+ * @param {number} aya
+ * @returns {{ from: number, to: number } | null}
+ */
+function markerRange(text, aya) {
+  for (const m of String(text || '').matchAll(VERSE_MARKER)) {
+    const nums = (westernDigits(m[1]).match(/\d+/g) || []).map(Number);
+    if (!nums.length) continue;
+    const from = Math.min(...nums);
+    const to = Math.max(...nums);
+    if (from <= aya && aya <= to) return { from, to };
+  }
+  return null;
+}
+
+/**
+ * Which verses share one translation, from the RAW text of the bundled file
+ * (never from the cleaned column): consecutive verses with identical text,
+ * joined with the range in their marker. 53:13 and 53:14 both end «(13ـ14)»
+ * though 53:14's text is a shortened copy of 53:13's — the marker makes them
+ * one group. A verse on its own is { from: aya, to: aya }.
+ */
+/**
+ * @param {VerseMap} ugMap sura → aya → raw text
+ * @returns {Record<number, Record<number, { from: number, to: number }>>}
+ */
+export function uyghurGroups(ugMap) {
+  /** @type {Record<number, Record<number, { from: number, to: number }>>} */
+  const out = {};
+  for (const sura of Object.keys(ugMap).map(Number)) {
+    const texts = ugMap[sura];
+    const ayas = Object.keys(texts).map(Number).sort((a, b) => a - b);
+    if (!ayas.length) continue;
+    const last = ayas[ayas.length - 1];
+    // Union-find over the verses of the sura; every union joins an
+    // interval, so each group comes out as a run of consecutive verses.
+    /** @type {Record<number, number>} */
+    const parent = {};
+    /** @param {number} a @returns {number} */
+    const find = (a) => (parent[a] === a ? a : (parent[a] = find(parent[a])));
+    /** @param {number} a @param {number} b */
+    const join = (a, b) => {
+      parent[find(a)] = find(b);
+    };
+    for (const a of ayas) parent[a] = a;
+    for (let i = 1; i < ayas.length; i++) {
+      if (ayas[i] === ayas[i - 1] + 1 && texts[ayas[i]] === texts[ayas[i - 1]]) join(ayas[i], ayas[i - 1]);
+    }
+    for (const a of ayas) {
+      const r = markerRange(texts[a], a);
+      if (!r) continue;
+      for (let b = Math.max(1, r.from); b <= Math.min(last, r.to); b++) {
+        if (parent[b] !== undefined) join(b, a);
+      }
+    }
+    /** @type {Record<number, { from: number, to: number }>} */
+    const span = {};
+    for (const a of ayas) {
+      const root = find(a);
+      const s = span[root] || (span[root] = { from: a, to: a });
+      if (a < s.from) s.from = a;
+      if (a > s.to) s.to = a;
+    }
+    out[sura] = {};
+    for (const a of ayas) {
+      const s = span[find(a)];
+      out[sura][a] = { from: s.from, to: s.to };
+    }
+  }
+  return out;
+}
+
+/**
+ * The groups of more than one verse, in mushaf order, as `[sura, from, to]`,
+ * with the verse whose cleaned text is the group's (the longest; the first on
+ * a tie) and whether every verse of the group carries that same text. The
+ * identical runs do; 53:13–14 does not, and its text is 53:13's.
+ */
+/**
+ * @param {VerseMap} ugMap sura → aya → raw text
+ * @returns {{ sura: number, from: number, to: number, textAya: number, same: boolean }[]}
+ */
+export function multiVerseGroups(ugMap) {
+  const groups = uyghurGroups(ugMap);
+  /** @type {{ sura: number, from: number, to: number, textAya: number, same: boolean }[]} */
+  const out = [];
+  for (const sura of Object.keys(groups).map(Number).sort((a, b) => a - b)) {
+    const seen = new Set();
+    for (const aya of Object.keys(groups[sura]).map(Number).sort((a, b) => a - b)) {
+      const { from, to } = groups[sura][aya];
+      if (to === from || seen.has(from)) continue;
+      seen.add(from);
+      const text = (/** @type {number} */ a) => cleanUyghurTranslation(ugMap[sura][a]);
+      let textAya = from;
+      let same = true;
+      for (let a = from + 1; a <= to; a++) {
+        if (text(a) !== text(from)) same = false;
+        if (text(a).length > text(textAya).length) textAya = a;
+      }
+      out.push({ sura, from, to, textAya, same });
+    }
+  }
+  return out;
 }
 
 /**
@@ -256,7 +394,8 @@ export function parseTanzil(content) {
  * Parse the quranenc Uyghur translation XML. The desktop uses
  * node-html-parser; this walks the same `<sura>/<aya>/<translation>` shape
  * directly, because the file is machine-generated and the web project should
- * not carry an HTML parser for one script. Returns `{ [sura]: { [aya]: text } }`.
+ * not carry an HTML parser for one script. Returns `{ [sura]: { [aya]: text } }`,
+ * each text as the file has it — its verse markers still in it.
  */
 /**
  * @param {string} xmlContent
@@ -285,7 +424,8 @@ export function parseUyghurXml(xmlContent) {
       let text = translation[1].trim();
       // Unwrap the CDATA section the exporter writes around every verse.
       text = text.replace(/^<!\[CDATA\[([\s\S]*?)\]\]>$/, '$1').trim();
-      text = text.replace(/\(\d+\)[.。]?\s*$/, '').trim();
+      // The text as the file has it, verse markers included: uyghurGroups()
+      // reads them, and cleanUyghurTranslation() takes them out.
       map[suraNum][ayaNum] = text;
     }
   }

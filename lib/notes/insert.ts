@@ -13,8 +13,8 @@
  *    the writer sees on insert is what comes back after a save and a reload.
  *    A unit test holds this to it — tests/unit/note-insert.test.ts.
  */
-import { ayaHtml, escapeHtml, type AyaRenderMode } from "@/lib/quran/copy";
-import type { Aya } from "@/lib/quran/types";
+import { escapeHtml, unitHtml, type AyaRenderMode } from "@/lib/quran/copy";
+import type { VerseUnit } from "@/lib/quran/verse-label";
 
 /** Small and grey, and legible on the paper, sepia and dark themes alike. */
 const CITE_STYLE = "font-size:13px;color:#8a8a8a";
@@ -109,19 +109,26 @@ export function isCitationParagraph(element: Element): boolean {
 }
 
 /**
- * A verse, exactly as the mushaf's copy action formats it, followed by its
- * reference. The reference is not decoration: a verse in a note that does not
- * say which verse it is cannot be checked by the person reading the note.
+ * A verse, exactly as the mushaf's copy action formats it — its translation
+ * the group's, with its label «[4 _ 6]» — followed by its reference. The
+ * reference is not decoration: a verse in a note that does not say which
+ * verse it is cannot be checked by the person reading the note.
+ *
+ * `unit` holds the verse inserted — or the found verses of one
+ * group, from a search card — worked out on the server, which knows the
+ * groups (app/notes/source-actions.ts).
  */
-export function ayaInsertHtml(aya: Aya, mode: AyaRenderMode, suraName: string): string {
-  const reference = `${aya.sura}:${aya.aya}`;
+export function ayaInsertHtml(unit: VerseUnit, mode: AyaRenderMode, suraName: string): string {
+  const aya = unit.ayas[0];
+  const last = unit.ayas[unit.ayas.length - 1];
+  const reference = last.aya > aya.aya ? `${aya.sura}:${aya.aya}-${last.aya}` : `${aya.sura}:${aya.aya}`;
   const label = escapeHtml(
     suraName ? `قۇرئان كەرىم — ${suraName} — ${reference}` : `قۇرئان كەرىم — ${reference}`,
   );
   const href = escapeHtml(ayaHref(aya.sura, aya.aya));
 
   return (
-    ayaHtml(aya, mode) +
+    unitHtml(unit, mode) +
     `<p dir="rtl" style="${CITE_STYLE}"><a href="${href}">${label}</a></p>` +
     `<p><br></p>`
   );

@@ -249,6 +249,18 @@ export default defineConfig({
         },
       },
       {
+        // Verse labels and translation groups (PROMPT-53): anonymous only.
+        name: `quran-labels-${viewport.name}`,
+        testMatch: /[\\/]quran-labels\.spec\.ts$/,
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
         // The notebook: signed-in by default, with the isolation test opening a
         // second, different account itself.
         name: `notes-${viewport.name}`,

@@ -14,7 +14,23 @@ import {
 } from "@/app/notes/source-actions";
 import { ayaHref, readerHref, sourceInsertHtml, ayaInsertHtml } from "@/lib/notes/insert";
 import type { AyaRenderMode } from "@/lib/quran/copy";
-import type { Aya, QuranHit } from "@/lib/quran/types";
+import type { QuranCard } from "@/lib/quran/search-groups";
+import type { VerseUnit } from "@/lib/quran/verse-label";
+
+/**
+ * A search card as the unit it inserts: each found verse's Arabic, then the
+ * group's translation once with its label — no second request.
+ */
+function cardUnit(card: QuranCard): VerseUnit {
+  return {
+    sura: card.sura,
+    from: card.from,
+    to: card.to,
+    ayas: card.verses.map((verse) => ({ sura: card.sura, aya: verse.aya, text_ar: verse.text_ar, text_ug: card.text_ug })),
+    text: card.text_ug,
+    label: card.label,
+  };
+}
 
 /**
  * The library, beside the note being written.
@@ -66,9 +82,9 @@ export function SourcePanel({
   const [sura, setSura] = useState("");
   const [aya, setAya] = useState("");
   const [mode, setMode] = useState<AyaRenderMode>("both");
-  const [preview, setPreview] = useState<{ aya: Aya; suraNameUg: string } | null>(null);
+  const [preview, setPreview] = useState<{ unit: VerseUnit; suraNameUg: string } | null>(null);
   const [quranQuery, setQuranQuery] = useState("");
-  const [quranHits, setQuranHits] = useState<QuranHit[] | null>(null);
+  const [quranHits, setQuranHits] = useState<QuranCard[] | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const quranSearchRef = useRef<HTMLInputElement>(null);
@@ -139,7 +155,7 @@ export function SourcePanel({
       setError(result.error);
       return;
     }
-    setQuranHits(result.hits);
+    setQuranHits(result.cards);
   }, [quranQuery]);
 
   const loadPreview = useCallback(async () => {
@@ -152,7 +168,7 @@ export function SourcePanel({
       setPreview(null);
       return;
     }
-    setPreview({ aya: result.aya, suraNameUg: result.suraNameUg });
+    setPreview({ unit: result.unit, suraNameUg: result.suraNameUg });
   }, [sura, aya]);
 
   async function expand(hit: NoteSourceHit) {
@@ -192,20 +208,8 @@ export function SourcePanel({
     );
   }
 
-  async function insertAya(target: { sura: number; aya: number }, suraNameUg?: string) {
-    let verse = preview;
-    if (!verse || verse.aya.sura !== target.sura || verse.aya.aya !== target.aya) {
-      const result = await getAyaForNoteAction(target);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      verse = { aya: result.aya, suraNameUg: result.suraNameUg };
-    }
-    onInsert(
-      ayaInsertHtml(verse.aya, mode, suraNameUg ?? verse.suraNameUg),
-      "ئايەت قىستۇرۇلدى.",
-    );
+  function insertUnit(unit: VerseUnit, suraNameUg: string) {
+    onInsert(ayaInsertHtml(unit, mode, suraNameUg), "ئايەت قىستۇرۇلدى.");
   }
 
   return (
@@ -473,19 +477,19 @@ export function SourcePanel({
                   data-testid="aya-preview-box"
                 >
                   <p className="quran-face text-right text-[19px] leading-[2.1]" dir="rtl">
-                    <AyaText text={preview.aya.text_ar} query="" />
+                    <AyaText text={preview.unit.ayas[0].text_ar} query="" />
                   </p>
-                  {preview.aya.text_ug && mode !== "ar" && (
-                    <p className="mt-2 text-[13px] leading-7 text-ink2">{preview.aya.text_ug}</p>
+                  {preview.unit.text && mode !== "ar" && (
+                    <p className="mt-2 text-[13px] leading-7 text-ink2" data-testid="aya-preview-uyghur">
+                      {preview.unit.text} <span className="quran-aya-label">{preview.unit.label}</span>
+                    </p>
                   )}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <button
                       type="button"
                       className="hbtn"
                       data-testid="aya-insert"
-                      onClick={() =>
-                        void insertAya({ sura: preview.aya.sura, aya: preview.aya.aya })
-                      }
+                      onClick={() => insertUnit(preview.unit, preview.suraNameUg)}
                     >
                       <Icon name="plus" />
                       ئايەت قىستۇرۇش
@@ -493,7 +497,7 @@ export function SourcePanel({
                     <a
                       className="hbtn"
                       data-testid="aya-goto"
-                      href={ayaHref(preview.aya.sura, preview.aya.aya)}
+                      href={ayaHref(preview.unit.sura, preview.unit.ayas[0].aya)}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -546,32 +550,39 @@ export function SourcePanel({
 
                 {quranHits && quranHits.length > 0 && (
                   <ul className="mt-3 space-y-2.5" data-testid="quran-source-results">
-                    {quranHits.map((hit) => (
+                    {quranHits.map((card) => (
                       <li
-                        key={`${hit.sura}:${hit.aya}`}
+                        key={`${card.sura}:${card.from}`}
                         className="rounded-[var(--radius)] border border-bd bg-bg2 p-3"
+                        data-group={card.to > card.from ? `${card.from}-${card.to}` : undefined}
                       >
                         <p className="text-[12px] text-ink3">
-                          {hit.sura_name_ug} · {hit.sura}:{hit.aya}
+                          {card.sura_name_ug} · {card.sura}:
+                          {card.verses.map((verse) => verse.aya).join("، ")}{" "}
+                          <span className="quran-aya-label">{card.label}</span>
                         </p>
-                        <p className="quran-face mt-1 text-right text-[17px] leading-[2]" dir="rtl">
-                          <AyaText text={hit.text_ar} query={quranQuery.trim()} />
-                        </p>
+                        {card.verses.map((verse) => (
+                          <p
+                            key={verse.aya}
+                            className="quran-face mt-1 text-right text-[17px] leading-[2]"
+                            dir="rtl"
+                          >
+                            <AyaText text={verse.text_ar} query={quranQuery.trim()} />
+                          </p>
+                        ))}
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           <button
                             type="button"
                             className="hbtn"
                             data-testid="quran-source-insert"
-                            onClick={() =>
-                              void insertAya({ sura: hit.sura, aya: hit.aya }, hit.sura_name_ug)
-                            }
+                            onClick={() => insertUnit(cardUnit(card), card.sura_name_ug)}
                           >
                             <Icon name="plus" />
                             قىستۇرۇش
                           </button>
                           <a
                             className="hbtn"
-                            href={ayaHref(hit.sura, hit.aya)}
+                            href={ayaHref(card.sura, card.verses[0].aya)}
                             target="_blank"
                             rel="noreferrer"
                           >

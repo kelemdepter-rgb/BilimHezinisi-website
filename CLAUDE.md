@@ -714,6 +714,53 @@ here. The table is left in place because an applied migration is never edited ·
   specs clear `BATCH_PREFIX` around their own tests, and a draft swept
   mid-run is gone before the next viewport reads it.
 
+## Qur'an verse labels (PROMPT-53 — the desktop's 3.6, on the web)
+- **A verse marker is not translation text.** The QuranEnc file ends each
+  translation with «(4)»; `cleanUyghurTranslation` (`scripts/quran-text.mjs`,
+  byte-identical with the desktop's `scripts/seed-quran.js`) removes a
+  parenthesised group only when it holds digits and separators alone (`0-9`,
+  `٠-٩`, space, `-`, `–`, tatweel U+0640, `،`, `,`, ZWJ/ZWNJ) — never a
+  letter or a punctuation mark; parentheses with words stay (58:4).
+  `parseUyghurXml` keeps the raw text, markers included; the old rule dropped
+  «(4).» with its period, so 5,267 stored translations had lost their final
+  period besides the 433 that still showed a marker (dry run, 2026-10-29).
+  `tests/unit/quran-labels.test.ts` proves it over all 6,236 verses when
+  `migration-data/` is present and SKIPS (never passes silently) without it;
+  `tests/fixtures/quran-markers.json` holds every odd case and always runs.
+- **186 translation groups, as data, not a migration**:
+  `lib/quran/groups.generated.ts` (`[sura, from, to]`, written by
+  `node scripts/build-quran-groups.mjs` from the RAW XML — identical
+  consecutive texts joined with the range in their marker; committed). 185
+  identical runs (149×2, 24×3, 6×4, 3×5, 2×6, 1×7) plus 53:13–14, whose texts
+  differ (`GROUP_TEXT_AYA`: 53:13's, the longer, is the group's).
+- **The label** (`lib/quran/verse-label.ts`): «[7]» or «[4 _ 6]», exactly
+  `[` from ` _ ` to `]`, Western digits, U+005F with one space each side,
+  logical order, NO bidi isolation. Every translation carries it: the
+  mushaf, copy, the notebook insert and both Qur'an searches. A group's
+  translation is shown once, under its last verse; each earlier verse shows
+  the ≥ 44 px pointer «تەرجىمىسى 6-ئايەتنىڭ ئاستىدا [4 _ 6]», which scrolls to
+  that verse and selects it. A verse of a group copied or inserted alone
+  carries the group's translation; a run covering a group writes it once
+  (`units`). Search lists a group once (`groupQuranHits`, within the page the
+  RPC returned) with the Arabic of each verse found; the count is of cards.
+- **Only the Qur'an pages load the group table.** `lib/quran/copy.ts` and
+  `lib/notes/insert.ts` import the `VerseUnit` type alone; the notebook gets
+  its units and cards from `app/notes/source-actions.ts`. Measured: the
+  table's chunk is in `/quran/[sura]`'s first load only.
+- **The verse number is the Uthmani font's own medallion**: Arabic-Indic
+  digits drawn through `liga` (digits 0.27 em, medallion 0.89 em — measured on
+  the desktop; our `UthmanicHafs1-Ex1-Ver12.otf` is byte-identical), set at
+  1.75 em of the verse text (digits ≈ 0.47 of it), no circle, background or
+  border of ours. Never turn `liga` off there. In the translation-only mode it
+  is sized from the Arabic text size, not the smaller Uyghur. Still the
+  verse's ≥ 44 px action button, its state on `aria-expanded`.
+- **After re-seeding, bump `QURAN_DATA_VERSION`** in `lib/quran/data.ts`: the
+  sura and aya reads are cached 30 days and the version is in their keys.
+  The service worker needs nothing: documents are network-first and no
+  browser code reads `quran_ayas`. `seed-quran.mjs --dry-run` compares with
+  the database and fails if any stored Arabic differs; `--force` rewrites
+  `text_ug` only, writing each row's stored Arabic back as it was read.
+
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
 `npm run lint` + `npm run build` → Playwright smoke (mobile + desktop viewports) →

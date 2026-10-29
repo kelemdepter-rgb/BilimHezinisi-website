@@ -5,7 +5,7 @@ import { SearchField } from "@/components/search/search-field";
 import { AyaText } from "@/components/quran/aya-text";
 import { QuranSourceNote } from "@/components/quran/source-note";
 import { SuraList } from "@/components/quran/sura-list";
-import { getSuras, runQuranSearch, type QuranSearchOutcome } from "@/lib/quran/data";
+import { getSuras, quranCards, runQuranSearch, type QuranSearchOutcome } from "@/lib/quran/data";
 import { toArabicNumerals } from "@/lib/quran/format";
 import { SEARCH_BUSY_TEXT } from "@/lib/search/busy";
 import { SEARCH_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
@@ -50,6 +50,10 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
       ? Promise.resolve(BUSY_OUTCOME)
       : runQuranSearch({ query, limit: PAGE_SIZE, offset: (pageNo - 1) * PAGE_SIZE }),
   ]);
+
+  // One card per translation group: a group found three times shows its
+  // translation once, with its label, and each found verse's Arabic.
+  const cards = search.hits.length > 0 ? await quranCards(search.hits) : [];
 
   const pageHref = (next: number) =>
     `/quran?q=${encodeURIComponent(query)}${next > 1 ? `&p=${next}` : ""}`;
@@ -119,35 +123,42 @@ export default async function QuranPage({ searchParams }: PageProps<"/quran">) {
           ) : (
             <>
               <p className="mt-2 text-[13px] text-ink3" data-testid="quran-search-meta">
-                بۇ بەتتە {search.hits.length} ئايەت · {(search.elapsedMs / 1000).toFixed(2)} سېكۇنت
+                بۇ بەتتە {cards.length} نەتىجە · {(search.elapsedMs / 1000).toFixed(2)} سېكۇنت
               </p>
               <ul className="mt-3 space-y-2" data-testid="quran-search-results">
-                {search.hits.map((hit) => (
-                  <li key={`${hit.sura}-${hit.aya}`}>
+                {cards.map((card) => (
+                  <li key={`${card.sura}-${card.from}`}>
                     <Link
-                      href={`/quran/${hit.sura}?aya=${hit.aya}`}
+                      href={`/quran/${card.sura}?aya=${card.verses[0].aya}`}
                       data-testid="quran-search-result"
-                      data-sura={hit.sura}
-                      data-aya={hit.aya}
+                      data-sura={card.sura}
+                      data-aya={card.verses[0].aya}
+                      data-group={card.to > card.from ? `${card.from}-${card.to}` : undefined}
                       className="paper block p-3.5 hover:shadow-[var(--shadow-2)]"
                     >
                       <span className="flex flex-wrap items-baseline gap-x-2 text-[12.5px] font-bold text-am">
-                        <span className="quran-face text-[15px]">{hit.sura_name_ar}</span>
-                        <span>{hit.sura_name_ug}</span>
+                        <span className="quran-face text-[15px]">{card.sura_name_ar}</span>
+                        <span>{card.sura_name_ug}</span>
                         <span className="text-ink3">
-                          {toArabicNumerals(hit.aya)}-ئايەت
+                          {card.verses.map((verse) => toArabicNumerals(verse.aya)).join("، ")}-ئايەت
                         </span>
                       </span>
-                      {/* The full Uthmani verse, tashkil and all. */}
-                      <span
-                        className="quran-face mt-1.5 block text-[21px] leading-[2.1] text-ink"
-                        data-testid="quran-hit-arabic"
-                      >
-                        <AyaText text={hit.text_ar} query={query} />
-                      </span>
-                      {hit.text_ug && (
-                        <span className="mt-1 block text-[13.5px] leading-7 text-ink2">
-                          <AyaText text={hit.text_ug} query={query} />
+                      {/* The full Uthmani verse, tashkil and all — each verse
+                          of the group that matched, in order. */}
+                      {card.verses.map((verse) => (
+                        <span
+                          key={verse.aya}
+                          className="quran-face mt-1.5 block text-[21px] leading-[2.1] text-ink"
+                          data-testid="quran-hit-arabic"
+                        >
+                          <AyaText text={verse.text_ar} query={query} />
+                          {card.verses.length > 1 && <> {toArabicNumerals(verse.aya)}</>}
+                        </span>
+                      ))}
+                      {card.text_ug && (
+                        <span className="mt-1 block text-[13.5px] leading-7 text-ink2" data-testid="quran-hit-uyghur">
+                          <AyaText text={card.text_ug} query={query} />{" "}
+                          <span className="quran-aya-label">{card.label}</span>
                         </span>
                       )}
                     </Link>

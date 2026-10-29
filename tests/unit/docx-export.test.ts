@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import JSZip from "jszip";
 import { buildDocx, type DocxOptions } from "@/lib/notes/export-docx";
 import { ayaInsertHtml, sourceInsertHtml } from "@/lib/notes/insert";
+import { unitOf } from "@/lib/quran/verse-label";
 
 /**
  * A .docx is a zip of XML. "Valid" here means the archive really opens, the
@@ -392,7 +393,7 @@ describe("DOCX export uses the notebook's typography", () => {
   });
 
   it("an inserted verse keeps its Uthmani face, by the name Word finds it under", async () => {
-    const html = ayaInsertHtml({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, "both", "سىناق");
+    const html = ayaInsertHtml(unitOf({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, []), "both", "سىناق");
     const { documentXml } = await openDocx("ف", html, { typography });
     // «Uthmanic Hafs» is only this site's @font-face name; the font file's own is the stack's next.
     expect(documentXml).toContain('w:cs="KFGQPC Uthmanic Script HAFS"');
@@ -411,7 +412,7 @@ describe("DOCX export: sources and credit", () => {
     passage: "نەقىل قىلىنغان جۈملە.",
     query: "",
   });
-  const verse = ayaInsertHtml({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, "both", "سىناق");
+  const verse = ayaInsertHtml(unitOf({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, []), "both", "سىناق");
   const label = "«سىناق كىتاب» — ئويدۇرما ئاپتور — 3-بەت";
 
   it("with footnotes off, a citation stays an inline link, as before", async () => {
@@ -448,7 +449,7 @@ describe("DOCX export: sources and credit", () => {
     const marked = paragraphs.filter((paragraph) => paragraph.getElementsByTagNameNS(W, "footnoteReference").length > 0);
     expect(marked.map(paragraphText)).toEqual([
       "نەقىل قىلىنغان جۈملە.",
-      "﴿سىناق ئايىتى﴾«سىناق تەرجىمىسى»",
+      "﴿سىناق ئايىتى﴾«سىناق تەرجىمىسى» [2]",
     ]);
     for (const paragraph of marked) {
       const runs = Array.from(paragraph.getElementsByTagNameNS(W, "r"));

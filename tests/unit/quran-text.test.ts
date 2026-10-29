@@ -72,11 +72,27 @@ describe("stripBasmalaPrefix", () => {
 });
 
 describe("cleanUyghurTranslation", () => {
-  it("removes the tafsir citation markers the Saleh translation carries", () => {
-    expect(cleanUyghurTranslation("قىيامەت(4).")).toBe(
-      "قىيامەت.",
-    );
-    expect(cleanUyghurTranslation("a(2،3) b[12] c")).toBe("a b c");
+  it("removes the verse markers the Saleh translation carries, and nothing else", () => {
+    expect(cleanUyghurTranslation("قىيامەت(4).")).toBe("قىيامەت.");
+    expect(cleanUyghurTranslation("a(2،3) b c")).toBe("a b c");
+    // A range with a tatweel, a backwards hyphen range, a stray separator, a ZWJ.
+    expect(cleanUyghurTranslation("ھازىرلىدۇق(160ـ161).")).toBe("ھازىرلىدۇق.");
+    expect(cleanUyghurTranslation("ئۇقمايدۇ(56- 55)")).toBe("ئۇقمايدۇ");
+    expect(cleanUyghurTranslation("جۇدامەن،(54 ـ ).")).toBe("جۇدامەن،.");
+    expect(cleanUyghurTranslation("بىلىسىلەر»(\u200d88).")).toBe("بىلىسىلەر».");
+    // Square brackets are not the file's markers: they stay (desktop 3.6).
+    expect(cleanUyghurTranslation("a [12] b")).toBe("a [12] b");
+  });
+
+  it("keeps a space after a removed marker only before more words", () => {
+    expect(cleanUyghurTranslation("بەردۇق(146). ئۇ")).toBe("بەردۇق. ئۇ");
+    expect(cleanUyghurTranslation("بەردۇق(146)ئۇ")).toBe("بەردۇق ئۇ");
+    expect(cleanUyghurTranslation("(2)(زۇلھەججە) ئون")).toBe("(زۇلھەججە) ئون");
+  });
+
+  it("keeps parentheses that hold words, digits and all (58:4)", () => {
+    const words = "(60 مىسكىنگە بىر ۋاخ تاماق بېرىشى لازىم)";
+    expect(cleanUyghurTranslation(`ئادەم ${words}، بۇ(4).`)).toBe(`ئادەم ${words}، بۇ.`);
   });
 
   it("collapses whitespace left behind and trims", () => {
@@ -157,8 +173,8 @@ describe("parseUyghurXml", () => {
     expect(parsed[2][1]).toBe("ۇچ");
   });
 
-  it("unwraps CDATA and drops the trailing verse-number marker", () => {
-    expect(parseUyghurXml(xml)[1][1]).toBe("بىر");
+  it("unwraps CDATA and keeps the verse marker for the groups to read", () => {
+    expect(parseUyghurXml(xml)[1][1]).toBe("بىر(1).");
   });
 });
 

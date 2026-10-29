@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
@@ -8,7 +8,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { QuranSourceNote } from "@/components/quran/source-note";
 import { SuraList } from "@/components/quran/sura-list";
 import { addQuranBookmark, removeQuranBookmark } from "@/lib/quran/bookmarks";
-import { copyAyas } from "@/lib/quran/copy";
+import { copyUnits } from "@/lib/quran/copy";
 import { BASMALA, revelationLabel, showsBasmala, toArabicNumerals } from "@/lib/quran/format";
 import {
   ARABIC_LINE_HEIGHT,
@@ -24,6 +24,7 @@ import {
   subscribeTranslationMode,
 } from "@/lib/quran/settings-store";
 import type { Aya, Sura } from "@/lib/quran/types";
+import { groupOf, groupText, label, unitOf, type VerseRange } from "@/lib/quran/verse-label";
 import { MAX_FONT_SIZE, MIN_FONT_SIZE } from "@/lib/reader/settings";
 import {
   getSettingsServerSnapshot,
@@ -35,19 +36,29 @@ import type { Theme } from "@/lib/theme";
 
 const TOAST_MS = 2400;
 
+/** The medallion's size against the verse text (desktop 3.6, `.quran-aya-num`). */
+const AYA_NUMBER_EM = 1.75;
+
 /**
- * The medallion carrying the aya number. It doubles as the verse's action
+ * The aya number: Arabic-Indic digits in the Uthmani face, which the font
+ * itself draws as its verse-end medallion. It doubles as the verse's action
  * trigger, so the same reach exists without a pointer — and stops the click
  * from bubbling into the surrounding tap area, which would toggle twice.
+ *
+ * `size` (px) is given only where it sits in the translation (the `ug` mode):
+ * 1.75 em of the smaller Uyghur text would leave its digits too small to read,
+ * so there it is sized from the Arabic text, as in the other modes.
  */
 function AyaNumber({
   aya,
   expanded,
   onToggle,
+  size,
 }: {
   aya: number;
   expanded: boolean;
   onToggle: () => void;
+  size?: number;
 }) {
   return (
     <button
@@ -56,6 +67,7 @@ function AyaNumber({
       data-testid="aya-number"
       aria-expanded={expanded}
       aria-label={`${toArabicNumerals(aya)}-ئايەت — ھەرىكەتلەر`}
+      style={size ? { fontSize: `${size}px` } : undefined}
       onClick={(event) => {
         event.stopPropagation();
         onToggle();
@@ -65,6 +77,12 @@ function AyaNumber({
     </button>
   );
 }
+
+/** What a verse shows under its Arabic: its translation, or where it is. */
+type Translation =
+  | { kind: "text"; text: string; range: VerseRange }
+  | { kind: "pointer"; range: VerseRange }
+  | { kind: "none" };
 
 export function Mushaf({
   sura,
@@ -104,6 +122,23 @@ export function Mushaf({
   const drawerCloseRef = useRef<HTMLButtonElement>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * Verses the translator rendered as one sentence (lib/quran/verse-label.ts)
+   * show the translation once, under the last of them, ending «[4 _ 6]»; the
+   * earlier ones point to it. A verse on its own ends «[7]».
+   */
+  const translations = useMemo(() => {
+    const out = new Map<number, Translation>();
+    for (const aya of ayas) {
+      const range = groupOf(sura.number, aya.aya);
+      const text = range.to > range.from ? groupText(ayas, sura.number, range) : aya.text_ug;
+      if (!text) out.set(aya.aya, { kind: "none" });
+      else if (aya.aya < range.to) out.set(aya.aya, { kind: "pointer", range });
+      else out.set(aya.aya, { kind: "text", text, range });
+    }
+    return out;
+  }, [ayas, sura.number]);
+
   const previous = sura.number > 1 ? suras.find((s) => s.number === sura.number - 1) : undefined;
   const next = sura.number < 114 ? suras.find((s) => s.number === sura.number + 1) : undefined;
 
@@ -127,6 +162,21 @@ export function Mushaf({
     node.scrollIntoView({ behavior: "smooth", block: "start" });
     setSelected(ayaNumber);
     return true;
+  }, []);
+
+  /**
+   * From a verse of a group to the translation under its last verse. The
+   * translation itself is brought into view, not the verse's top: on a phone
+   * a long Arabic verse would leave it below the screen.
+   */
+  const goToTranslation = useCallback((ayaNumber: number) => {
+    const node = containerRef.current?.querySelector<HTMLElement>(`[data-aya="${ayaNumber}"]`);
+    if (!node) return;
+    const target = node.querySelector<HTMLElement>('[data-testid="aya-uyghur"]') ?? node;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    setSelected(ayaNumber);
+    // The keyboard follows the reader there: the target's own number.
+    node.querySelector<HTMLElement>('[data-testid="aya-number"]')?.focus({ preventScroll: true });
   }, []);
 
   /**
@@ -155,6 +205,15 @@ export function Mushaf({
     // restoration runs on load too. One attempt lands on the wrong offset, so
     // the target is brought back into view once the fonts are in and once more
     // after layout settles.
+    // Once the reader acts — a tap, a wheel, a key — the page is theirs: a
+    // late font must not pull them back from where they went (a group's
+    // pointer, the jump form).
+    const yield_ = () => {
+      cancelled = true;
+    };
+    const events = ["pointerdown", "wheel", "touchstart", "keydown"] as const;
+    for (const name of events) window.addEventListener(name, yield_, { passive: true, once: true });
+
     const frame = requestAnimationFrame(bring);
     const timer = setTimeout(bring, 400);
     void document.fonts?.ready.then(() => requestAnimationFrame(bring));
@@ -163,6 +222,7 @@ export function Mushaf({
       cancelled = true;
       cancelAnimationFrame(frame);
       clearTimeout(timer);
+      for (const name of events) window.removeEventListener(name, yield_);
     };
   }, [initialAya, sura.number]);
 
@@ -183,7 +243,8 @@ export function Mushaf({
   }, [drawerOpen]);
 
   async function copySelected(withTranslation: boolean, aya: Aya) {
-    const copied = await copyAyas([aya], withTranslation);
+    // A verse of a group carries the group's translation and label.
+    const copied = await copyUnits([unitOf(aya, ayas)], withTranslation);
     showToast(
       copied
         ? withTranslation
@@ -237,6 +298,7 @@ export function Mushaf({
   }
 
   const arabicSize = Math.round(settings.fontSize * ARABIC_SIZE_RATIO);
+  const numberInTranslation = Math.round(arabicSize * AYA_NUMBER_EM);
   const translationSize = Math.round(settings.fontSize * TRANSLATION_SIZE_RATIO);
   const nextMode = TRANSLATION_MODES[(TRANSLATION_MODES.indexOf(mode) + 1) % TRANSLATION_MODES.length];
 
@@ -338,6 +400,15 @@ export function Mushaf({
               {ayas.map((aya) => {
                 const isSelected = selected === aya.aya;
                 const bookmarked = bookmarks.has(aya.aya);
+                const translation = translations.get(aya.aya) ?? { kind: "none" as const };
+                const number = (size?: number) => (
+                  <AyaNumber
+                    aya={aya.aya}
+                    expanded={isSelected}
+                    onToggle={() => toggleSelected(aya.aya)}
+                    size={size}
+                  />
+                );
                 return (
                   <article
                     key={aya.aya}
@@ -363,14 +434,10 @@ export function Mushaf({
                           style={{ fontSize: `${arabicSize}px`, lineHeight: ARABIC_LINE_HEIGHT }}
                         >
                           {aya.text_ar}
-                          <AyaNumber
-                            aya={aya.aya}
-                            expanded={isSelected}
-                            onToggle={() => toggleSelected(aya.aya)}
-                          />
+                          {number()}
                         </p>
                       )}
-                      {mode !== "ar" && aya.text_ug && (
+                      {mode !== "ar" && translation.kind === "text" && (
                         <p
                           className="quran-aya-ug"
                           data-testid="aya-uyghur"
@@ -379,14 +446,30 @@ export function Mushaf({
                             lineHeight: settings.lineHeight,
                           }}
                         >
-                          {mode === "ug" && (
-                            <AyaNumber
-                              aya={aya.aya}
-                              expanded={isSelected}
-                              onToggle={() => toggleSelected(aya.aya)}
-                            />
-                          )}
-                          {aya.text_ug}
+                          {mode === "ug" && number(numberInTranslation)}
+                          {translation.text}{" "}
+                          <span className="quran-aya-label" data-testid="aya-label">
+                            {label(translation.range.from, translation.range.to)}
+                          </span>
+                        </p>
+                      )}
+                      {mode !== "ar" && translation.kind === "pointer" && (
+                        <p className="quran-aya-ug" data-testid="aya-uyghur-pointer">
+                          {mode === "ug" && number(numberInTranslation)}
+                          <button
+                            type="button"
+                            className="quran-aya-ug-ref"
+                            data-testid="aya-group-pointer"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              goToTranslation(translation.range.to);
+                            }}
+                          >
+                            تەرجىمىسى {translation.range.to}-ئايەتنىڭ ئاستىدا{" "}
+                            <span className="quran-aya-label">
+                              {label(translation.range.from, translation.range.to)}
+                            </span>
+                          </button>
                         </p>
                       )}
                     </div>
@@ -406,7 +489,7 @@ export function Mushaf({
                           type="button"
                           className="hbtn"
                           data-testid="copy-with-translation"
-                          disabled={!aya.text_ug}
+                          disabled={translation.kind === "none"}
                           onClick={() => void copySelected(true, aya)}
                         >
                           <Icon name="copy" />

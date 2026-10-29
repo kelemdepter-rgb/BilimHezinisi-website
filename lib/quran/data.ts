@@ -2,6 +2,7 @@ import { unstable_cache } from "next/cache";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { QURAN_TAG, cachedClient, throwIfUnavailable } from "@/lib/cache";
 import { isSearchBusy } from "@/lib/search/busy";
+import { groupQuranHits, type QuranCard } from "@/lib/quran/search-groups";
 import type { Aya, QuranHit, Sura } from "@/lib/quran/types";
 
 const SURA_COLUMNS = "number, name_ar, name_ug, name_translit, revelation, aya_count";
@@ -18,6 +19,14 @@ const SURA_COLUMNS = "number, name_ar, name_ug, name_translit, revelation, aya_c
  */
 const QURAN_CACHE_SECONDS = 60 * 60 * 24 * 30;
 
+/**
+ * Part of every Qur'an cache key. BUMP IT WHENEVER scripts/seed-quran.mjs IS
+ * RE-RUN against production: a deploy then reads the new rows instead of a
+ * month-old copy, without anyone having to call revalidateTag. History:
+ * 2 = PROMPT-53, verse markers out of text_ug (desktop 3.6 cleaner).
+ */
+const QURAN_DATA_VERSION = "2";
+
 /** All 114 suras, in mushaf order. */
 export const getSuras = unstable_cache(
   async (): Promise<Sura[]> => {
@@ -32,7 +41,7 @@ export const getSuras = unstable_cache(
     throwIfUnavailable("quran-suras", error);
     return (data as Sura[] | null) ?? [];
   },
-  ["quran-suras"],
+  ["quran-suras", QURAN_DATA_VERSION],
   { tags: [QURAN_TAG], revalidate: QURAN_CACHE_SECONDS },
 );
 
@@ -49,9 +58,33 @@ export const getAyas = unstable_cache(
     throwIfUnavailable("quran-ayas", error);
     return (data as Aya[] | null) ?? [];
   },
-  ["quran-ayas"],
+  ["quran-ayas", QURAN_DATA_VERSION],
   { tags: [QURAN_TAG], revalidate: QURAN_CACHE_SECONDS },
 );
+
+/**
+ * A page of search hits as cards, one per translation group, each with its
+ * group's translation. Only 53:14 found without 53:13 needs a text no hit
+ * carried; it comes from the cached sura, and a failed read keeps the hit's
+ * own text.
+ */
+export async function quranCards(hits: readonly QuranHit[]): Promise<QuranCard[]> {
+  const cards = groupQuranHits(hits);
+  await Promise.all(
+    cards.map(async (card) => {
+      if (card.needsTextOf === null) return;
+      const wanted = card.needsTextOf;
+      card.needsTextOf = null;
+      try {
+        const row = (await getAyas(card.sura)).find((aya) => aya.aya === wanted);
+        if (row && row.text_ug.length > card.text_ug.length) card.text_ug = row.text_ug;
+      } catch {
+        // The sura could not be read: the card keeps the text its hit carried.
+      }
+    }),
+  );
+  return cards;
+}
 
 /** The ayas of one sura the signed-in user has bookmarked. */
 export async function getSuraBookmarks(suraNumber: number): Promise<number[]> {

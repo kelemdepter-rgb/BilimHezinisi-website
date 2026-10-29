@@ -4,6 +4,7 @@ import { noteMarkdown } from "@/lib/notes/export-markdown";
 import { exportFileName, parseNote, takeCitations } from "@/lib/notes/export-shared";
 import { noteText } from "@/lib/notes/export-text";
 import { ayaInsertHtml, sourceInsertHtml } from "@/lib/notes/insert";
+import { unitOf } from "@/lib/quran/verse-label";
 import { QURAN_ATTRIBUTION } from "@/lib/notes/attribution";
 
 /**
@@ -95,7 +96,7 @@ const NOTE =
   "<ol><li>ئالدى</li><li>كېيىن</li></ol>" +
   sourceInsertHtml(CITATION) +
   "<table><tbody><tr><td>ئىسىم</td><td>سان</td></tr><tr><td>بىر</td><td>1</td></tr></tbody></table>" +
-  ayaInsertHtml({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, "both", "سىناق");
+  ayaInsertHtml(unitOf({ sura: 1, aya: 2, text_ar: "سىناق ئايىتى", text_ug: "سىناق تەرجىمىسى" }, []), "both", "سىناق");
 
 const BOOK = "http://localhost:3000/books/12/read?page=3";
 const VERSE = "http://localhost:3000/quran/1?aya=2";
@@ -129,7 +130,8 @@ describe("Markdown export", () => {
         "| بىر | 1 |",
         "",
         "﴿سىناق ئايىتى﴾  ",
-        "«سىناق تەرجىمىسى»",
+        // Turndown escapes the label's brackets; Markdown shows «[2]».
+        "«سىناق تەرجىمىسى» \\[2\\]",
         "",
         `[قۇرئان كەرىم — سىناق — 1:2](${VERSE})`,
         "",
@@ -165,7 +167,7 @@ describe("Markdown export", () => {
         "| بىر | 1 |",
         "",
         "﴿سىناق ئايىتى﴾  ",
-        "«سىناق تەرجىمىسى»[^2]",
+        "«سىناق تەرجىمىسى» \\[2\\][^2]",
         "",
         `[^1]: «سىناق كىتاب» — ئويدۇرما ئاپتور — 3-بەت — <${BOOK}>`,
         `[^2]: قۇرئان كەرىم — سىناق — 1:2 — <${VERSE}>`,
@@ -221,7 +223,7 @@ describe("text export", () => {
           "بىر | 1",
           "",
           "﴿سىناق ئايىتى﴾",
-          "«سىناق تەرجىمىسى»",
+          "«سىناق تەرجىمىسى» [2]",
           "",
           `قۇرئان كەرىم — سىناق — 1:2 (${VERSE})`,
           "",

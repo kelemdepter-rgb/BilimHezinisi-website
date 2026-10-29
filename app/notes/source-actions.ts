@@ -2,13 +2,15 @@
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { runBookSearch, type SearchHit } from "@/lib/search/books";
-import { runQuranSearch } from "@/lib/quran/data";
+import { quranCards, runQuranSearch } from "@/lib/quran/data";
+import type { QuranCard } from "@/lib/quran/search-groups";
+import { groupOf, unitOf, type VerseUnit } from "@/lib/quran/verse-label";
 import { findOccurrences } from "@/lib/search/occurrences";
 import { SEARCH_BUSY_TEXT } from "@/lib/search/busy";
 import { stripMarkdown } from "@/lib/books/strip-markdown";
 import { NOTE_SOURCE_RULE, callerKey, isRateLimited } from "@/lib/rate-limit";
 import { reportServerError } from "@/lib/server-log";
-import type { Aya, QuranHit } from "@/lib/quran/types";
+import type { Aya } from "@/lib/quran/types";
 
 /**
  * Searching the library, and the Qur'an, from inside a note.
@@ -47,10 +49,15 @@ export type NoteSourceResult =
   | { ok: true; hits: NoteSourceHit[]; tooCommon: boolean; partial: boolean }
   | { ok: false; error: string };
 
-export type NoteQuranResult = { ok: true; hits: QuranHit[] } | { ok: false; error: string };
+/** One card per translation group, as the Qur'an search page shows them. */
+export type NoteQuranResult = { ok: true; cards: QuranCard[] } | { ok: false; error: string };
 
+/**
+ * The verse as one unit: its Arabic, its group's translation and the label
+ * «[4 _ 6]» — worked out here, so the notebook never loads the group table.
+ */
 export type NoteAyaResult =
-  | { ok: true; aya: Aya; suraNameUg: string }
+  | { ok: true; unit: VerseUnit; suraNameUg: string }
   | { ok: false; error: string };
 
 export type NotePassageResult = { ok: true; passage: string } | { ok: false; error: string };
@@ -187,19 +194,24 @@ export async function searchQuranForNoteAction(input: { query: string }): Promis
     if (isRateLimited(caller.key, NOTE_SOURCE_RULE)) return { ok: false, error: MSG.tooFast };
 
     const query = input.query.trim().slice(0, MAX_QUERY);
-    if (!query) return { ok: true, hits: [] };
+    if (!query) return { ok: true, cards: [] };
 
     const outcome = await runQuranSearch({ query, limit: RESULT_LIMIT, offset: 0 });
     if (outcome.busy) return { ok: false, error: MSG.busy };
     if (outcome.failed) return { ok: false, error: MSG.failed };
-    return { ok: true, hits: outcome.hits };
+    return { ok: true, cards: await quranCards(outcome.hits) };
   } catch (error) {
     reportServerError("searchQuranForNoteAction", error);
     return { ok: false, error: MSG.failed };
   }
 }
 
-/** One verse by number, with the sura's Uyghur name for the reference line. */
+/**
+ * One verse by number, with its group's translation and the sura's Uyghur
+ * name for the reference line. The group's verses are read together (one
+ * request, at most seven rows) because 53:14's own text is a shortened copy
+ * of the group's.
+ */
 export async function getAyaForNoteAction(input: {
   sura: number;
   aya: number;
@@ -218,20 +230,24 @@ export async function getAyaForNoteAction(input: {
     const supabase = await createSupabaseServerClient();
     if (!supabase) return { ok: false, error: MSG.failed };
 
-    const [verse, suraRow] = await Promise.all([
+    const group = groupOf(sura, aya);
+    const [verses, suraRow] = await Promise.all([
       supabase
         .from("quran_ayas")
         .select("sura, aya, text_ar, text_ug")
         .eq("sura", sura)
-        .eq("aya", aya)
-        .maybeSingle(),
+        .gte("aya", group.from)
+        .lte("aya", group.to)
+        .order("aya", { ascending: true }),
       supabase.from("quran_suras").select("name_ug").eq("number", sura).maybeSingle(),
     ]);
 
-    if (verse.error || !verse.data) return { ok: false, error: "بۇ ئايەت تېپىلمىدى." };
+    const rows = (verses.data as Aya[] | null) ?? [];
+    const verse = rows.find((row) => row.aya === aya);
+    if (verses.error || !verse) return { ok: false, error: "بۇ ئايەت تېپىلمىدى." };
     return {
       ok: true,
-      aya: verse.data as Aya,
+      unit: unitOf(verse, rows),
       suraNameUg: ((suraRow.data as { name_ug: string } | null)?.name_ug ?? "").trim(),
     };
   } catch (error) {

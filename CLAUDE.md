@@ -434,13 +434,17 @@ here. The table is left in place because an applied migration is never edited ·
   quote of mixed text and blocks — a shape none of the three engines makes
   by typing; it arrives by pasting — leaves an empty `<blockquote>`.
 - **The phone header is two rows, ≤ 112 px** (below 640 px, menus, find
-  bar and spell step row closed): back · title · save state · spellcheck · AI, then undo ·
-  redo · bold · block style · list · «مەنبە قىستۇرۇش» · «باشقا
-  ئىقتىدارلار». Italic, underline and find join the tool row from 640 px up
-  and sit under «باشقا ئىقتىدارلار» below it (`useWideToolbar`) — one button
-  in one place, never a copy in each. Undo and redo never go into the
-  overflow; the back link wears `arrow-right`, never `undo`; no UI text
-  names Ctrl+Z.
+  bar and spell step row closed): home · «قايتىش» · title · save state ·
+  spellcheck · AI, then undo · redo · bold · block style · list · «مەنبە
+  قىستۇرۇش» · «باشقا ئىقتىدارلار». Italic, underline and find join the tool
+  row from 640 px up and sit under «باشقا ئىقتىدارلار» below it
+  (`useWideToolbar`) — one button in one place, never a copy in each. Undo
+  and redo never go into the overflow; home comes first, and the back
+  control is the boxed word «قايتىش» with no icon at all (PROMPT-54), so it
+  can never be taken for undo; no UI text names Ctrl+Z. The save label may
+  take at most 30 % of the title row below 640 px (38 % above), so the title
+  keeps ≥ 80 px at 360 beside the longest label; «ساقلانمىدى — … قايتا
+  سىنايدۇ» then wraps to three lines and the header is 111 px while it shows.
 - **The spell popup follows its word** on scroll, resize and visualViewport
   changes, at most once a frame, and closes only when the word leaves the
   visible part of the page (below the toolbar, inside the visual viewport),
@@ -516,7 +520,7 @@ here. The table is left in place because an applied migration is never edited ·
   `uyghurSortKey` (ئ first, then the alphabet) — never code-point order.
 - **Untouched new notes go**: leaving inside the app asks
   `discard_note_if_empty` (default title, no text, `updated_at =
-  created_at`; the server decides) — the back arrow waits for it, any other
+  created_at`; the server decides) — «قايتىش» waits for it, any other
   exit asks once React has really unmounted (never from an effect cleanup
   directly: development runs every cleanup once after mounting), never while
   another tab holds the note's Web Lock, and **never on pagehide** (it fires
@@ -760,6 +764,53 @@ here. The table is left in place because an applied migration is never edited ·
   browser code reads `quran_ayas`. `seed-quran.mjs --dry-run` compares with
   the database and fails if any stored Arabic differs; `--force` rewrites
   `text_ug` only, writing each row's stored Arabic back as it was read.
+
+## Reading-surface toolbars (PROMPT-54 — home, and «قايتىش» as a word)
+- **Four surfaces have no site header**: the reader (`/books/[id]/read`), a
+  sura (`/quran/[sura]`), a note and a trashed note (`/notes/[id]`) —
+  `bare` in `components/app-shell.tsx`. An installed PWA has no browser
+  back, so each toolbar carries its own way home. The site header is not
+  touched by any of this.
+- **Home is always the first control** — the right edge in RTL — on all
+  four: `components/home-link.tsx`, `data-testid="home-link"`, a `Link` to
+  `/` named and titled «باش بەت», with `LinkPending` inside. Below 640 px
+  the brand mark alone (30 px, the site header's rounding, ring and
+  shadow) in a borderless 44 × 44 box; from 640 px an `.hbtn` with a 20 px
+  mark and the words. The image is requested at the header's 30 px, so it
+  is the same file and the same cached copy offline.
+- **Back is the word «قايتىش» in a box, never an icon** — one class,
+  `.back-btn` in app/globals.css (`.hbtn`'s box; 10 px a side below
+  640 px ≈ 53 px, 14 px above; ≥ 44 px high). Destinations are unchanged:
+  reader `router.back()` from a search, otherwise `/books/{id}`; sura
+  `/quran`; note `/notes` (with the untouched-note discard); trashed note
+  `/notes/trash`. Its accessible name contains the word (WCAG 2.5.3) and
+  is its `title` too. The undo glyph is for undo alone. Order from the
+  right: home · «قايتىش» · everything else.
+- **One word, one action**: the reader's bottom-bar `link-return` reads
+  «ئۇلانمىغا قايتىش» from 640 px (arrow only below), named the same,
+  titled «ئۇلانمىنى باسقان ئورۇنغا قايتىش» — never a second bare «قايتىش».
+- **Phones (below 640 px): two rows on the reader and the sura**, ≤ 112 px
+  with the find row and the annotation form closed. Row 1: home ·
+  «قايتىش» · (sura list) · title · (the reader's match navigation). Row 2:
+  the tools, spread across the width. From 640 px up, one row. The sura
+  uses two groups that are `sm:contents` above 640 px; the reader uses
+  `order` (`TOOL` = `max-sm:order-2`, and a `basis-full` line break), so
+  its markup keeps the wide order — the match navigation between the theme
+  and find — and the keyboard walks it as it is seen there. No control is
+  rendered twice; every `data-testid` resolves to one element.
+- **Leaving a note through home is leaving through «قايتىش»**: the
+  editor's unmount cleanup detaches the save loop (which sends what is
+  unsent) and discards an untouched new note — nothing is added for home.
+  `tests/toolbar-home-back.spec.ts` proves both.
+- **Measured** (local, signed out, UKIJ Ekran 13 px): «قايتىش» in `.hbtn`
+  61 px (53 at 10 px), «باش بەت» 69 px. Title width at 360 / 375 / 390 px —
+  reader 56 / 71 / 86 → 239 / 254 / 269; sura 55 / 70 / 85 → 191 / 206 /
+  221. Phone toolbars: reader 105 px, sura 109 px (were 61, one crowded
+  row). Floors the spec holds at 360 × 740: reader signed in with AI and a
+  term ≥ 80 px of title with the tools on one line; sura ≥ 160 px; note
+  title field ≥ 72 px with AI and «ساقلاندى». At 768 × 1024 and 1280 one
+  row for every persona; at 640 only the fullest reader (signed in, AI, a
+  term) may wrap — its last tool takes a second line.
 
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +

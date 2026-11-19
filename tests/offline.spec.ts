@@ -178,6 +178,35 @@ test.describe("with the network off", () => {
     await context.setOffline(false);
   });
 
+  test("home from the reader lands on the site's own page, never a browser error", async ({
+    page,
+    context,
+  }) => {
+    await page.goto("/");
+    await serviceWorkerReady(page);
+    await page.goto(`/books/${seededBookId()}/read`);
+    await expect(page.getByTestId("reader-page").first()).toBeVisible();
+
+    await context.setOffline(true);
+    await page.getByTestId("home-link").click();
+
+    // The library as it was stored, or the offline page — ours either way,
+    // in Uyghur; a browser's own error page is neither. Offline, the router
+    // moves the address first and then loads the page in full, so the page
+    // is asserted once it has landed — the reader has neither of these.
+    await expect(
+      page
+        .getByTestId("offline-heading")
+        .or(page.getByRole("link", { name: "باش بەت — بىلىم خەزىنىسى" }))
+        .first(),
+    ).toBeVisible({ timeout: 20_000 });
+    await page.waitForLoadState("load");
+    expect(new URL(page.url()).pathname).toBe("/");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ug");
+    await assertNoHorizontalOverflow(page);
+    await context.setOffline(false);
+  });
+
   test("the reader's own type size and theme still apply", async ({ page, context }) => {
     const bookId = seededBookId();
     await page.goto("/");

@@ -139,7 +139,7 @@ test.describe("reader (from the top of the book)", () => {
     await scrollDownAndBackUp(page);
 
     // Every toolbar control must still be visible AND the topmost hit target.
-    for (const testId of ["reader-back", "font-decrease", "font-increase", "find-toggle", "panel-toggle"]) {
+    for (const testId of ["home-link", "reader-back", "font-decrease", "font-increase", "find-toggle", "panel-toggle"]) {
       await expect(page.getByTestId(testId), `${testId} must stay visible`).toBeVisible();
       expect(await topMostTestIdAt(page, testId), `${testId} must not be covered`).toBe(testId);
     }

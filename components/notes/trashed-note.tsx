@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useSyncExternalStore, useTransition } from "react";
 import Link from "next/link";
+import { HomeLink } from "@/components/home-link";
 import { Icon } from "@/components/icons";
 import { restoreNoteAction } from "@/app/notes/actions";
 import { IN_TRASH } from "@/lib/notes/list-protocol";
@@ -52,8 +53,15 @@ export function TrashedNoteView({ note }: { note: NoteDocument }) {
         className="grain safe-top safe-x sticky top-0 z-30 border-b border-bd bg-bg2/95 backdrop-blur print:hidden"
       >
         <div className="mx-auto flex w-full max-w-4xl items-center gap-1 px-2 py-1.5 sm:px-4">
-          <Link href="/notes/trash" className="ibtn" aria-label="ئەخلەت ساندۇقى" data-testid="notes-back">
-            <Icon name="arrow-right" className="ic-lg" />
+          <HomeLink />
+          <Link
+            href="/notes/trash"
+            className="back-btn"
+            aria-label="ئەخلەت ساندۇقىغا قايتىش"
+            title="ئەخلەت ساندۇقىغا قايتىش"
+            data-testid="notes-back"
+          >
+            قايتىش
           </Link>
           <h1 className="min-w-0 flex-1 truncate px-1.5 text-[15px] font-bold text-ink" data-testid="note-title">
             {note.title}

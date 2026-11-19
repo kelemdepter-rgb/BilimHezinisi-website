@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { HomeLink } from "@/components/home-link";
 import { Icon } from "@/components/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { QuranSourceNote } from "@/components/quran/source-note";
@@ -310,58 +311,72 @@ export function Mushaf({
         data-testid="quran-toolbar"
         className="grain safe-top safe-x sticky top-0 z-30 border-b border-bd bg-bg2/95 backdrop-blur print:hidden"
       >
+        {/* Two rows below 640 px (PROMPT-54): where am I and how do I leave,
+            then the tools spread across the width. One row from 640 px up,
+            where both groups dissolve into it (sm:contents). */}
         <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-1 px-2 py-2 sm:px-4">
-          <Link href="/quran" className="ibtn" aria-label="سۈرە تىزىملىكىگە قايتىش" data-testid="quran-back">
-            <Icon name="undo" className="ic-lg" />
-          </Link>
-          <button
-            type="button"
-            className="ibtn lg:hidden"
-            data-testid="sura-drawer-open"
-            aria-label="سۈرە تاللاش"
-            aria-expanded={drawerOpen}
-            onClick={() => setDrawerOpen(true)}
-          >
-            <Icon name="list" className="ic-lg" />
-          </button>
+          <div className="flex w-full min-w-0 items-center gap-1 sm:contents">
+            <HomeLink />
+            <Link
+              href="/quran"
+              className="back-btn"
+              aria-label="سۈرە تىزىملىكىگە قايتىش"
+              title="سۈرە تىزىملىكىگە قايتىش"
+              data-testid="quran-back"
+            >
+              قايتىش
+            </Link>
+            <button
+              type="button"
+              className="ibtn lg:hidden"
+              data-testid="sura-drawer-open"
+              aria-label="سۈرە تاللاش"
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerOpen(true)}
+            >
+              <Icon name="list" className="ic-lg" />
+            </button>
 
-          <h1 className="min-w-0 flex-1 truncate text-[14px] font-bold">
-            <span className="quran-face text-[18px]">{sura.name_ar}</span>
-            <span className="ms-2 text-ink2">{sura.name_ug}</span>
-          </h1>
+            <h1 className="min-w-0 flex-1 truncate text-[14px] font-bold">
+              <span className="quran-face text-[18px]">{sura.name_ar}</span>
+              <span className="ms-2 text-ink2">{sura.name_ug}</span>
+            </h1>
+          </div>
 
-          <button
-            type="button"
-            className="ibtn"
-            data-testid="quran-font-decrease"
-            aria-label="خەت چوڭلۇقىنى كىچىكلىتىش"
-            disabled={settings.fontSize <= MIN_FONT_SIZE}
-            onClick={() => updateSettingsStore({ fontSize: settings.fontSize - 2 })}
-          >
-            <span className="text-[15px] font-bold">A−</span>
-          </button>
-          <button
-            type="button"
-            className="ibtn"
-            data-testid="quran-font-increase"
-            aria-label="خەت چوڭلۇقىنى چوڭايتىش"
-            disabled={settings.fontSize >= MAX_FONT_SIZE}
-            onClick={() => updateSettingsStore({ fontSize: settings.fontSize + 2 })}
-          >
-            <span className="text-[15px] font-bold">A+</span>
-          </button>
-          <ThemeToggle initial={theme} />
-          <button
-            type="button"
-            className="hbtn"
-            data-testid="translation-toggle"
-            title={TRANSLATION_LABELS[nextMode]}
-            aria-label={`كۆرسىتىش ھالىتى (ھازىر: ${TRANSLATION_LABELS[mode]})`}
-            onClick={() => setTranslationMode(nextMode)}
-          >
-            <Icon name="languages" />
-            <span className="hidden sm:inline">{TRANSLATION_LABELS[mode]}</span>
-          </button>
+          <div className="flex w-full items-center justify-between sm:contents">
+            <button
+              type="button"
+              className="ibtn"
+              data-testid="quran-font-decrease"
+              aria-label="خەت چوڭلۇقىنى كىچىكلىتىش"
+              disabled={settings.fontSize <= MIN_FONT_SIZE}
+              onClick={() => updateSettingsStore({ fontSize: settings.fontSize - 2 })}
+            >
+              <span className="text-[15px] font-bold">A−</span>
+            </button>
+            <button
+              type="button"
+              className="ibtn"
+              data-testid="quran-font-increase"
+              aria-label="خەت چوڭلۇقىنى چوڭايتىش"
+              disabled={settings.fontSize >= MAX_FONT_SIZE}
+              onClick={() => updateSettingsStore({ fontSize: settings.fontSize + 2 })}
+            >
+              <span className="text-[15px] font-bold">A+</span>
+            </button>
+            <ThemeToggle initial={theme} />
+            <button
+              type="button"
+              className="hbtn"
+              data-testid="translation-toggle"
+              title={TRANSLATION_LABELS[nextMode]}
+              aria-label={`كۆرسىتىش ھالىتى (ھازىر: ${TRANSLATION_LABELS[mode]})`}
+              onClick={() => setTranslationMode(nextMode)}
+            >
+              <Icon name="languages" />
+              <span className="hidden sm:inline">{TRANSLATION_LABELS[mode]}</span>
+            </button>
+          </div>
         </div>
       </header>
 

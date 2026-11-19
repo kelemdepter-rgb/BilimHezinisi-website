@@ -3,6 +3,7 @@
 import { Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { HomeLink } from "@/components/home-link";
 import { Icon, type IconName } from "@/components/icons";
 import {
   createNoteAction,
@@ -104,7 +105,7 @@ const CHOICE_FAILED =
 const NOTICE = "mt-3 rounded-[var(--radius)] px-3.5 py-2.5 text-[13px] leading-6";
 /** A conflict choice that finds the note in one of these stops there, and says why. */
 const BLOCKING_CODES: ReadonlySet<SaveCode> = new Set(["not_found", "needs_account", "in_trash"]);
-/** The back arrow waits at most this long for an untouched note to be discarded. */
+/** «قايتىش» waits at most this long for an untouched note to be discarded. */
 const DISCARD_WAIT_MS = 3000;
 const PERSONAL_FULL = `شەخسىي لۇغەتتە ${MAX_PERSONAL_WORDS.toLocaleString("en-US")} سۆز بار — ئارتۇقىنى قوشقىلى بولمايدۇ. «باشقا ئىقتىدارلار» → «شەخسىي لۇغەت» تىن كېرەكسىزلىرىنى ئۆچۈرۈڭ.`;
 const IGNORE_FULL = `بۇ خاتىرىدە ${MAX_IGNORED_PER_NOTE} سۆزگە سەل قارالدى — ئارتۇقىنى قوشقىلى بولمايدۇ. بۇ سۆزنى «لۇغەتكە قوش» ئارقىلىق قوبۇل قىلسىڭىز بولىدۇ.`;
@@ -361,7 +362,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
   }, [note.id, session, untouched]);
   /** The latest discardIfUntouched, for the effect's cleanup. */
   const discardRef = useRef(discardIfUntouched);
-  /** Leaving was handled by the back arrow, which waited for the discard. */
+  /** Leaving was handled by «قايتىش», which waited for the discard. */
   const leftByArrow = useRef(false);
   /** A discard asked for by the effect's cleanup, cancelled if the effect runs again. */
   const pendingDiscard = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1137,13 +1138,18 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
           row up here is a row less to write in.
         */}
         <div className="mx-auto flex w-full max-w-4xl items-center gap-1 px-2 py-1.5 sm:px-4">
-          {/* An arrow to the start of the line — away from this note, in RTL
-              — and never the undo icon: a writer who wants to undo must not
-              leave the note by mistake (N11). */}
+          {/* Home first, then the way back as a word in a box — no icon, so it
+              can never be taken for undo, and a writer who wants to undo
+              cannot leave the note by mistake (N11, PROMPT-54). Leaving
+              through home is as safe as leaving through «قايتىش»: the
+              effect's cleanup above flushes the save and discards an
+              untouched note for both. */}
+          <HomeLink />
           <Link
             href="/notes"
-            className="ibtn"
-            aria-label="خاتىرىلەر تىزىملىكى"
+            className="back-btn"
+            aria-label="خاتىرىلەر تىزىملىكىگە قايتىش"
+            title="خاتىرىلەر تىزىملىكىگە قايتىش"
             data-testid="notes-back"
             onClick={(event) => {
               // An untouched note goes first, so the list it returns to is
@@ -1156,7 +1162,7 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               void Promise.race([discardIfUntouched(), waited]).finally(() => router.push("/notes"));
             }}
           >
-            <Icon name="arrow-right" className="ic-lg" />
+            قايتىش
           </Link>
           <input
             autoComplete="off"
@@ -1175,10 +1181,12 @@ export function NoteEditor({ note }: { note: NoteDocument }) {
               noteChanged();
             }}
           />
-          {/* A long state wraps onto a second line rather than squeezing the
-              title away on a 360 px phone. */}
+          {/* A long state wraps rather than squeezing the title away. Below
+              640 px it may take at most 30 % of the row: home and «قايتىش»
+              share it since PROMPT-54, and at 38 % the longest label left a
+              360 px phone's title 56 px; at 30 % it keeps 84. */}
           <span
-            className="max-w-[38%] shrink-0 px-1 text-[12px] leading-4 text-ink3"
+            className="max-w-[30%] shrink-0 px-1 text-[12px] leading-4 text-ink3 sm:max-w-[38%]"
             data-testid="save-state"
             role="status"
           >

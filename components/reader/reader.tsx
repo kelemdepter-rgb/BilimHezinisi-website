@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@/components/icons";
 import { DownloadBook } from "@/components/books/download-book";
+import { HomeLink } from "@/components/home-link";
 import { ShareButton } from "@/components/books/share-button";
 import { QuoteCard } from "@/components/reader/quote-card";
 import { KeyboardControl } from "@/components/search/uyghur-keyboard";
@@ -74,6 +75,8 @@ const PAGE_FAILED = "بۇ بەتنى ئاچقىلى بولمىدى.";
 const FETCH_AHEAD_PX = 1200;
 /** What the reader is told when a bookmark or a note could not be saved. */
 const SAVE_FAILED = { bookmark: "خەتكۈچ قوشۇلمىدى.", note: "خاتىرە قوشۇلمىدى." } as const;
+/** A toolbar tool: in the second row below 640 px, after the line break. */
+const TOOL = "max-sm:order-2";
 
 /**
  * ?page= as the address bar has it, for a document that came from the cache.
@@ -831,7 +834,16 @@ export function Reader({
         data-testid="reader-toolbar"
         className="grain safe-top safe-x sticky top-0 z-30 border-b border-bd bg-bg2/95 backdrop-blur print:hidden"
       >
-        <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-1 px-2 py-2 sm:px-4">
+        {/*
+          Two rows below 640 px (PROMPT-54): where am I and how do I leave —
+          home, «قايتىش», the title and, from a search, the match navigation —
+          then the tools, spread across the width. From 640 px up, one row in
+          the order of the markup. The phone rows come from `order` alone
+          (TOOL and the line break), so the markup keeps the wide screen's
+          order and the keyboard walks it the way it is seen there.
+        */}
+        <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center gap-x-1 gap-y-0 px-2 py-2 max-sm:justify-between sm:gap-y-1 sm:px-4">
+          <HomeLink />
           {/* Someone who came from a search wants the results back, not this
               book's cover page — they are working through the list. Going back
               through history restores the scroll position and the already
@@ -840,30 +852,34 @@ export function Reader({
           {cameFromSearch ? (
             <button
               type="button"
-              className="ibtn"
+              className="back-btn"
               aria-label="ئىزدەش نەتىجىسىگە قايتىش"
+              title="ئىزدەش نەتىجىسىگە قايتىش"
               data-testid="reader-back"
               onClick={() => router.back()}
             >
-              <Icon name="undo" className="ic-lg" />
+              قايتىش
             </button>
           ) : (
             <Link
               href={`/books/${bookId}`}
-              className="ibtn"
+              className="back-btn"
               aria-label="كىتاب بېتىگە قايتىش"
+              title="كىتاب بېتىگە قايتىش"
               data-testid="reader-back"
             >
-              <Icon name="undo" className="ic-lg" />
+              قايتىش
             </Link>
           )}
           <h1 className="min-w-0 flex-1 truncate text-[14px] font-bold">
             {title}
           </h1>
+          {/* The end of the first row on a phone; nothing on a wider screen. */}
+          <span aria-hidden className="basis-full max-sm:order-1 sm:hidden" />
 
           <button
             type="button"
-            className="ibtn"
+            className={`ibtn ${TOOL}`}
             data-testid="font-decrease"
             aria-label="خەت چوڭلۇقىنى كىچىكلىتىش"
             disabled={settings.fontSize <= MIN_FONT_SIZE}
@@ -873,7 +889,7 @@ export function Reader({
           </button>
           <button
             type="button"
-            className="ibtn"
+            className={`ibtn ${TOOL}`}
             data-testid="font-increase"
             aria-label="خەت چوڭلۇقىنى چوڭايتىش"
             disabled={settings.fontSize >= MAX_FONT_SIZE}
@@ -881,11 +897,14 @@ export function Reader({
           >
             <span className="text-[15px] font-bold">A+</span>
           </button>
-          <ThemeToggle initial={theme} />
+          <span className={`flex ${TOOL}`}>
+            <ThemeToggle initial={theme} />
+          </span>
 
           {/* Step through the term's occurrences without opening anything —
               this is the control that was missing when a reader arrived here
-              from the search page. */}
+              from the search page. On a phone it stays in the first row,
+              beside the title it belongs to. */}
           {occurrences.length > 0 && (
             <span
               className="flex shrink-0 items-center"
@@ -933,7 +952,7 @@ export function Reader({
 
           <button
             type="button"
-            className="ibtn"
+            className={`ibtn ${TOOL}`}
             data-testid="find-toggle"
             aria-label="كىتاب ئىچىدىن ئىزدەش"
             aria-expanded={findOpen}
@@ -945,7 +964,7 @@ export function Reader({
             <button
               type="button"
               ref={bookmarkButtonRef}
-              className="ibtn"
+              className={`ibtn ${TOOL}`}
               data-testid="add-bookmark"
               aria-label="خەتكۈچ قوشۇش"
               aria-expanded={draft?.kind === "bookmark"}
@@ -957,7 +976,7 @@ export function Reader({
           {aiAvailable && (
             <button
               type="button"
-              className="ibtn"
+              className={`ibtn ${TOOL}`}
               data-testid="ai-toggle"
               aria-label="سۈنئىي ئىدراك ياردەمچىسى"
               aria-expanded={aiOpen}
@@ -968,7 +987,7 @@ export function Reader({
           )}
           <button
             type="button"
-            className="ibtn"
+            className={`ibtn ${TOOL}`}
             data-testid="panel-toggle"
             aria-label="خەتكۈچ ۋە خاتىرىلەر"
             aria-expanded={panelOpen}
@@ -1153,12 +1172,14 @@ export function Reader({
               type="button"
               className="hbtn"
               data-testid="link-return"
-              aria-label="ئۇلانمىنى باسقان ئورۇنغا قايتىش"
+              aria-label="ئۇلانمىغا قايتىش"
+              title="ئۇلانمىنى باسقان ئورۇنغا قايتىش"
               onClick={returnToLink}
             >
-              {/* Back, the way the notebook's back link points in RTL. */}
+              {/* Not the bare «قايتىش» of the toolbar above, which leaves the
+                  book: one word, one action (PROMPT-54). */}
               <Icon name="arrow-right" />
-              <span className="hidden sm:inline">قايتىش</span>
+              <span className="hidden sm:inline">ئۇلانمىغا قايتىش</span>
             </button>
           )}
           <button

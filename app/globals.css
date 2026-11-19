@@ -218,8 +218,11 @@
   .ic.ic-sm { width: 13px; height: 13px; }
   .ic.ic-lg { width: 22px; height: 22px; }
 
-  /* ── Shared controls, ported from the desktop header/button styles ── */
-  .hbtn {
+  /* ── Shared controls, ported from the desktop header/button styles ──
+     .back-btn is the way out of a reading surface (PROMPT-54): the word
+     «قايتىش» in .hbtn's own box, never an icon. */
+  .hbtn,
+  .back-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -237,7 +240,14 @@
     white-space: nowrap;
     text-decoration: none;
   }
-  .hbtn:hover { background: var(--bg2); color: var(--text); }
+  .hbtn:hover,
+  .back-btn:hover { background: var(--bg2); color: var(--text); }
+  /* On a phone it shares its row with home and the title: 10 px a side
+     (≈ 53 px for the word) instead of 14, never less than 44 px tall. */
+  .back-btn { flex-shrink: 0; padding-inline: 10px; }
+  @media (width >= 40rem) {
+    .back-btn { padding-inline: 14px; }
+  }
   .hbtn.on { background: var(--am); color: var(--at); border-color: var(--am); font-weight: 600; }
   /* Square ghost icon button (≥44px touch target) */
   .ibtn {

@@ -256,6 +256,7 @@ test.describe("mushaf", () => {
     await scrollDownAndBackUp(page);
 
     for (const testId of [
+      "home-link",
       "quran-back",
       "quran-font-decrease",
       "quran-font-increase",

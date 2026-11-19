@@ -325,13 +325,12 @@ test.describe("undo in reach", () => {
   test("the back link and undo look different, and both work", async ({ page }) => {
     const path = await newNote(page);
     try {
-      const icon = (testId: string) => page.getByTestId(testId).locator("use").getAttribute("href");
-      const back = await icon("notes-back");
-      const undo = await icon("format-undo");
-      expect(back).toBeTruthy();
-      expect(undo).toBeTruthy();
-      expect(back, "back must not wear the undo icon").not.toBe(undo);
-      await expect(page.getByTestId("notes-back")).toHaveAttribute("aria-label", "خاتىرىلەر تىزىملىكى");
+      // Back is a word in a box, with no icon at all (PROMPT-54); undo keeps its icon.
+      const back = page.getByTestId("notes-back");
+      await expect(back).toHaveText("قايتىش");
+      await expect(back.locator("svg")).toHaveCount(0);
+      await expect(back).toHaveAccessibleName("خاتىرىلەر تىزىملىكىگە قايتىش");
+      await expect(page.getByTestId("format-undo").locator("use")).toHaveAttribute("href", /#i-undo$/);
 
       const body = page.getByTestId("note-body");
       await body.click();

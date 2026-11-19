@@ -188,7 +188,12 @@ test.describe("table of contents", () => {
 
     const back = page.getByTestId("link-return");
     await expect(back).toBeVisible();
-    await expect(back).toHaveAccessibleName("ئۇلانمىنى باسقان ئورۇنغا قايتىش");
+    // Not the toolbar's bare «قايتىش», which leaves the book (PROMPT-54).
+    await expect(back).toHaveAccessibleName("ئۇلانمىغا قايتىش");
+    await expect(back).toHaveAttribute("title", "ئۇلانمىنى باسقان ئورۇنغا قايتىش");
+    // What is on screen (innerText): the words from 640 px up, the arrow alone below.
+    const shown = (page.viewportSize()?.width ?? 0) >= 640 ? "ئۇلانمىغا قايتىش" : "";
+    await expect(back).toHaveText(shown, { useInnerText: true });
 
     // Every control in the bottom bar is there and is what a tap would hit,
     // after a scroll to the end and back.

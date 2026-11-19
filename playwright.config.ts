@@ -353,6 +353,26 @@ export default defineConfig({
       },
       {
         /**
+         * Home and «قايتىش» on the reading surfaces that have no site header
+         * (PROMPT-54): the reader signed out and in, a sura, a note and a
+         * trashed note — where each goes, nothing lost leaving a note through
+         * home, and the phone toolbars' two rows. Signed in by default; the
+         * signed-out cases clear the state themselves.
+         */
+        name: `toolbar-${viewport.name}`,
+        testMatch: /[\\/]toolbar-home-back\.spec\.ts$/,
+        dependencies: ["setup"],
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+          storageState: STAFF_STATE_PATH,
+        },
+      },
+      {
+        /**
          * «ئىلگىرىكى نۇسخىلار» (PROMPT-46): earlier versions of a note kept
          * in this browser's IndexedDB — putting one back, the version a
          * replace-all leaves, a browser that refuses the store, signing out

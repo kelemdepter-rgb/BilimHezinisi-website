@@ -18,9 +18,10 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
     name: SITE_NAME,
-    // Home screens truncate at roughly 12 characters; the full name would be
-    // cut mid-word, and «خەزىنە» on its own is the half that identifies it.
-    short_name: "بىلىم خەزىنە",
+    // The full name under the home-screen icon: the owner's decision of
+    // 2026-11-19 (PROMPT-55), replacing the 12-character «بىلىم خەزىنە».
+    // Some launchers have room for less and may still cut it short.
+    short_name: SITE_NAME,
     description: SITE_DESCRIPTION,
     lang: "ug",
     dir: "rtl",

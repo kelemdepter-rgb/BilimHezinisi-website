@@ -81,7 +81,8 @@ test.describe("installable", () => {
 
     // The checklist a browser actually applies before offering to install.
     expect(manifest.name).toBe("بىلىم خەزىنىسى");
-    expect(manifest.short_name.length).toBeGreaterThan(0);
+    // The full name under the icon, by the owner's choice (PROMPT-55).
+    expect(manifest.short_name).toBe(manifest.name);
     expect(manifest.start_url).toBe("/");
     expect(manifest.display).toBe("standalone");
     expect(manifest.lang).toBe("ug");

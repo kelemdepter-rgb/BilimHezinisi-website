@@ -220,6 +220,56 @@ test.describe("category management", () => {
     await expect(first.getByTestId("category-outdent")).toBeVisible();
   });
 
+  /**
+   * The picture picker speaks Uyghur, shows the picture it names, and goes
+   * back to the folder once a category is added. Nothing is saved here except
+   * the one category the last step adds and removes.
+   */
+  test("names every picture in Uyghur and shows the one chosen", async ({ page }) => {
+    const name = "__e2e_tur_icon__";
+    await page.goto("/admin/categories");
+    const form = page.locator("form").filter({ has: page.getByTestId("category-add") });
+    await expect(form.getByText("تۈرلەر تىزىملىكى", { exact: true })).toBeVisible();
+    await expect(page.getByText("ئاتا تۈر", { exact: true })).toHaveCount(0);
+
+    const select = form.getByTestId("category-icon-select");
+    const preview = form.getByTestId("category-icon-preview");
+    const labels = await select.locator("option").allTextContents();
+    expect(labels.length).toBeGreaterThan(40);
+    for (const label of labels) expect(label, label).not.toMatch(/[A-Za-z]/);
+    expect(labels).toContain("ئاي يۇلتۇز");
+
+    await expect(preview).toHaveAttribute("data-icon", "folder");
+    await select.selectOption({ label: "ئاي يۇلتۇز" });
+    await expect(select).toHaveValue("crescent-star");
+    await expect(preview).toHaveAttribute("data-icon", "crescent-star");
+
+    // Every picture on offer is drawn somewhere on this page.
+    const undrawn = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLOptionElement>('[data-testid="category-icon-select"] option')]
+        .map((option) => option.value)
+        .filter((value) => !document.getElementById(`i-${value}`)),
+    );
+    expect(undrawn).toEqual([]);
+
+    // The preview box sits beside the select and keeps a 44 px target row.
+    const box = await preview.boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(44);
+    await assertNoHorizontalOverflow(page);
+
+    try {
+      await select.selectOption({ label: "كەبە" });
+      await addCategory(page, name);
+      await expect(select).toHaveValue("folder");
+      await expect(preview).toHaveAttribute("data-icon", "folder");
+      const row = page.getByTestId("category-row").filter({ hasText: name }).first();
+      await expect(row.locator("use").first()).toHaveAttribute("href", "#i-kaaba");
+      expect(await page.evaluate(() => document.querySelectorAll("#i-kaaba").length)).toBe(1);
+    } finally {
+      await removeCategory(page, name);
+    }
+  });
+
   test("keeps controls reachable after scrolling down and back up", async ({ page }) => {
     await page.goto("/admin/categories");
     await scrollDownAndBackUp(page);

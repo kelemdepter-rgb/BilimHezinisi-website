@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import "./globals.css";
 import { IconSprite } from "@/components/icons";
+import { CategoryIconSprite } from "@/components/category-icons";
 import { AppShell } from "@/components/app-shell";
 import { getCategories, getCategoryCounts, getSessionInfo } from "@/lib/data";
 import { THEME_COLOR } from "./manifest";
@@ -163,6 +164,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-dvh">
         <IconSprite />
+        {/* Only the category-only pictures some category actually wears. */}
+        <CategoryIconSprite names={categories.map((category) => category.icon)} />
         <AppShell
           theme={theme}
           sessionPromise={sessionPromise}

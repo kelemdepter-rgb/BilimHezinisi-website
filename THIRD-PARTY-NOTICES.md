@@ -180,6 +180,23 @@ advertising, as a public library service.
 
 ---
 
+## 7. Icons
+
+The line icons inlined into every page (`components/icons.tsx`) and the
+category pictures (`components/category-icons.tsx`) are drawn in the style of,
+and most of them taken from, **Lucide** — <https://lucide.dev>.
+
+- ISC License. Copyright (c) for portions of Lucide are held by Cole Bemis
+  2013-2022 as part of Feather (MIT). All other copyright (c) for Lucide are
+  held by Lucide Contributors 2022.
+- Permission to use, copy, modify, and/or distribute this software for any
+  purpose with or without fee is hereby granted, provided that the above
+  copyright notice and this permission notice appear in all copies.
+- The crescent and star, Kaaba, prayer beads, Ramadan lantern, oil lamp, palm
+  and family category pictures are this project's own drawings.
+
+---
+
 If you believe any material on this site is used in a way that infringes your
 rights, write to **kelemdepter@gmail.com** — it will be corrected or removed
 promptly.

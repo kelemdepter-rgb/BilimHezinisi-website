@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Icon, type IconName } from "@/components/icons";
 import {
@@ -9,14 +9,8 @@ import {
   reorderCategoriesAction,
   updateCategoryAction,
 } from "@/app/admin/categories/actions";
+import { CATEGORY_ICON_GROUPS, CATEGORY_ICON_OPTIONS } from "@/lib/category-icons";
 import type { Category } from "@/lib/types";
-
-/** Icons offered for categories — all already in the shared sprite. */
-const CATEGORY_ICONS: IconName[] = [
-  "folder", "book", "book-open", "book-marked", "scroll", "mosque", "landmark",
-  "scale", "feather", "languages", "star", "smile", "bookmark", "layers",
-  "file-text", "globe", "tag", "notebook-pen",
-];
 
 type FlatNode = { category: Category; depth: number; index: number };
 
@@ -392,15 +386,66 @@ export function CategoryTree({ initial }: { initial: Category[] }) {
   );
 }
 
+/**
+ * The picture for a category: Uyghur names in groups, and beside them the
+ * picture itself, so the admin sees what a name looks like before saving. A
+ * native <select> cannot draw an icon inside its options, hence the preview.
+ */
 function IconPicker({ name, defaultValue }: { name: string; defaultValue: string }) {
+  const [value, setValue] = useState(defaultValue);
+  const selectRef = useRef<HTMLSelectElement>(null);
+
+  /*
+   * The select stays uncontrolled, so a category that was just added leaves
+   * the form back on the default picture, as it always did: React resets an
+   * action's form when it succeeds. The preview follows it there.
+   */
+  useEffect(() => {
+    const form = selectRef.current?.form;
+    if (!form) return;
+    const onReset = () => setValue(defaultValue);
+    form.addEventListener("reset", onReset);
+    return () => form.removeEventListener("reset", onReset);
+  }, [defaultValue]);
+
+  /*
+   * A name the list does not know — a row written straight into the
+   * database — is offered as it is. Without it the select would show the
+   * first option, and saving only a new name would quietly turn the picture
+   * into a folder.
+   */
+  const unknown = !CATEGORY_ICON_OPTIONS.some((option) => option.name === defaultValue);
   return (
-    <select className="field w-auto" name={name} defaultValue={defaultValue} aria-label="سىنبەلگە">
-      {CATEGORY_ICONS.map((icon) => (
-        <option key={icon} value={icon}>
-          {icon}
-        </option>
-      ))}
-    </select>
+    <span className="flex items-center gap-2">
+      <span
+        className="grid size-11 shrink-0 place-items-center rounded-[var(--radius)] border border-bd2 bg-bg2"
+        data-testid="category-icon-preview"
+        data-icon={value}
+        aria-hidden="true"
+      >
+        <Icon name={value as IconName} className="ic-lg text-am" />
+      </span>
+      <select
+        ref={selectRef}
+        className="field w-auto"
+        name={name}
+        defaultValue={defaultValue}
+        onChange={(event) => setValue(event.target.value)}
+        aria-label="سىنبەلگە"
+        data-testid="category-icon-select"
+      >
+        {unknown && <option value={defaultValue}>{defaultValue}</option>}
+        {CATEGORY_ICON_GROUPS.map((group) => (
+          <optgroup key={group.label} label={group.label}>
+            {group.icons.map((icon) => (
+              <option key={icon.name} value={icon.name}>
+                {icon.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </span>
   );
 }
 
@@ -424,7 +469,7 @@ function AddCategoryForm({
         <IconPicker name="icon" defaultValue="folder" />
       </label>
       <label>
-        <span className="mb-1.5 block text-[13px] font-semibold text-ink2">ئاتا تۈر</span>
+        <span className="mb-1.5 block text-[13px] font-semibold text-ink2">تۈرلەر تىزىملىكى</span>
         <select className="field w-auto" name="parent_id" defaultValue="">
           <option value="">— يوق (باش تۈر) —</option>
           {flatten(categories).map((node) => (

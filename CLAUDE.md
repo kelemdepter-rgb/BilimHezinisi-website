@@ -74,6 +74,14 @@ modify anything there from this project).
 - Layout concepts to mirror: top bar with brand, right-side category sidebar
   (drawer on mobile), book grid/list toggle, reader with themes (light/dark/sepia) and
   font-size controls, SVG sprite icons (copy the desktop `<symbol>` icon set).
+- **Category pictures** (2026-11-19): the admin picks from `lib/category-icons.ts` —
+  Uyghur names in groups, a live preview beside the select; `categories.icon` keeps the
+  English sprite name. Pictures only a category wears (crescent and star, Kaaba, prayer
+  beads…) live in `components/category-icons.tsx` and reach a page only when a
+  category wears one (root layout) or on /admin/categories (the rest). Never move
+  them into `<IconSprite />`: it is inlined into every page twice, and all of them
+  cost ~2.8 KB brotli per page load. `tests/unit/category-icons.test.ts` holds the
+  list and the drawings together.
 
 ## Roles
 - `admin` (the owner): everything — books, categories, users/roles, settings, AI config,

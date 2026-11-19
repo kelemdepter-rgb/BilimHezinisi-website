@@ -373,6 +373,25 @@ export default defineConfig({
       },
       {
         /**
+         * «ئەپ قىلىپ قاچىلاش» in the menu (PROMPT-55): the row on a phone,
+         * the browser's install offer opened in one tap and never
+         * suppressed, nothing inside the installed app, another app's
+         * browser. Anonymous — installing needs no account — and against a
+         * synthetic offer, since Chrome's real one needs 30 s of engagement.
+         * The iPhone case runs in WebKit below.
+         */
+        name: `install-${viewport.name}`,
+        testMatch: /[\\/]install-entry\.spec\.ts$/,
+        use: {
+          browserName: "chromium" as const,
+          viewport: { width: viewport.width, height: viewport.height },
+          isMobile: viewport.mobile,
+          hasTouch: viewport.mobile,
+          deviceScaleFactor: viewport.scale,
+        },
+      },
+      {
+        /**
          * «ئىلگىرىكى نۇسخىلار» (PROMPT-46): earlier versions of a note kept
          * in this browser's IndexedDB — putting one back, the version a
          * replace-all leaves, a browser that refuses the store, signing out
@@ -876,6 +895,21 @@ export default defineConfig({
         hasTouch: true,
         deviceScaleFactor: 3,
         storageState: STAFF_STATE_PATH,
+      },
+    },
+    {
+      // The install row on iPhone Safari's engine, as an iPhone: Share →
+      // «Add to Home Screen» → «Add», unfolded under the row.
+      name: "install-webkit-mobile-390x844",
+      testMatch: /[\\/]install-entry\.spec\.ts$/,
+      use: {
+        browserName: "webkit" as const,
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+        deviceScaleFactor: 3,
+        userAgent:
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
       },
     },
     ...NOTEBOOK_ENGINES.map((engine) => ({

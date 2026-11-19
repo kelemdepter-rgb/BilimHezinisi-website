@@ -812,6 +812,58 @@ here. The table is left in place because an applied migration is never edited ·
   row for every persona; at 640 only the fullest reader (signed in, AI, a
   term) may wrap — its last tool takes a second line.
 
+## Installing the app (PROMPT-55 — a place to go, never a pop-up)
+- **The manifest's `short_name` is `SITE_NAME`**, the full «بىلىم خەزىنىسى»,
+  by the owner's choice of 2026-11-19 — not the old 12-character
+  «بىلىم خەزىنە». Some launchers have room for less and may cut it; that is
+  accepted. Android picks a name change up in an installed app by itself,
+  later.
+- **«ئەپ قىلىپ قاچىلاش» is the last row of the menu's «بۆلۈملەر»**
+  (`components/pwa/install-entry.tsx`, `data-testid="install-entry"`), in
+  both the sidebar and the drawer. What it does is decided in the browser
+  only, by the pure `decideInstallState` (`lib/pwa/install-state.ts`,
+  unit-tested over real user agents): the installed app (`display-mode`
+  standalone / fullscreen / minimal-ui, or `navigator.standalone`) →
+  nothing; a saved offer → `prompt()` in one tap (the ONLY case a computer
+  sees the row); another app's browser on a phone (`FBAN`/`FBAV`/`FB_IAB`,
+  `Instagram`, `MicroMessenger`, `Line/`, Android's `; wv)`) → open it in
+  Safari or Chrome, with «ئۇلانمىنى كۆچۈرۈش»; an iPhone or iPad (iPadOS as
+  a Mac with touch) → Share → «Add to Home Screen» → «Add», unfolded inline
+  (Apple gives a page no way to install); anything else with no offer yet —
+  Android included — → nothing.
+- **The row never teaches the browser's own menu** (owner, 2026-11-19:
+  «tap it and it installs»). Where a browser can install, the row exists
+  only while one tap does it: on a reader's first visit Chrome makes its
+  offer after a tap and ~30 s, later visits at once, and the row then
+  arrives as the last one. Do not bring back a «⋮ → Install app» lesson.
+  Accepted through the row → «قاچىلاندى…» in its place; `appinstalled`
+  without the row (the browser's own banner or menu) → the row goes. On the
+  server and until hydrated it renders nothing, so as the last row it moves
+  nothing above it.
+- **Nothing appears by itself, ever** — no banner, modal or toast, on this
+  visit or a later one. The steps unfold under the row (`aria-expanded`),
+  never in a dialog.
+- **`preventDefault()` is never called on `beforeinstallprompt`**: Chrome's
+  own install notice must keep appearing. It is not needed — Chromium's
+  `prompt()` checks only that the offer is still connected and that a tap
+  called it — so the event is saved and used as it is. `prompt()` runs
+  straight from the tap, before any `await`; an offer is used once, and
+  Chrome sends a fresh one after a «no».
+- **One store for the offer** (`lib/pwa/install-prompt.ts`), and both copies
+  of the row read it through `useSyncExternalStore`. Its
+  `beforeinstallprompt` / `appinstalled` listeners are attached before
+  hydration: `instrumentation-client.ts` imports it for that alone (it
+  measures and sends nothing). Never move them to the drawer or the shell's
+  code — the shell's chunk was measured being evaluated AFTER `load`
+  (338 ms against 316), and Chrome's offer comes once, shortly after `load`.
+- **Nothing about installing is stored, counted or sent**: no table,
+  beacon, analytics, cookie or storage key. The store is the page's memory
+  and goes with it.
+- `tests/install-entry.spec.ts` (projects `install-*`, Chromium at the three
+  sizes and WebKit as an iPhone) uses a synthetic offer with stubbed
+  `prompt()` / `userChoice` — Chrome's real one needs 30 s of engagement —
+  and asserts its `defaultPrevented` stays false.
+
 ## Workflow
 Plan → new migration SQL (if schema changes) → code → `npm run typecheck` +
 `npm run lint` + `npm run build` → Playwright smoke (mobile + desktop viewports) →

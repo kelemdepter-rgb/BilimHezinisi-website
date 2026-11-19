@@ -9,6 +9,7 @@ import { CategoryScope } from "@/components/search/category-scope";
 import { SearchField } from "@/components/search/search-field";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LinkPending } from "@/components/nav-pending";
+import { InstallEntry } from "@/components/pwa/install-entry";
 import { signOutAction } from "@/app/(auth)/actions";
 import { forgetNoteHistory } from "@/lib/notes/history";
 import type { Category, SessionInfo } from "@/lib/types";
@@ -369,6 +370,9 @@ function SidebarContent({
         <Suspense fallback={<PersonalLinksSkeleton signedIn={looksSignedIn} />}>
           <PersonalLinks sessionPromise={sessionPromise} />
         </Suspense>
+        {/* «ئەپ قىلىپ قاچىلاش» (PROMPT-55): last, because it is decided in
+            the browser and appears after hydration — nothing above it moves. */}
+        <InstallEntry />
       </nav>
 
       <nav aria-label="كىتاب تۈرلىرى">
